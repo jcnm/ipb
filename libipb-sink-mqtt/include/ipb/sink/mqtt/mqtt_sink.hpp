@@ -1,11 +1,18 @@
 #pragma once
 
+/**
+ * @file mqtt_sink.hpp
+ * @brief Generic MQTT sink for publishing IPB DataPoints
+ *
+ * Uses the shared MQTT transport layer to avoid duplicating the MQTT client.
+ */
+
 #include "ipb/common/interfaces.hpp"
 #include "ipb/common/data_point.hpp"
 #include "ipb/common/dataset.hpp"
 #include "ipb/common/endpoint.hpp"
+#include "ipb/transport/mqtt/mqtt_connection.hpp"
 
-#include <mqtt/async_client.h>
 #include <json/json.h>
 #include <string>
 #include <memory>
@@ -20,12 +27,8 @@
 
 namespace ipb::sink::mqtt {
 
-// MQTT Quality of Service levels
-enum class MQTTQoS : int {
-    AT_MOST_ONCE = 0,
-    AT_LEAST_ONCE = 1,
-    EXACTLY_ONCE = 2
-};
+// Use shared transport QoS
+using QoS = transport::mqtt::QoS;
 
 // MQTT message format types
 enum class MQTTMessageFormat {
@@ -37,13 +40,8 @@ enum class MQTTMessageFormat {
     CUSTOM          // Custom format via callback
 };
 
-// MQTT connection security
-enum class MQTTSecurity {
-    NONE,           // No security
-    TLS,            // TLS encryption
-    TLS_PSK,        // TLS with Pre-Shared Key
-    TLS_CERT        // TLS with client certificates
-};
+// Use shared transport security mode
+using SecurityMode = transport::mqtt::SecurityMode;
 
 // MQTT topic strategy
 enum class MQTTTopicStrategy {
@@ -54,36 +52,13 @@ enum class MQTTTopicStrategy {
     CUSTOM              // Custom topic via callback
 };
 
-// MQTT connection configuration
-struct MQTTConnectionConfig {
-    std::string broker_url = "tcp://localhost:1883";
-    std::string client_id = "ipb_mqtt_sink";
-    std::string username;
-    std::string password;
-    
-    // Connection parameters
-    std::chrono::seconds keep_alive_interval{60};
-    std::chrono::seconds connection_timeout{30};
-    bool clean_session = true;
-    bool enable_automatic_reconnect = true;
-    std::chrono::seconds reconnect_delay{5};
-    int max_reconnect_attempts = -1; // -1 = infinite
-    
-    // Security configuration
-    MQTTSecurity security = MQTTSecurity::NONE;
-    std::string ca_cert_path;
-    std::string client_cert_path;
-    std::string client_key_path;
-    std::string psk_identity;
-    std::string psk_key;
-    bool verify_hostname = true;
-    bool verify_certificate = true;
-};
+// Use shared transport connection configuration
+using ConnectionConfig = transport::mqtt::ConnectionConfig;
 
 // MQTT message configuration
 struct MQTTMessageConfig {
     MQTTMessageFormat format = MQTTMessageFormat::JSON;
-    MQTTQoS qos = MQTTQoS::AT_LEAST_ONCE;
+    QoS qos = QoS::AT_LEAST_ONCE;
     bool retain = false;
     bool enable_compression = false;
     std::string compression_algorithm = "gzip";
@@ -152,15 +127,18 @@ struct MQTTMonitoringConfig {
 
 // Complete MQTT sink configuration
 struct MQTTSinkConfig {
-    MQTTConnectionConfig connection;
+    // Shared transport connection (uses MQTTConnectionManager)
+    std::string connection_id = "mqtt_sink_default";
+    ConnectionConfig connection;
+
     MQTTMessageConfig messages;
     MQTTPerformanceConfig performance;
     MQTTMonitoringConfig monitoring;
-    
+
     // Sink identification
     std::string sink_id = "mqtt_sink";
     std::string description = "MQTT Sink for IPB";
-    
+
     // Presets
     static MQTTSinkConfig create_high_throughput();
     static MQTTSinkConfig create_low_latency();
@@ -218,9 +196,9 @@ public:
 
     // MQTT-specific methods
     common::Result<void> configure(const MQTTSinkConfig& config);
-    common::Result<void> publish_message(const std::string& topic, 
-                                        const std::string& payload, 
-                                        MQTTQoS qos = MQTTQoS::AT_LEAST_ONCE,
+    common::Result<void> publish_message(const std::string& topic,
+                                        const std::string& payload,
+                                        QoS qos = QoS::AT_LEAST_ONCE,
                                         bool retain = false);
     
     // Statistics and monitoring
@@ -240,49 +218,45 @@ public:
 private:
     // Configuration
     MQTTSinkConfig config_;
-    
-    // MQTT client
-    std::unique_ptr<::mqtt::async_client> mqtt_client_;
-    std::unique_ptr<::mqtt::connect_options> connect_options_;
-    
+
+    // Shared MQTT connection (via MQTTConnectionManager)
+    std::shared_ptr<transport::mqtt::MQTTConnection> connection_;
+
     // State management
     std::atomic<bool> running_{false};
     std::atomic<bool> shutdown_requested_{false};
     std::atomic<bool> connected_{false};
-    
+
     // Async processing
     std::queue<common::DataPoint> message_queue_;
     std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
     std::vector<std::thread> worker_threads_;
-    
+
     // Batching
     std::vector<common::DataPoint> current_batch_;
     std::mutex batch_mutex_;
     std::thread batch_thread_;
     std::chrono::steady_clock::time_point last_batch_time_;
-    
+
     // Statistics
     mutable MQTTSinkStatistics statistics_;
     std::thread statistics_thread_;
-    
+
     // Memory management
     std::unique_ptr<char[]> memory_pool_;
     std::atomic<size_t> memory_pool_offset_{0};
-    
+
     // Internal methods
     void worker_loop();
     void batch_loop();
     void statistics_loop();
-    void setup_connection_options();
-    void setup_ssl_options();
-    
+
     common::Result<void> connect_to_broker();
     common::Result<void> disconnect_from_broker();
-    
-    void handle_connection_lost(const std::string& cause);
-    void handle_message_arrived(::mqtt::const_message_ptr msg);
-    void handle_delivery_complete(::mqtt::delivery_token_ptr token);
+
+    void handle_connection_state(transport::mqtt::ConnectionState state, const std::string& reason);
+    void handle_delivery_complete(int token, bool success, const std::string& error);
     
     common::Result<void> publish_data_point_internal(const common::DataPoint& data_point);
     common::Result<void> publish_batch_internal(const std::vector<common::DataPoint>& batch);

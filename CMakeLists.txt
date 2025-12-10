@@ -25,6 +25,7 @@ option(ENABLE_MQTT_SINK "Enable MQTT sink" ON)
 # Scoop options (data collectors)
 option(ENABLE_MODBUS_SCOOP "Enable Modbus scoop" OFF)
 option(ENABLE_OPCUA_SCOOP "Enable OPC UA scoop" OFF)
+option(ENABLE_MQTT_SCOOP "Enable MQTT scoop" ON)
 option(ENABLE_SPARKPLUG_SCOOP "Enable Sparkplug B scoop" OFF)
 
 # Sparkplug sink option
@@ -166,7 +167,7 @@ endif()
 # MQTT Transport Layer (shared by MQTT sink/scoop and Sparkplug sink/scoop)
 # Build if any MQTT-based component is enabled
 set(NEED_MQTT_TRANSPORT FALSE)
-if(ENABLE_MQTT_SINK OR ENABLE_SPARKPLUG_SINK OR ENABLE_SPARKPLUG_SCOOP OR BUILD_TRANSPORT_MQTT)
+if(ENABLE_MQTT_SINK OR ENABLE_MQTT_SCOOP OR ENABLE_SPARKPLUG_SINK OR ENABLE_SPARKPLUG_SCOOP OR BUILD_TRANSPORT_MQTT)
     set(NEED_MQTT_TRANSPORT TRUE)
 endif()
 
@@ -195,6 +196,12 @@ endif()
 if((BUILD_ALL_COMPONENTS OR ENABLE_MQTT_SINK) AND MQTT_TRANSPORT_AVAILABLE)
     conditional_add_subdirectory(libipb-sink-mqtt ENABLE_MQTT_SINK)
     message(STATUS "MQTT sink enabled")
+endif()
+
+# MQTT Scoop
+if((BUILD_ALL_COMPONENTS OR ENABLE_MQTT_SCOOP) AND MQTT_TRANSPORT_AVAILABLE)
+    conditional_add_subdirectory(libipb-scoop-mqtt ENABLE_MQTT_SCOOP)
+    message(STATUS "MQTT scoop enabled")
 endif()
 
 # Sparkplug B Sink
@@ -266,6 +273,7 @@ message(STATUS "")
 message(STATUS "Scoops (Data Collectors):")
 message(STATUS "  Modbus scoop: ${ENABLE_MODBUS_SCOOP}")
 message(STATUS "  OPC UA scoop: ${ENABLE_OPCUA_SCOOP}")
+message(STATUS "  MQTT scoop: ${ENABLE_MQTT_SCOOP}")
 message(STATUS "  Sparkplug B scoop: ${ENABLE_SPARKPLUG_SCOOP}")
 message(STATUS "")
 message(STATUS "Options:")
