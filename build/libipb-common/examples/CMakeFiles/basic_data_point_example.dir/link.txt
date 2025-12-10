@@ -1,0 +1,1 @@
+/usr/bin/c++  -Wall -Wextra -Wpedantic -O3 -DNDEBUG -O3 -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/basic_data_point_example.dir/basic_data_point_example.cpp.o -o basic_data_point_example  ../libipb-common.a

@@ -1,0 +1,5 @@
+if(EXISTS "/Users/smpceo/Desktop/ipb2/build/libipb-common/tests/test_ipb_common[1]_tests.cmake")
+  include("/Users/smpceo/Desktop/ipb2/build/libipb-common/tests/test_ipb_common[1]_tests.cmake")
+else()
+  add_test(test_ipb_common_NOT_BUILT test_ipb_common_NOT_BUILT)
+endif()

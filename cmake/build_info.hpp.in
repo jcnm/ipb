@@ -1,0 +1,43 @@
+#pragma once
+
+// IPB Build Information
+// Generated automatically by CMake
+
+#define IPB_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define IPB_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define IPB_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define IPB_VERSION_STRING "@PROJECT_VERSION@"
+
+#define IPB_BUILD_TYPE "@CMAKE_BUILD_TYPE@"
+#define IPB_COMPILER_ID "@CMAKE_CXX_COMPILER_ID@"
+#define IPB_COMPILER_VERSION "@CMAKE_CXX_COMPILER_VERSION@"
+#define IPB_SYSTEM_NAME "@CMAKE_SYSTEM_NAME@"
+#define IPB_SYSTEM_PROCESSOR "@CMAKE_SYSTEM_PROCESSOR@"
+
+// Build timestamp
+#define IPB_BUILD_TIMESTAMP "@BUILD_TIMESTAMP@"
+
+// Component availability
+#cmakedefine01 IPB_HAS_CONSOLE_SINK
+#cmakedefine01 IPB_HAS_SYSLOG_SINK
+#cmakedefine01 IPB_HAS_MQTT_SINK
+#cmakedefine01 IPB_HAS_ROUTER
+#cmakedefine01 IPB_HAS_GATE
+
+// Feature flags
+#cmakedefine01 IPB_ENABLE_OPTIMIZATIONS
+#cmakedefine01 IPB_ENABLE_LTO
+#cmakedefine01 IPB_ENABLE_SANITIZERS
+#cmakedefine01 IPB_ENABLE_COVERAGE
+
+namespace ipb {
+namespace build_info {
+
+constexpr const char* version() { return IPB_VERSION_STRING; }
+constexpr const char* build_type() { return IPB_BUILD_TYPE; }
+constexpr const char* compiler() { return IPB_COMPILER_ID; }
+constexpr const char* system() { return IPB_SYSTEM_NAME; }
+
+} // namespace build_info
+} // namespace ipb
+

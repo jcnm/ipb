@@ -1,0 +1,2 @@
+/usr/bin/ar qc libipb-common.a "CMakeFiles/ipb-common.dir/src/data_point.cpp.o" "CMakeFiles/ipb-common.dir/src/dataset.cpp.o" "CMakeFiles/ipb-common.dir/src/endpoint.cpp.o" "CMakeFiles/ipb-common.dir/src/interfaces.cpp.o" "CMakeFiles/ipb-common.dir/src/rt_primitives.cpp.o"
+/usr/bin/ranlib libipb-common.a

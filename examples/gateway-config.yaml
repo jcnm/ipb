@@ -1,0 +1,256 @@
+# IPB Gateway Configuration Example
+# This configuration demonstrates the use of Console and Syslog sinks
+# along with MQTT command interface
+
+general:
+  instance_id: "ipb-gateway-production-001"
+  log_level: "INFO"
+  enable_hot_reload: true
+  config_check_interval: 10
+
+scheduler:
+  enable_realtime_priority: true
+  realtime_priority: 50
+  enable_cpu_affinity: true
+  cpu_cores: [0, 1, 2, 3]
+  default_deadline_us: 1000
+  max_tasks: 10000
+
+router:
+  thread_pool_size: 4
+  enable_lock_free: true
+  enable_zero_copy: true
+  routing_table_size: 1000
+  routing_timeout_us: 500
+
+# Protocol Adapters Configuration
+adapters:
+  - id: "modbus_plc_001"
+    type: "modbus"
+    enabled: true
+    connection_type: "tcp"
+    host: "192.168.1.100"
+    port: 502
+    slave_id: 1
+    polling_interval_ms: 1000
+    response_timeout_ms: 5000
+    enable_debug: false
+    registers:
+      - name: "temperature_sensor_1"
+        address: 40001
+        type: "holding_register"
+        data_type: "float32"
+        count: 2
+      - name: "pressure_sensor_1"
+        address: 40003
+        type: "holding_register"
+        data_type: "uint16"
+        count: 1
+      - name: "pump_status"
+        address: 10001
+        type: "coil"
+        data_type: "bool"
+        count: 1
+
+  - id: "opcua_server_001"
+    type: "opcua"
+    enabled: true
+    endpoint_url: "opc.tcp://192.168.1.101:4840"
+    security_policy: "None"
+    security_mode: "None"
+    session_timeout_ms: 60000
+    subscription_interval_ms: 1000
+    nodes:
+      - name: "flow_rate"
+        node_id: "ns=2;s=FlowRate"
+        data_type: "double"
+      - name: "valve_position"
+        node_id: "ns=2;s=ValvePosition"
+        data_type: "float"
+
+# Sinks Configuration
+sinks:
+  # Console Sink for debugging and development
+  - id: "console_debug"
+    type: "console"
+    enabled: true
+    format: "colored"
+    enable_file_output: true
+    output_file: "/var/log/ipb/console_output.log"
+    enable_async: true
+    queue_size: 10000
+    flush_interval_ms: 100
+    enable_statistics: true
+    statistics_interval_s: 30
+    filtering:
+      enable_filtering: true
+      address_filters:
+        - "temperature_.*"
+        - "pressure_.*"
+      protocol_id_filters: ["modbus", "opcua"]
+      quality_filters: ["good", "uncertain"]
+
+  # Syslog Sink for system integration
+  - id: "syslog_production"
+    type: "syslog"
+    enabled: true
+    ident: "ipb-gateway"
+    facility: "local0"
+    format: "rfc5424"
+    enable_remote: true
+    remote_host: "syslog.company.com"
+    remote_port: 514
+    transport: "udp"
+    enable_async: true
+    queue_size: 5000
+    batch_size: 100
+    flush_interval_ms: 500
+    enable_statistics: true
+    priority_mapping:
+      default_priority: "info"
+      address_priority_map:
+        "alarm_.*": "warning"
+        "error_.*": "err"
+        "critical_.*": "crit"
+      protocol_priority_map:
+        "modbus": "info"
+        "opcua": "info"
+      quality_priority_map:
+        "bad": "warning"
+        "uncertain": "notice"
+        "good": "info"
+    fallback:
+      enable_file_fallback: true
+      fallback_file_path: "/var/log/ipb/syslog_fallback.log"
+      enable_console_fallback: true
+      max_consecutive_failures: 5
+      recovery_check_interval_s: 30
+
+  # MQTT Sink for data streaming
+  - id: "mqtt_stream"
+    type: "mqtt"
+    enabled: true
+    broker_url: "tcp://mqtt.company.com:1883"
+    client_id: "ipb-gateway-mqtt-001"
+    username: "ipb_user"
+    password: "secure_mqtt_password"
+    base_topic: "ipb/industrial/data"
+    topic_strategy: "hierarchical"
+    qos: 1
+    retain: false
+    enable_compression: true
+    enable_batching: true
+    batch_size: 50
+    batch_timeout_ms: 1000
+    enable_async: true
+    queue_size: 5000
+    enable_statistics: true
+    security:
+      enable_tls: false
+      ca_cert_path: "/etc/ssl/certs/ca-certificates.crt"
+      verify_certificate: true
+    performance:
+      thread_pool_size: 2
+      max_inflight_messages: 1000
+      publish_timeout_ms: 30000
+
+# Routing Rules
+routing:
+  rules:
+    # Route all temperature data to console and syslog
+    - name: "temperature_routing"
+      source_filter:
+        address_pattern: "temperature_.*"
+        protocol_ids: ["modbus", "opcua"]
+      destinations:
+        - sink_id: "console_debug"
+          priority: "high"
+        - sink_id: "syslog_production"
+          priority: "normal"
+      enable_batching: true
+      batch_size: 50
+      batch_timeout_ms: 1000
+
+    # Route pressure data to syslog only
+    - name: "pressure_routing"
+      source_filter:
+        address_pattern: "pressure_.*"
+        quality_filters: ["good", "uncertain"]
+      destinations:
+        - sink_id: "syslog_production"
+          priority: "normal"
+      enable_batching: false
+
+    # Route critical data to MQTT for real-time monitoring
+    - name: "critical_mqtt_routing"
+      source_filter:
+        address_pattern: "(temperature_.*|pressure_.*|flow_.*)"
+        protocol_ids: ["modbus", "opcua"]
+        quality_filters: ["good"]
+      destinations:
+        - sink_id: "mqtt_stream"
+          priority: "high"
+        - sink_id: "console_debug"
+          priority: "normal"
+      enable_batching: true
+      batch_size: 25
+      batch_timeout_ms: 500
+
+    # Route all alarm/error data to both sinks with high priority
+    - name: "alarm_routing"
+      source_filter:
+        address_pattern: "(alarm_.*|error_.*|critical_.*)"
+        quality_filters: ["good", "bad", "uncertain"]
+      destinations:
+        - sink_id: "console_debug"
+          priority: "critical"
+        - sink_id: "syslog_production"
+          priority: "critical"
+        - sink_id: "mqtt_stream"
+          priority: "critical"
+      enable_batching: false
+
+    # Default route for all other data
+    - name: "default_routing"
+      source_filter:
+        address_pattern: ".*"
+      destinations:
+        - sink_id: "console_debug"
+          priority: "low"
+      enable_batching: true
+      batch_size: 100
+      batch_timeout_ms: 5000
+
+# MQTT Command Interface
+mqtt_commands:
+  enable: true
+  broker_url: "mqtt://mqtt.company.com:1883"
+  command_topic: "ipb/gateway/commands"
+  response_topic: "ipb/gateway/responses"
+  status_topic: "ipb/gateway/status"
+  status_interval_s: 30
+  client_id: "ipb-gateway-cmd-001"
+  
+  # Authentication (optional)
+  username: "ipb_gateway"
+  password: "secure_password_here"
+  
+  # TLS Configuration (optional)
+  enable_tls: false
+  ca_cert_path: "/etc/ssl/certs/ca-certificates.crt"
+  client_cert_path: "/etc/ipb/client.crt"
+  client_key_path: "/etc/ipb/client.key"
+
+# Monitoring and Metrics
+monitoring:
+  enable_prometheus_metrics: true
+  prometheus_port: 9090
+  prometheus_path: "/metrics"
+  enable_health_checks: true
+  health_check_interval_s: 10
+  
+  # Health check thresholds
+  max_error_rate: 0.05  # 5%
+  max_latency_ms: 1000
+  min_throughput_msg_per_s: 100
+

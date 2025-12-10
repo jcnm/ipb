@@ -1,0 +1,12 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libipb-common
+Description: IPB Common Library - Core types and interfaces for industrial protocols
+Version: 1.0.0
+Requires: 
+Libs: -L${libdir} -lipb-common
+Cflags: -I${includedir}
+

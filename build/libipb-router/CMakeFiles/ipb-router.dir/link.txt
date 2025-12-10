@@ -1,0 +1,2 @@
+/usr/bin/ar qc libipb-router.a "CMakeFiles/ipb-router.dir/src/router.cpp.o" "CMakeFiles/ipb-router.dir/src/edf_scheduler.cpp.o" "CMakeFiles/ipb-router.dir/src/routing_rule.cpp.o"
+/usr/bin/ranlib libipb-router.a
