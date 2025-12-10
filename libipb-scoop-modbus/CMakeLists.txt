@@ -1,7 +1,7 @@
-# Modbus Adapter Library
+# Modbus Scoop Library
 cmake_minimum_required(VERSION 3.16)
 
-project(libipb-adapter-modbus VERSION 1.2.0)
+project(libipb-scoop-modbus VERSION 1.2.0)
 
 # C++ Standard
 set(CMAKE_CXX_STANDARD 20)
@@ -22,15 +22,15 @@ include_directories(
 )
 
 # Source files
-set(MODBUS_ADAPTER_SOURCES
-    src/modbus_adapter.cpp
+set(MODBUS_SCOOP_SOURCES
+    src/modbus_scoop.cpp
 )
 
 # Create shared library
-add_library(ipb-adapter-modbus SHARED ${MODBUS_ADAPTER_SOURCES})
+add_library(ipb-scoop-modbus SHARED ${MODBUS_SCOOP_SOURCES})
 
 # Link libraries
-target_link_libraries(ipb-adapter-modbus
+target_link_libraries(ipb-scoop-modbus
     ipb-common
     jsoncpp_lib
     ${LIBMODBUS_LIBRARIES}
@@ -38,7 +38,7 @@ target_link_libraries(ipb-adapter-modbus
 )
 
 # Compiler flags
-target_compile_options(ipb-adapter-modbus PRIVATE
+target_compile_options(ipb-scoop-modbus PRIVATE
     -Wall -Wextra -Wpedantic
     -O3 -march=native
     -fPIC
@@ -46,12 +46,12 @@ target_compile_options(ipb-adapter-modbus PRIVATE
 )
 
 # Link directories
-target_link_directories(ipb-adapter-modbus PRIVATE
+target_link_directories(ipb-scoop-modbus PRIVATE
     ${LIBMODBUS_LIBRARY_DIRS}
 )
 
 # Install targets
-install(TARGETS ipb-adapter-modbus
+install(TARGETS ipb-scoop-modbus
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
 )
@@ -65,21 +65,21 @@ install(DIRECTORY include/
 include(CMakePackageConfigHelpers)
 
 configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/libipb-adapter-modbus-config.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/libipb-adapter-modbus-config.cmake"
-    INSTALL_DESTINATION lib/cmake/libipb-adapter-modbus
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/libipb-scoop-modbus-config.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/libipb-scoop-modbus-config.cmake"
+    INSTALL_DESTINATION lib/cmake/libipb-scoop-modbus
 )
 
 write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/libipb-adapter-modbus-config-version.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/libipb-scoop-modbus-config-version.cmake"
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
 
 install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/libipb-adapter-modbus-config.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/libipb-adapter-modbus-config-version.cmake"
-    DESTINATION lib/cmake/libipb-adapter-modbus
+    "${CMAKE_CURRENT_BINARY_DIR}/libipb-scoop-modbus-config.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/libipb-scoop-modbus-config-version.cmake"
+    DESTINATION lib/cmake/libipb-scoop-modbus
 )
 
 # Tests
@@ -91,4 +91,3 @@ endif()
 if(BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
-

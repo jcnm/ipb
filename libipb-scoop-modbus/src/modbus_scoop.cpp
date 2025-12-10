@@ -1,24 +1,24 @@
-#include "ipb/adapter/modbus/modbus_adapter.hpp"
+#include "ipb/scoop/modbus/modbus_scoop.hpp"
 #include <modbus/modbus.h>
 #include <json/json.h>
 #include <thread>
 #include <chrono>
 #include <iostream>
 
-namespace ipb::adapter::modbus {
+namespace ipb::scoop::modbus {
 
-ModbusAdapter::ModbusAdapter(const ModbusAdapterConfig& config)
+ModbusScoop::ModbusScoop(const ModbusScoopConfig& config)
     : config_(config) {
 }
 
-ModbusAdapter::~ModbusAdapter() {
+ModbusScoop::~ModbusScoop() {
     if (running_.load()) {
         stop();
     }
     shutdown();
 }
 
-common::Result<void> ModbusAdapter::initialize(const std::string& config_path) {
+common::Result<void> ModbusScoop::initialize(const std::string& config_path) {
     try {
         // Initialize libmodbus context
         if (config_.connection_type == ModbusConnectionType::TCP) {
@@ -53,14 +53,14 @@ common::Result<void> ModbusAdapter::initialize(const std::string& config_path) {
         
     } catch (const std::exception& e) {
         return common::Result<void>::failure(
-            "Failed to initialize Modbus adapter: " + std::string(e.what())
+            "Failed to initialize Modbus scoop: " + std::string(e.what())
         );
     }
 }
 
-common::Result<void> ModbusAdapter::start() {
+common::Result<void> ModbusScoop::start() {
     if (running_.load()) {
-        return common::Result<void>::failure("Modbus adapter is already running");
+        return common::Result<void>::failure("Modbus scoop is already running");
     }
     
     try {
@@ -75,11 +75,11 @@ common::Result<void> ModbusAdapter::start() {
         shutdown_requested_.store(false);
         
         // Start polling thread
-        polling_thread_ = std::thread(&ModbusAdapter::polling_loop, this);
+        polling_thread_ = std::thread(&ModbusScoop::polling_loop, this);
         
         // Start statistics thread if enabled
         if (config_.enable_statistics) {
-            statistics_thread_ = std::thread(&ModbusAdapter::statistics_loop, this);
+            statistics_thread_ = std::thread(&ModbusScoop::statistics_loop, this);
         }
         
         // Reset statistics
@@ -90,12 +90,12 @@ common::Result<void> ModbusAdapter::start() {
     } catch (const std::exception& e) {
         running_.store(false);
         return common::Result<void>::failure(
-            "Failed to start Modbus adapter: " + std::string(e.what())
+            "Failed to start Modbus scoop: " + std::string(e.what())
         );
     }
 }
 
-common::Result<void> ModbusAdapter::stop() {
+common::Result<void> ModbusScoop::stop() {
     if (!running_.load()) {
         return common::Result<void>::success();
     }
@@ -122,12 +122,12 @@ common::Result<void> ModbusAdapter::stop() {
         
     } catch (const std::exception& e) {
         return common::Result<void>::failure(
-            "Failed to stop Modbus adapter: " + std::string(e.what())
+            "Failed to stop Modbus scoop: " + std::string(e.what())
         );
     }
 }
 
-common::Result<void> ModbusAdapter::shutdown() {
+common::Result<void> ModbusScoop::shutdown() {
     shutdown_requested_.store(true);
     
     auto stop_result = stop();
@@ -146,16 +146,16 @@ common::Result<void> ModbusAdapter::shutdown() {
         
     } catch (const std::exception& e) {
         return common::Result<void>::failure(
-            "Failed to shutdown Modbus adapter: " + std::string(e.what())
+            "Failed to shutdown Modbus scoop: " + std::string(e.what())
         );
     }
 }
 
-bool ModbusAdapter::is_connected() const {
+bool ModbusScoop::is_connected() const {
     return running_.load() && modbus_ctx_ != nullptr;
 }
 
-bool ModbusAdapter::is_healthy() const {
+bool ModbusScoop::is_healthy() const {
     if (!running_.load() || !modbus_ctx_) {
         return false;
     }
@@ -170,7 +170,7 @@ bool ModbusAdapter::is_healthy() const {
     return true;
 }
 
-common::ProtocolMetrics ModbusAdapter::get_metrics() const {
+common::ProtocolMetrics ModbusScoop::get_metrics() const {
     common::ProtocolMetrics metrics;
     metrics.protocol_id = "modbus";
     metrics.messages_sent = statistics_.successful_reads.load();
@@ -183,7 +183,7 @@ common::ProtocolMetrics ModbusAdapter::get_metrics() const {
     return metrics;
 }
 
-std::string ModbusAdapter::get_protocol_info() const {
+std::string ModbusScoop::get_protocol_info() const {
     Json::Value info;
     info["protocol"] = "modbus";
     info["connection_type"] = (config_.connection_type == ModbusConnectionType::TCP) ? "tcp" : "rtu";
@@ -201,7 +201,7 @@ std::string ModbusAdapter::get_protocol_info() const {
     return Json::writeString(builder, info);
 }
 
-void ModbusAdapter::polling_loop() {
+void ModbusScoop::polling_loop() {
     while (running_.load()) {
         auto cycle_start = std::chrono::high_resolution_clock::now();
         
@@ -241,7 +241,7 @@ void ModbusAdapter::polling_loop() {
     }
 }
 
-void ModbusAdapter::statistics_loop() {
+void ModbusScoop::statistics_loop() {
     while (running_.load()) {
         std::this_thread::sleep_for(config_.statistics_interval);
         
@@ -251,7 +251,7 @@ void ModbusAdapter::statistics_loop() {
     }
 }
 
-common::Result<common::DataPoint> ModbusAdapter::read_register(const ModbusRegisterConfig& register_config) {
+common::Result<common::DataPoint> ModbusScoop::read_register(const ModbusRegisterConfig& register_config) {
     auto start_time = std::chrono::high_resolution_clock::now();
     
     try {
@@ -353,7 +353,7 @@ common::Result<common::DataPoint> ModbusAdapter::read_register(const ModbusRegis
     }
 }
 
-void ModbusAdapter::print_statistics() const {
+void ModbusScoop::print_statistics() const {
     if (!config_.enable_statistics) {
         return;
     }
@@ -369,33 +369,33 @@ void ModbusAdapter::print_statistics() const {
 }
 
 // Factory implementations
-std::unique_ptr<ModbusAdapter> ModbusAdapterFactory::create_tcp(
+std::unique_ptr<ModbusScoop> ModbusScoopFactory::create_tcp(
     const std::string& host, uint16_t port, uint8_t slave_id) {
     
-    ModbusAdapterConfig config;
+    ModbusScoopConfig config;
     config.connection_type = ModbusConnectionType::TCP;
     config.host = host;
     config.port = port;
     config.slave_id = slave_id;
     
-    return std::make_unique<ModbusAdapter>(config);
+    return std::make_unique<ModbusScoop>(config);
 }
 
-std::unique_ptr<ModbusAdapter> ModbusAdapterFactory::create_rtu(
+std::unique_ptr<ModbusScoop> ModbusScoopFactory::create_rtu(
     const std::string& device, uint32_t baud_rate, uint8_t slave_id) {
     
-    ModbusAdapterConfig config;
+    ModbusScoopConfig config;
     config.connection_type = ModbusConnectionType::RTU;
     config.device = device;
     config.baud_rate = baud_rate;
     config.slave_id = slave_id;
     
-    return std::make_unique<ModbusAdapter>(config);
+    return std::make_unique<ModbusScoop>(config);
 }
 
-std::unique_ptr<ModbusAdapter> ModbusAdapterFactory::create(const ModbusAdapterConfig& config) {
-    return std::make_unique<ModbusAdapter>(config);
+std::unique_ptr<ModbusScoop> ModbusScoopFactory::create(const ModbusScoopConfig& config) {
+    return std::make_unique<ModbusScoop>(config);
 }
 
-} // namespace ipb::adapter::modbus
+} // namespace ipb::scoop::modbus
 

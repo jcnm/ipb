@@ -8,7 +8,7 @@
 
 ## 1. Résumé Exécutif
 
-**IPB (Industrial Protocol Bridge)** est un middleware de communication industrielle haute performance conçu pour des environnements temps-réel avec des exigences de latence en microsecondes. Le projet est structuré en mono-repo C++20 avec une architecture modulaire basée sur des adaptateurs (entrées) et des sinks (sorties).
+**IPB (Industrial Protocol Bridge)** est un middleware de communication industrielle haute performance conçu pour des environnements temps-réel avec des exigences de latence en microsecondes. Le projet est structuré en mono-repo C++20 avec une architecture modulaire basée sur des scoops (collecteurs de données en entrée) et des sinks (sorties).
 
 ### Points Forts Identifiés
 - Architecture modulaire bien définie
@@ -46,7 +46,7 @@ ipb/
 │   └── src/
 │
 ├── libipb-sink-*/          # Sinks (sortie) - plugins dynamiques
-├── libipb-adapter-*/       # Adaptateurs (entrée) - plugins dynamiques
+├── libipb-scoop-*/         # Scoops (collecteurs de données) - plugins dynamiques
 ├── ipb-gate/               # Application principale
 └── CMakeLists.txt          # Configuration build racine
 ```
@@ -58,7 +58,7 @@ ipb/
 | `libipb-common` | Structure OK, tests absents | CRITIQUE |
 | `libipb-router` | Monolithique, à refactorer | CRITIQUE |
 | `libipb-sink-*` | Bien modularisé | OK |
-| `libipb-adapter-*` | Bien modularisé | OK |
+| `libipb-scoop-*` | Bien modularisé | OK |
 | `ipb-gate` | Bien structuré | OK |
 
 ---

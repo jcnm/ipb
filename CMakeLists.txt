@@ -22,9 +22,9 @@ option(ENABLE_CONSOLE_SINK "Enable Console sink" ON)
 option(ENABLE_SYSLOG_SINK "Enable Syslog sink" ON)
 option(ENABLE_MQTT_SINK "Enable MQTT sink" ON)
 
-# Adapter options (for future use)
-option(ENABLE_MODBUS_ADAPTER "Enable Modbus adapter" OFF)
-option(ENABLE_OPCUA_ADAPTER "Enable OPC UA adapter" OFF)
+# Scoop options (data collectors)
+option(ENABLE_MODBUS_SCOOP "Enable Modbus scoop" OFF)
+option(ENABLE_OPCUA_SCOOP "Enable OPC UA scoop" OFF)
 
 # Performance options
 option(ENABLE_OPTIMIZATIONS "Enable performance optimizations" ON)

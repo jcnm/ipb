@@ -14,7 +14,7 @@
 #include <condition_variable>
 #include <chrono>
 
-namespace ipb::adapter::modbus {
+namespace ipb::scoop::modbus {
 
 /**
  * @brief Modbus register types
@@ -71,7 +71,7 @@ struct ModbusAddress {
 /**
  * @brief Modbus adapter configuration
  */
-class ModbusAdapterConfig : public ipb::common::ConfigurationBase {
+class ModbusScoopConfig : public ipb::common::ConfigurationBase {
 public:
     // Connection settings
     ipb::common::EndPoint endpoint;
@@ -117,15 +117,15 @@ public:
     std::unique_ptr<ipb::common::ConfigurationBase> clone() const override;
     
     // Preset configurations
-    static ModbusAdapterConfig create_high_performance();
-    static ModbusAdapterConfig create_low_latency();
-    static ModbusAdapterConfig create_reliable();
-    static ModbusAdapterConfig create_minimal();
+    static ModbusScoopConfig create_high_performance();
+    static ModbusScoopConfig create_low_latency();
+    static ModbusScoopConfig create_reliable();
+    static ModbusScoopConfig create_minimal();
 };
 
 /**
- * @brief High-performance Modbus protocol adapter
- * 
+ * @brief High-performance Modbus protocol scoop (data collector)
+ *
  * Features:
  * - TCP and RTU support
  * - Asynchronous polling with configurable intervals
@@ -135,21 +135,21 @@ public:
  * - Zero-copy data handling where possible
  * - Lock-free statistics collection
  */
-class ModbusAdapter : public ipb::common::IProtocolSourceBase {
+class ModbusScoop : public ipb::common::IProtocolSourceBase {
 public:
     static constexpr uint16_t PROTOCOL_ID = 1;
     static constexpr std::string_view PROTOCOL_NAME = "Modbus";
-    static constexpr std::string_view COMPONENT_NAME = "ModbusAdapter";
+    static constexpr std::string_view COMPONENT_NAME = "ModbusScoop";
     static constexpr std::string_view COMPONENT_VERSION = "1.0.0";
     
-    ModbusAdapter();
-    ~ModbusAdapter() override;
-    
+    ModbusScoop();
+    ~ModbusScoop() override;
+
     // Disable copy/move for thread safety
-    ModbusAdapter(const ModbusAdapter&) = delete;
-    ModbusAdapter& operator=(const ModbusAdapter&) = delete;
-    ModbusAdapter(ModbusAdapter&&) = delete;
-    ModbusAdapter& operator=(ModbusAdapter&&) = delete;
+    ModbusScoop(const ModbusScoop&) = delete;
+    ModbusScoop& operator=(const ModbusScoop&) = delete;
+    ModbusScoop(ModbusScoop&&) = delete;
+    ModbusScoop& operator=(ModbusScoop&&) = delete;
     
     // IProtocolSourceBase interface
     ipb::common::Result<ipb::common::DataSet> read() override;
@@ -204,7 +204,7 @@ public:
     
 private:
     // Configuration
-    std::unique_ptr<ModbusAdapterConfig> config_;
+    std::unique_ptr<ModbusScoopConfig> config_;
     
     // Modbus context
     modbus_t* modbus_ctx_ = nullptr;
@@ -284,31 +284,31 @@ private:
 };
 
 /**
- * @brief Factory for creating Modbus adapters
+ * @brief Factory for creating Modbus scoops
  */
-class ModbusAdapterFactory {
+class ModbusScoopFactory {
 public:
-    static std::unique_ptr<ModbusAdapter> create(const ModbusAdapterConfig& config);
-    static std::unique_ptr<ModbusAdapter> create_tcp(const std::string& host, uint16_t port);
-    static std::unique_ptr<ModbusAdapter> create_rtu(const std::string& device, 
-                                                    int baud_rate = 9600,
-                                                    char parity = 'N',
-                                                    int data_bits = 8,
-                                                    int stop_bits = 1);
-    
+    static std::unique_ptr<ModbusScoop> create(const ModbusScoopConfig& config);
+    static std::unique_ptr<ModbusScoop> create_tcp(const std::string& host, uint16_t port);
+    static std::unique_ptr<ModbusScoop> create_rtu(const std::string& device,
+                                                   int baud_rate = 9600,
+                                                   char parity = 'N',
+                                                   int data_bits = 8,
+                                                   int stop_bits = 1);
+
     // Preset factories
-    static std::unique_ptr<ModbusAdapter> create_high_performance_tcp(const std::string& host, uint16_t port);
-    static std::unique_ptr<ModbusAdapter> create_low_latency_tcp(const std::string& host, uint16_t port);
-    static std::unique_ptr<ModbusAdapter> create_reliable_tcp(const std::string& host, uint16_t port);
+    static std::unique_ptr<ModbusScoop> create_high_performance_tcp(const std::string& host, uint16_t port);
+    static std::unique_ptr<ModbusScoop> create_low_latency_tcp(const std::string& host, uint16_t port);
+    static std::unique_ptr<ModbusScoop> create_reliable_tcp(const std::string& host, uint16_t port);
 };
 
-} // namespace ipb::adapter::modbus
+} // namespace ipb::scoop::modbus
 
 // Hash specialization for ModbusAddress
 namespace std {
     template<>
-    struct hash<ipb::adapter::modbus::ModbusAddress> {
-        size_t operator()(const ipb::adapter::modbus::ModbusAddress& addr) const noexcept {
+    struct hash<ipb::scoop::modbus::ModbusAddress> {
+        size_t operator()(const ipb::scoop::modbus::ModbusAddress& addr) const noexcept {
             return addr.hash();
         }
     };

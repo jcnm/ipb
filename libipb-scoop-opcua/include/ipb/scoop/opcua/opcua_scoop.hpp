@@ -18,7 +18,7 @@
 #include <chrono>
 #include <queue>
 
-namespace ipb::adapter::opcua {
+namespace ipb::scoop::opcua {
 
 /**
  * @brief OPC UA node class enumeration
@@ -113,7 +113,7 @@ struct SubscriptionSettings {
 /**
  * @brief OPC UA adapter configuration
  */
-class OPCUAAdapterConfig : public ipb::common::ConfigurationBase {
+class OPCUAScoopConfig : public ipb::common::ConfigurationBase {
 public:
     // Connection settings
     std::string endpoint_url;
@@ -178,10 +178,10 @@ public:
     std::unique_ptr<ipb::common::ConfigurationBase> clone() const override;
     
     // Preset configurations
-    static OPCUAAdapterConfig create_high_performance();
-    static OPCUAAdapterConfig create_low_latency();
-    static OPCUAAdapterConfig create_secure();
-    static OPCUAAdapterConfig create_reliable();
+    static OPCUAScoopConfig create_high_performance();
+    static OPCUAScoopConfig create_low_latency();
+    static OPCUAScoopConfig create_secure();
+    static OPCUAScoopConfig create_reliable();
 };
 
 /**
@@ -197,21 +197,21 @@ public:
  * - Method calling support
  * - Historical data access
  */
-class OPCUAAdapter : public ipb::common::IProtocolSourceBase {
+class OPCUAScoop : public ipb::common::IProtocolSourceBase {
 public:
     static constexpr uint16_t PROTOCOL_ID = 2;
     static constexpr std::string_view PROTOCOL_NAME = "OPC UA";
-    static constexpr std::string_view COMPONENT_NAME = "OPCUAAdapter";
+    static constexpr std::string_view COMPONENT_NAME = "OPCUAScoop";
     static constexpr std::string_view COMPONENT_VERSION = "1.0.0";
     
-    OPCUAAdapter();
-    ~OPCUAAdapter() override;
+    OPCUAScoop();
+    ~OPCUAScoop() override;
     
     // Disable copy/move for thread safety
-    OPCUAAdapter(const OPCUAAdapter&) = delete;
-    OPCUAAdapter& operator=(const OPCUAAdapter&) = delete;
-    OPCUAAdapter(OPCUAAdapter&&) = delete;
-    OPCUAAdapter& operator=(OPCUAAdapter&&) = delete;
+    OPCUAScoop(const OPCUAScoop&) = delete;
+    OPCUAScoop& operator=(const OPCUAScoop&) = delete;
+    OPCUAScoop(OPCUAScoop&&) = delete;
+    OPCUAScoop& operator=(OPCUAScoop&&) = delete;
     
     // IProtocolSourceBase interface
     ipb::common::Result<ipb::common::DataSet> read() override;
@@ -289,7 +289,7 @@ public:
 
 private:
     // Configuration
-    std::unique_ptr<OPCUAAdapterConfig> config_;
+    std::unique_ptr<OPCUAScoopConfig> config_;
     
     // OPC UA client
     UA_Client* client_ = nullptr;
@@ -405,32 +405,32 @@ private:
 /**
  * @brief Factory for creating OPC UA adapters
  */
-class OPCUAAdapterFactory {
+class OPCUAScoopFactory {
 public:
-    static std::unique_ptr<OPCUAAdapter> create(const OPCUAAdapterConfig& config);
-    static std::unique_ptr<OPCUAAdapter> create_insecure(const std::string& endpoint_url);
-    static std::unique_ptr<OPCUAAdapter> create_secure(const std::string& endpoint_url,
+    static std::unique_ptr<OPCUAScoop> create(const OPCUAScoopConfig& config);
+    static std::unique_ptr<OPCUAScoop> create_insecure(const std::string& endpoint_url);
+    static std::unique_ptr<OPCUAScoop> create_secure(const std::string& endpoint_url,
                                                       const std::string& username,
                                                       const std::string& password);
-    static std::unique_ptr<OPCUAAdapter> create_certificate_based(const std::string& endpoint_url,
+    static std::unique_ptr<OPCUAScoop> create_certificate_based(const std::string& endpoint_url,
                                                                  const std::string& cert_path,
                                                                  const std::string& key_path);
     
     // Preset factories
-    static std::unique_ptr<OPCUAAdapter> create_high_performance(const std::string& endpoint_url);
-    static std::unique_ptr<OPCUAAdapter> create_low_latency(const std::string& endpoint_url);
-    static std::unique_ptr<OPCUAAdapter> create_secure_reliable(const std::string& endpoint_url,
+    static std::unique_ptr<OPCUAScoop> create_high_performance(const std::string& endpoint_url);
+    static std::unique_ptr<OPCUAScoop> create_low_latency(const std::string& endpoint_url);
+    static std::unique_ptr<OPCUAScoop> create_secure_reliable(const std::string& endpoint_url,
                                                                const std::string& username,
                                                                const std::string& password);
 };
 
-} // namespace ipb::adapter::opcua
+} // namespace ipb::scoop::opcua
 
 // Hash specialization for NodeId
 namespace std {
     template<>
-    struct hash<ipb::adapter::opcua::NodeId> {
-        size_t operator()(const ipb::adapter::opcua::NodeId& node_id) const noexcept {
+    struct hash<ipb::scoop::opcua::NodeId> {
+        size_t operator()(const ipb::scoop::opcua::NodeId& node_id) const noexcept {
             return node_id.hash();
         }
     };
