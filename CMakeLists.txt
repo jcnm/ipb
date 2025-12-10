@@ -25,6 +25,13 @@ option(ENABLE_MQTT_SINK "Enable MQTT sink" ON)
 # Scoop options (data collectors)
 option(ENABLE_MODBUS_SCOOP "Enable Modbus scoop" OFF)
 option(ENABLE_OPCUA_SCOOP "Enable OPC UA scoop" OFF)
+option(ENABLE_SPARKPLUG_SCOOP "Enable Sparkplug B scoop" OFF)
+
+# Sparkplug sink option
+option(ENABLE_SPARKPLUG_SINK "Enable Sparkplug B sink" OFF)
+
+# Transport options (shared libraries)
+option(BUILD_TRANSPORT_MQTT "Build MQTT transport (shared by MQTT/Sparkplug)" ON)
 
 # Performance options
 option(ENABLE_OPTIMIZATIONS "Enable performance optimizations" ON)
@@ -156,20 +163,50 @@ if(BUILD_ALL_COMPONENTS OR ENABLE_SYSLOG_SINK)
     conditional_add_subdirectory(libipb-sink-syslog ENABLE_SYSLOG_SINK)
 endif()
 
-if(BUILD_ALL_COMPONENTS OR ENABLE_MQTT_SINK)
+# MQTT Transport Layer (shared by MQTT sink/scoop and Sparkplug sink/scoop)
+# Build if any MQTT-based component is enabled
+set(NEED_MQTT_TRANSPORT FALSE)
+if(ENABLE_MQTT_SINK OR ENABLE_SPARKPLUG_SINK OR ENABLE_SPARKPLUG_SCOOP OR BUILD_TRANSPORT_MQTT)
+    set(NEED_MQTT_TRANSPORT TRUE)
+endif()
+
+if(NEED_MQTT_TRANSPORT)
     # Check for MQTT dependencies
     find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
     find_library(PAHO_MQTT_C_LIB paho-mqtt3as)
-    
+
     if(PAHO_MQTT_CPP_LIB AND PAHO_MQTT_C_LIB)
-        conditional_add_subdirectory(libipb-sink-mqtt ENABLE_MQTT_SINK)
-        message(STATUS "MQTT sink enabled")
+        # Build shared transport library first
+        conditional_add_subdirectory(libipb-transport-mqtt TRUE)
+        message(STATUS "MQTT transport library enabled")
+        set(MQTT_TRANSPORT_AVAILABLE TRUE)
     else()
-        message(WARNING "MQTT libraries not found. MQTT sink disabled.")
+        message(WARNING "MQTT libraries not found. MQTT/Sparkplug components disabled.")
         message(STATUS "Install with: brew install paho-mqtt-c paho-mqtt-cpp (macOS)")
         message(STATUS "Install with: sudo apt install libpaho-mqtt-dev libpaho-mqttpp-dev (Ubuntu)")
+        set(MQTT_TRANSPORT_AVAILABLE FALSE)
         set(ENABLE_MQTT_SINK OFF)
+        set(ENABLE_SPARKPLUG_SINK OFF)
+        set(ENABLE_SPARKPLUG_SCOOP OFF)
     endif()
+endif()
+
+# MQTT Sink
+if((BUILD_ALL_COMPONENTS OR ENABLE_MQTT_SINK) AND MQTT_TRANSPORT_AVAILABLE)
+    conditional_add_subdirectory(libipb-sink-mqtt ENABLE_MQTT_SINK)
+    message(STATUS "MQTT sink enabled")
+endif()
+
+# Sparkplug B Sink
+if((BUILD_ALL_COMPONENTS OR ENABLE_SPARKPLUG_SINK) AND MQTT_TRANSPORT_AVAILABLE)
+    conditional_add_subdirectory(libipb-sink-sparkplug ENABLE_SPARKPLUG_SINK)
+    message(STATUS "Sparkplug B sink enabled")
+endif()
+
+# Sparkplug B Scoop
+if((BUILD_ALL_COMPONENTS OR ENABLE_SPARKPLUG_SCOOP) AND MQTT_TRANSPORT_AVAILABLE)
+    conditional_add_subdirectory(libipb-scoop-sparkplug ENABLE_SPARKPLUG_SCOOP)
+    message(STATUS "Sparkplug B scoop enabled")
 endif()
 
 # Main application
@@ -217,10 +254,19 @@ message(STATUS "  Common library: ${BUILD_COMMON}")
 message(STATUS "  Router: ${BUILD_ROUTER}")
 message(STATUS "  IPB Gate: ${BUILD_GATE}")
 message(STATUS "")
+message(STATUS "Transport:")
+message(STATUS "  MQTT transport: ${MQTT_TRANSPORT_AVAILABLE}")
+message(STATUS "")
 message(STATUS "Sinks:")
 message(STATUS "  Console sink: ${ENABLE_CONSOLE_SINK}")
 message(STATUS "  Syslog sink: ${ENABLE_SYSLOG_SINK}")
 message(STATUS "  MQTT sink: ${ENABLE_MQTT_SINK}")
+message(STATUS "  Sparkplug B sink: ${ENABLE_SPARKPLUG_SINK}")
+message(STATUS "")
+message(STATUS "Scoops (Data Collectors):")
+message(STATUS "  Modbus scoop: ${ENABLE_MODBUS_SCOOP}")
+message(STATUS "  OPC UA scoop: ${ENABLE_OPCUA_SCOOP}")
+message(STATUS "  Sparkplug B scoop: ${ENABLE_SPARKPLUG_SCOOP}")
 message(STATUS "")
 message(STATUS "Options:")
 message(STATUS "  Examples: ${BUILD_EXAMPLES}")
