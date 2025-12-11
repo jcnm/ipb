@@ -41,6 +41,9 @@ set(SOURCES
     # Sink Registry
     src/sink_registry/sink_registry.cpp
     src/sink_registry/load_balancer.cpp
+
+    # Scoop Registry
+    src/scoop_registry/scoop_registry.cpp
 )
 
 add_library(ipb-core-components ${SOURCES})
