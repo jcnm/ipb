@@ -1,10 +1,11 @@
 #include "ipb/transport/mqtt/mqtt_connection.hpp"
+#include "ipb/transport/mqtt/backends/mqtt_backend.hpp"
 
-#include <mqtt/async_client.h>
 #include <random>
 #include <sstream>
 #include <iomanip>
 #include <regex>
+#include <iostream>
 
 namespace ipb::transport::mqtt {
 
@@ -16,6 +17,9 @@ bool ConnectionConfig::is_valid() const noexcept {
     if (broker_url.empty()) return false;
     if (keep_alive.count() <= 0) return false;
     if (connect_timeout.count() <= 0) return false;
+
+    // Check if selected backend is available
+    if (!is_backend_available(backend)) return false;
 
     if (security != SecurityMode::NONE) {
         if (security == SecurityMode::TLS || security == SecurityMode::TLS_CLIENT_CERT) {
@@ -37,6 +41,10 @@ std::string ConnectionConfig::validation_error() const {
     if (keep_alive.count() <= 0) return "Keep alive must be positive";
     if (connect_timeout.count() <= 0) return "Connect timeout must be positive";
 
+    if (!is_backend_available(backend)) {
+        return "Selected backend '" + std::string(backend_type_name(backend)) + "' is not available";
+    }
+
     if (security != SecurityMode::NONE) {
         if (security == SecurityMode::TLS || security == SecurityMode::TLS_CLIENT_CERT) {
             if (tls.ca_cert_path.empty()) return "CA certificate path required for TLS";
@@ -55,34 +63,62 @@ std::string ConnectionConfig::validation_error() const {
 }
 
 //=============================================================================
-// MQTTConnection::Impl
+// MQTTConnection::Impl - Backend-agnostic implementation
 //=============================================================================
 
-class MQTTConnection::Impl : public ::mqtt::callback, public ::mqtt::iaction_listener {
+class MQTTConnection::Impl {
 public:
     explicit Impl(const ConnectionConfig& config)
         : config_(config)
         , state_(ConnectionState::DISCONNECTED) {
 
         // Generate client ID if not provided
-        std::string client_id = config.client_id;
-        if (client_id.empty()) {
-            client_id = generate_client_id("ipb");
-        }
-        client_id_ = client_id;
+        client_id_ = config.client_id.empty() ? generate_client_id("ipb") : config.client_id;
 
-        // Create MQTT client
-        client_ = std::make_unique<::mqtt::async_client>(
-            config.broker_url,
-            client_id,
-            config.max_buffered
+        // Sync keep_alive_seconds from keep_alive duration
+        config_.keep_alive_seconds = static_cast<uint16_t>(config.keep_alive.count());
+        config_.reconnect_delay_seconds = static_cast<uint32_t>(config.min_reconnect_delay.count());
+
+        // Sync LWT fields
+        config_.sync_lwt();
+
+        // Update client_id in config
+        config_.client_id = client_id_;
+
+        // Create the appropriate backend
+        backend_ = create_backend(config.backend);
+        if (!backend_) {
+            std::cerr << "Failed to create MQTT backend: "
+                      << backend_type_name(config.backend) << std::endl;
+            return;
+        }
+
+        // Initialize backend
+        if (!backend_->initialize(config_)) {
+            std::cerr << "Failed to initialize MQTT backend" << std::endl;
+            backend_.reset();
+            return;
+        }
+
+        // Setup callbacks
+        backend_->set_connection_callback(
+            [this](ConnectionState state, std::string_view reason) {
+                handle_connection_state(state, reason);
+            }
         );
 
-        // Set this as the callback handler
-        client_->set_callback(*this);
+        backend_->set_message_callback(
+            [this](std::string_view topic, std::span<const uint8_t> payload,
+                   QoS qos, bool retained) {
+                handle_message(topic, payload, qos, retained);
+            }
+        );
 
-        // Setup connection options
-        setup_connect_options();
+        backend_->set_delivery_callback(
+            [this](uint16_t token, bool success) {
+                handle_delivery(token, success);
+            }
+        );
     }
 
     ~Impl() {
@@ -90,39 +126,28 @@ public:
     }
 
     bool connect() {
+        if (!backend_) return false;
+
         if (state_ == ConnectionState::CONNECTED ||
             state_ == ConnectionState::CONNECTING) {
             return true;
         }
 
-        try {
-            state_ = ConnectionState::CONNECTING;
-            client_->connect(conn_opts_, nullptr, *this);
-            return true;
-        } catch (const ::mqtt::exception& e) {
-            state_ = ConnectionState::FAILED;
-            invoke_connection_callback(ConnectionState::FAILED, e.what());
-            return false;
-        }
+        state_ = ConnectionState::CONNECTING;
+        return backend_->connect();
     }
 
     void disconnect(std::chrono::milliseconds timeout) {
-        if (state_ == ConnectionState::DISCONNECTED) {
+        if (!backend_ || state_ == ConnectionState::DISCONNECTED) {
             return;
         }
 
-        try {
-            if (client_->is_connected()) {
-                client_->disconnect(static_cast<int>(timeout.count()))->wait();
-            }
-            state_ = ConnectionState::DISCONNECTED;
-        } catch (const ::mqtt::exception&) {
-            // Ignore disconnection errors
-        }
+        backend_->disconnect(static_cast<uint32_t>(timeout.count()));
+        state_ = ConnectionState::DISCONNECTED;
     }
 
     bool is_connected() const noexcept {
-        return state_ == ConnectionState::CONNECTED && client_->is_connected();
+        return backend_ && backend_->is_connected();
     }
 
     ConnectionState get_state() const noexcept {
@@ -131,6 +156,22 @@ public:
 
     std::string get_client_id() const {
         return client_id_;
+    }
+
+    BackendType get_backend_type() const noexcept {
+        return backend_ ? backend_->type() : BackendType::PAHO;
+    }
+
+    IMQTTBackend* get_backend() noexcept {
+        return backend_.get();
+    }
+
+    int process_events(uint32_t timeout_ms) {
+        return backend_ ? backend_->process_events(timeout_ms) : -1;
+    }
+
+    bool requires_event_loop() const noexcept {
+        return backend_ && backend_->requires_event_loop();
     }
 
     int publish(const std::string& topic,
@@ -143,16 +184,20 @@ public:
             return -1;
         }
 
-        try {
-            auto msg = ::mqtt::make_message(topic, payload, len, static_cast<int>(qos), retained);
-            auto tok = client_->publish(msg);
+        std::span<const uint8_t> payload_span(
+            static_cast<const uint8_t*>(payload), len
+        );
+
+        uint16_t token = backend_->publish(topic, payload_span, qos, retained);
+
+        if (token > 0) {
             stats_.messages_published++;
             stats_.bytes_sent += len;
-            return tok->get_message_id();
-        } catch (const ::mqtt::exception&) {
-            stats_.messages_failed++;
-            return -1;
+            return static_cast<int>(token);
         }
+
+        stats_.messages_failed++;
+        return -1;
     }
 
     bool publish_sync(const std::string& topic,
@@ -166,224 +211,116 @@ public:
             return false;
         }
 
-        try {
-            auto msg = ::mqtt::make_message(topic, payload, len, static_cast<int>(qos), retained);
-            auto tok = client_->publish(msg);
-            if (tok->wait_for(timeout)) {
-                stats_.messages_published++;
-                stats_.bytes_sent += len;
-                return true;
-            }
+        std::span<const uint8_t> payload_span(
+            static_cast<const uint8_t*>(payload), len
+        );
+
+        bool success = backend_->publish_sync(
+            topic, payload_span, qos, retained,
+            static_cast<uint32_t>(timeout.count())
+        );
+
+        if (success) {
+            stats_.messages_published++;
+            stats_.bytes_sent += len;
+        } else {
             stats_.messages_failed++;
-            return false;
-        } catch (const ::mqtt::exception&) {
-            stats_.messages_failed++;
-            return false;
         }
+
+        return success;
     }
 
     bool subscribe(const std::string& topic, QoS qos) {
         if (!is_connected()) return false;
-
-        try {
-            client_->subscribe(topic, static_cast<int>(qos));
-            return true;
-        } catch (const ::mqtt::exception&) {
-            return false;
-        }
-    }
-
-    bool subscribe(const std::vector<std::pair<std::string, QoS>>& topics) {
-        if (!is_connected() || topics.empty()) return false;
-
-        try {
-            std::vector<std::string> topic_filters;
-            std::vector<int> qos_levels;
-            for (const auto& [topic, qos] : topics) {
-                topic_filters.push_back(topic);
-                qos_levels.push_back(static_cast<int>(qos));
-            }
-            client_->subscribe(topic_filters, qos_levels);
-            return true;
-        } catch (const ::mqtt::exception&) {
-            return false;
-        }
+        return backend_->subscribe(topic, qos);
     }
 
     bool unsubscribe(const std::string& topic) {
         if (!is_connected()) return false;
-
-        try {
-            client_->unsubscribe(topic);
-            return true;
-        } catch (const ::mqtt::exception&) {
-            return false;
-        }
-    }
-
-    bool unsubscribe(const std::vector<std::string>& topics) {
-        if (!is_connected() || topics.empty()) return false;
-
-        try {
-            client_->unsubscribe(topics);
-            return true;
-        } catch (const ::mqtt::exception&) {
-            return false;
-        }
+        return backend_->unsubscribe(topic);
     }
 
     void set_connection_callback(ConnectionCallback cb) {
-        std::lock_guard<std::mutex> lock(cb_mutex_);
+        std::lock_guard<std::mutex> lock(callback_mutex_);
         connection_cb_ = std::move(cb);
     }
 
     void set_message_callback(MessageCallback cb) {
-        std::lock_guard<std::mutex> lock(cb_mutex_);
+        std::lock_guard<std::mutex> lock(callback_mutex_);
         message_cb_ = std::move(cb);
     }
 
     void set_delivery_callback(DeliveryCallback cb) {
-        std::lock_guard<std::mutex> lock(cb_mutex_);
+        std::lock_guard<std::mutex> lock(callback_mutex_);
         delivery_cb_ = std::move(cb);
     }
 
-    const Statistics& get_statistics() const noexcept {
+    const MQTTConnection::Statistics& get_statistics() const noexcept {
         return stats_;
     }
 
     void reset_statistics() {
         stats_.reset();
+        if (backend_) {
+            backend_->reset_stats();
+        }
     }
 
 private:
-    // mqtt::callback overrides
-    void connected(const std::string& cause) override {
-        state_ = ConnectionState::CONNECTED;
-        stats_.connected_since = std::chrono::steady_clock::now();
-        invoke_connection_callback(ConnectionState::CONNECTED, cause);
-    }
+    void handle_connection_state(ConnectionState state, std::string_view reason) {
+        state_ = state;
 
-    void connection_lost(const std::string& cause) override {
-        state_ = ConnectionState::DISCONNECTED;
-        invoke_connection_callback(ConnectionState::DISCONNECTED, cause);
-
-        // Attempt reconnection if enabled
-        if (config_.auto_reconnect) {
+        if (state == ConnectionState::CONNECTED) {
+            stats_.connected_since = std::chrono::steady_clock::now();
+        } else if (state == ConnectionState::RECONNECTING) {
             stats_.reconnect_count++;
-            state_ = ConnectionState::RECONNECTING;
-            invoke_connection_callback(ConnectionState::RECONNECTING, "Auto-reconnecting");
-        }
-    }
-
-    void message_arrived(::mqtt::const_message_ptr msg) override {
-        stats_.messages_received++;
-        stats_.bytes_received += msg->get_payload().size();
-
-        std::lock_guard<std::mutex> lock(cb_mutex_);
-        if (message_cb_) {
-            message_cb_(
-                msg->get_topic(),
-                msg->get_payload_str(),
-                static_cast<QoS>(msg->get_qos()),
-                msg->is_retained()
-            );
-        }
-    }
-
-    void delivery_complete(::mqtt::delivery_token_ptr tok) override {
-        std::lock_guard<std::mutex> lock(cb_mutex_);
-        if (delivery_cb_) {
-            delivery_cb_(tok->get_message_id(), true, "");
-        }
-    }
-
-    // mqtt::iaction_listener overrides
-    void on_failure(const ::mqtt::token& tok) override {
-        if (state_ == ConnectionState::CONNECTING) {
-            state_ = ConnectionState::FAILED;
-            invoke_connection_callback(ConnectionState::FAILED, "Connection failed");
-        }
-    }
-
-    void on_success(const ::mqtt::token& tok) override {
-        // Connection successful - handled in connected() callback
-    }
-
-    void setup_connect_options() {
-        conn_opts_.set_clean_session(config_.clean_session);
-        conn_opts_.set_keep_alive_interval(static_cast<int>(config_.keep_alive.count()));
-        conn_opts_.set_connect_timeout(static_cast<int>(config_.connect_timeout.count()));
-        conn_opts_.set_automatic_reconnect(config_.auto_reconnect);
-
-        if (config_.auto_reconnect) {
-            conn_opts_.set_min_retry_interval(static_cast<int>(config_.min_reconnect_delay.count()));
-            conn_opts_.set_max_retry_interval(static_cast<int>(config_.max_reconnect_delay.count()));
         }
 
-        if (!config_.username.empty()) {
-            conn_opts_.set_user_name(config_.username);
-            conn_opts_.set_password(config_.password);
-        }
-
-        // Setup TLS if required
-        if (config_.security != SecurityMode::NONE) {
-            setup_ssl_options();
-        }
-
-        // Setup LWT if configured
-        if (config_.lwt.enabled) {
-            auto lwt = ::mqtt::message(
-                config_.lwt.topic,
-                config_.lwt.payload,
-                static_cast<int>(config_.lwt.qos),
-                config_.lwt.retained
-            );
-            conn_opts_.set_will_message(std::make_shared<::mqtt::message>(lwt));
-        }
-    }
-
-    void setup_ssl_options() {
-        ::mqtt::ssl_options ssl_opts;
-
-        if (!config_.tls.ca_cert_path.empty()) {
-            ssl_opts.set_trust_store(config_.tls.ca_cert_path);
-        }
-
-        if (!config_.tls.client_cert_path.empty()) {
-            ssl_opts.set_key_store(config_.tls.client_cert_path);
-        }
-
-        if (!config_.tls.client_key_path.empty()) {
-            ssl_opts.set_private_key(config_.tls.client_key_path);
-        }
-
-        ssl_opts.set_enable_server_cert_auth(config_.tls.verify_certificate);
-
-        conn_opts_.set_ssl(ssl_opts);
-    }
-
-    void invoke_connection_callback(ConnectionState state, const std::string& reason) {
-        std::lock_guard<std::mutex> lock(cb_mutex_);
+        std::lock_guard<std::mutex> lock(callback_mutex_);
         if (connection_cb_) {
-            connection_cb_(state, reason);
+            connection_cb_(state, std::string(reason));
+        }
+    }
+
+    void handle_message(std::string_view topic, std::span<const uint8_t> payload,
+                        QoS qos, bool retained) {
+        stats_.messages_received++;
+        stats_.bytes_received += payload.size();
+
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        if (message_cb_) {
+            std::string payload_str(
+                reinterpret_cast<const char*>(payload.data()),
+                payload.size()
+            );
+            message_cb_(std::string(topic), payload_str, qos, retained);
+        }
+    }
+
+    void handle_delivery(uint16_t token, bool success) {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        if (delivery_cb_) {
+            delivery_cb_(static_cast<int>(token), success, success ? "" : "Delivery failed");
         }
     }
 
     ConnectionConfig config_;
     std::string client_id_;
-    std::unique_ptr<::mqtt::async_client> client_;
-    ::mqtt::connect_options conn_opts_;
+    std::unique_ptr<IMQTTBackend> backend_;
     std::atomic<ConnectionState> state_;
-    Statistics stats_;
 
-    std::mutex cb_mutex_;
+    // Callbacks
     ConnectionCallback connection_cb_;
     MessageCallback message_cb_;
     DeliveryCallback delivery_cb_;
+    mutable std::mutex callback_mutex_;
+
+    // Statistics
+    mutable MQTTConnection::Statistics stats_;
 };
 
 //=============================================================================
-// MQTTConnection Implementation
+// MQTTConnection Public Methods
 //=============================================================================
 
 MQTTConnection::MQTTConnection(const ConnectionConfig& config)
@@ -414,6 +351,22 @@ std::string MQTTConnection::get_client_id() const {
     return impl_->get_client_id();
 }
 
+BackendType MQTTConnection::get_backend_type() const noexcept {
+    return impl_->get_backend_type();
+}
+
+IMQTTBackend* MQTTConnection::get_backend() noexcept {
+    return impl_->get_backend();
+}
+
+int MQTTConnection::process_events(uint32_t timeout_ms) {
+    return impl_->process_events(timeout_ms);
+}
+
+bool MQTTConnection::requires_event_loop() const noexcept {
+    return impl_->requires_event_loop();
+}
+
 int MQTTConnection::publish(const std::string& topic,
                             const std::string& payload,
                             QoS qos,
@@ -429,10 +382,10 @@ int MQTTConnection::publish(const std::string& topic,
 }
 
 bool MQTTConnection::publish_sync(const std::string& topic,
-                                  const std::string& payload,
-                                  QoS qos,
-                                  bool retained,
-                                  std::chrono::milliseconds timeout) {
+                                   const std::string& payload,
+                                   QoS qos,
+                                   bool retained,
+                                   std::chrono::milliseconds timeout) {
     return impl_->publish_sync(topic, payload.data(), payload.size(), qos, retained, timeout);
 }
 
@@ -441,7 +394,12 @@ bool MQTTConnection::subscribe(const std::string& topic, QoS qos) {
 }
 
 bool MQTTConnection::subscribe(const std::vector<std::pair<std::string, QoS>>& topics) {
-    return impl_->subscribe(topics);
+    for (const auto& [topic, qos] : topics) {
+        if (!impl_->subscribe(topic, qos)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool MQTTConnection::unsubscribe(const std::string& topic) {
@@ -449,7 +407,12 @@ bool MQTTConnection::unsubscribe(const std::string& topic) {
 }
 
 bool MQTTConnection::unsubscribe(const std::vector<std::string>& topics) {
-    return impl_->unsubscribe(topics);
+    for (const auto& topic : topics) {
+        if (!impl_->unsubscribe(topic)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void MQTTConnection::set_connection_callback(ConnectionCallback cb) {
@@ -473,7 +436,7 @@ void MQTTConnection::reset_statistics() {
 }
 
 //=============================================================================
-// MQTTConnectionManager Implementation
+// MQTTConnectionManager
 //=============================================================================
 
 MQTTConnectionManager& MQTTConnectionManager::instance() {
@@ -505,10 +468,7 @@ std::shared_ptr<MQTTConnection> MQTTConnectionManager::get(const std::string& co
     std::lock_guard<std::mutex> lock(mutex_);
 
     auto it = connections_.find(connection_id);
-    if (it != connections_.end()) {
-        return it->second;
-    }
-    return nullptr;
+    return (it != connections_.end()) ? it->second : nullptr;
 }
 
 bool MQTTConnectionManager::has_connection(const std::string& connection_id) const {
@@ -518,15 +478,7 @@ bool MQTTConnectionManager::has_connection(const std::string& connection_id) con
 
 void MQTTConnectionManager::remove(const std::string& connection_id) {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    auto it = connections_.find(connection_id);
-    if (it != connections_.end()) {
-        // Only remove if this is the last reference
-        if (it->second.use_count() == 1) {
-            it->second->disconnect();
-            connections_.erase(it);
-        }
-    }
+    connections_.erase(connection_id);
 }
 
 std::vector<std::string> MQTTConnectionManager::get_connection_ids() const {
@@ -548,8 +500,10 @@ size_t MQTTConnectionManager::connection_count() const {
 void MQTTConnectionManager::disconnect_all() {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    for (auto& [_, conn] : connections_) {
-        conn->disconnect();
+    for (auto& [id, conn] : connections_) {
+        if (conn) {
+            conn->disconnect();
+        }
     }
     connections_.clear();
 }
@@ -566,26 +520,45 @@ std::string generate_client_id(const std::string& prefix) {
     std::stringstream ss;
     ss << prefix << "_";
 
+    // Generate 8 random hex characters
     for (int i = 0; i < 8; ++i) {
         ss << std::hex << dis(gen);
     }
+
+    // Add timestamp for uniqueness
+    auto now = std::chrono::system_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()
+    ).count();
+
+    ss << "_" << std::hex << (ms & 0xFFFF);
 
     return ss.str();
 }
 
 std::optional<std::tuple<std::string, std::string, uint16_t>> parse_broker_url(const std::string& url) {
-    // Pattern: protocol://host:port
-    std::regex url_regex(R"(^(tcp|ssl|ws|wss)://([^:]+):(\d+)$)");
+    // Simple regex for mqtt:// tcp:// ssl:// urls
+    std::regex url_regex(R"(^(tcp|ssl|mqtt|mqtts|ws|wss)://([^:/]+)(?::(\d+))?$)");
     std::smatch match;
 
-    if (std::regex_match(url, match, url_regex)) {
-        std::string protocol = match[1].str();
-        std::string host = match[2].str();
-        uint16_t port = static_cast<uint16_t>(std::stoi(match[3].str()));
-        return std::make_tuple(protocol, host, port);
+    if (!std::regex_match(url, match, url_regex)) {
+        return std::nullopt;
     }
 
-    return std::nullopt;
+    std::string protocol = match[1].str();
+    std::string host = match[2].str();
+    uint16_t port = 1883;
+
+    if (match[3].matched) {
+        port = static_cast<uint16_t>(std::stoi(match[3].str()));
+    } else {
+        // Default ports
+        if (protocol == "ssl" || protocol == "mqtts" || protocol == "wss") {
+            port = 8883;
+        }
+    }
+
+    return std::make_tuple(protocol, host, port);
 }
 
 std::string build_broker_url(const std::string& host, uint16_t port, bool use_tls) {

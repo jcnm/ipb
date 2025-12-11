@@ -5,33 +5,119 @@
 # - libipb-sink-sparkplug
 # - libipb-scoop-sparkplug
 #
-# This avoids duplicating the Paho MQTT library across multiple components.
+# Supports multiple backends:
+# - Paho MQTT (default, general purpose)
+# - coreMQTT (embedded, zero-allocation)
 
 cmake_minimum_required(VERSION 3.16)
 
-project(libipb-transport-mqtt VERSION 1.0.0)
+project(libipb-transport-mqtt VERSION 1.1.0)
 
 # C++ Standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Find Paho MQTT C++ library
-find_library(PAHO_MQTT_C_LIB paho-mqtt3as REQUIRED)
-find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3 REQUIRED)
-find_path(PAHO_MQTT_CPP_INCLUDE mqtt/async_client.h)
+#=============================================================================
+# Backend Options
+#=============================================================================
 
-if(NOT PAHO_MQTT_CPP_LIB OR NOT PAHO_MQTT_C_LIB)
-    message(FATAL_ERROR "Paho MQTT libraries not found. Please install:
-        Ubuntu/Debian: sudo apt install libpaho-mqtt-dev libpaho-mqttpp-dev
-        macOS: brew install paho-mqtt-c paho-mqtt-cpp")
+option(IPB_MQTT_BACKEND_PAHO "Enable Paho MQTT backend (default)" ON)
+option(IPB_MQTT_BACKEND_COREMQTT "Enable coreMQTT backend (embedded)" OFF)
+option(IPB_MQTT_DEFAULT_COREMQTT "Use coreMQTT as default backend" OFF)
+
+#=============================================================================
+# Find Dependencies
+#=============================================================================
+
+set(BACKENDS_AVAILABLE "")
+set(BACKEND_SOURCES "")
+set(BACKEND_LIBS "")
+set(BACKEND_INCLUDES "")
+set(BACKEND_DEFINES "")
+
+# Paho MQTT Backend
+if(IPB_MQTT_BACKEND_PAHO)
+    find_library(PAHO_MQTT_C_LIB paho-mqtt3as)
+    find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
+    find_path(PAHO_MQTT_CPP_INCLUDE mqtt/async_client.h)
+
+    if(PAHO_MQTT_CPP_LIB AND PAHO_MQTT_C_LIB)
+        message(STATUS "Paho MQTT backend: ENABLED")
+        list(APPEND BACKENDS_AVAILABLE "paho")
+        list(APPEND BACKEND_SOURCES src/backends/paho_backend.cpp)
+        list(APPEND BACKEND_LIBS ${PAHO_MQTT_CPP_LIB} ${PAHO_MQTT_C_LIB})
+        list(APPEND BACKEND_INCLUDES ${PAHO_MQTT_CPP_INCLUDE})
+        list(APPEND BACKEND_DEFINES IPB_HAS_PAHO=1)
+    else()
+        message(STATUS "Paho MQTT backend: NOT FOUND")
+        message(STATUS "  Install with: brew install paho-mqtt-c paho-mqtt-cpp (macOS)")
+        message(STATUS "  Install with: sudo apt install libpaho-mqtt-dev libpaho-mqttpp-dev (Ubuntu)")
+    endif()
 endif()
 
-# Source files
+# coreMQTT Backend
+if(IPB_MQTT_BACKEND_COREMQTT)
+    find_path(COREMQTT_INCLUDE core_mqtt.h
+        PATHS
+            /usr/local/include
+            /usr/include
+            ${CMAKE_SOURCE_DIR}/external/coreMQTT/source/include
+    )
+    find_library(COREMQTT_LIB coremqtt
+        PATHS
+            /usr/local/lib
+            /usr/lib
+            ${CMAKE_SOURCE_DIR}/external/coreMQTT/build
+    )
+
+    if(COREMQTT_INCLUDE)
+        message(STATUS "coreMQTT backend: ENABLED")
+        list(APPEND BACKENDS_AVAILABLE "coremqtt")
+        list(APPEND BACKEND_SOURCES src/backends/coremqtt_backend.cpp)
+        list(APPEND BACKEND_INCLUDES ${COREMQTT_INCLUDE})
+        list(APPEND BACKEND_DEFINES IPB_HAS_COREMQTT=1)
+        if(COREMQTT_LIB)
+            list(APPEND BACKEND_LIBS ${COREMQTT_LIB})
+        endif()
+    else()
+        message(STATUS "coreMQTT backend: NOT FOUND (stub will be used)")
+        # Still compile the stub version
+        list(APPEND BACKEND_SOURCES src/backends/coremqtt_backend.cpp)
+    endif()
+else()
+    # Compile stub even if not enabled (for API completeness)
+    list(APPEND BACKEND_SOURCES src/backends/coremqtt_backend.cpp)
+endif()
+
+# Default backend selection
+if(IPB_MQTT_DEFAULT_COREMQTT AND "coremqtt" IN_LIST BACKENDS_AVAILABLE)
+    list(APPEND BACKEND_DEFINES IPB_DEFAULT_MQTT_BACKEND_COREMQTT=1)
+    message(STATUS "Default MQTT backend: coreMQTT")
+elseif("paho" IN_LIST BACKENDS_AVAILABLE)
+    message(STATUS "Default MQTT backend: Paho")
+else()
+    message(WARNING "No MQTT backend available! Transport layer will not function.")
+endif()
+
+# Check we have at least one backend
+if(NOT BACKENDS_AVAILABLE)
+    message(WARNING "No MQTT backends found. Please install Paho MQTT or coreMQTT.")
+endif()
+
+#=============================================================================
+# Source Files
+#=============================================================================
+
 set(TRANSPORT_MQTT_SOURCES
     src/mqtt_connection.cpp
+    src/backends/backend_factory.cpp
+    ${BACKEND_SOURCES}
 )
 
-# Create shared library
+#=============================================================================
+# Library Target
+#=============================================================================
+
 add_library(ipb-transport-mqtt SHARED ${TRANSPORT_MQTT_SOURCES})
 
 # Include directories
@@ -40,17 +126,33 @@ target_include_directories(ipb-transport-mqtt
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
     PRIVATE
-        ${PAHO_MQTT_CPP_INCLUDE}
+        ${BACKEND_INCLUDES}
 )
 
 # Link dependencies
 target_link_libraries(ipb-transport-mqtt
     PUBLIC
-        ${PAHO_MQTT_CPP_LIB}
-        ${PAHO_MQTT_C_LIB}
         pthread
-        ssl
-        crypto
+    PRIVATE
+        ${BACKEND_LIBS}
+)
+
+# Find and link SSL if available (needed for TLS support)
+find_package(OpenSSL QUIET)
+if(OpenSSL_FOUND)
+    target_link_libraries(ipb-transport-mqtt PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+else()
+    find_library(SSL_LIB ssl)
+    find_library(CRYPTO_LIB crypto)
+    if(SSL_LIB AND CRYPTO_LIB)
+        target_link_libraries(ipb-transport-mqtt PRIVATE ${SSL_LIB} ${CRYPTO_LIB})
+    endif()
+endif()
+
+# Compile definitions
+target_compile_definitions(ipb-transport-mqtt
+    PRIVATE
+        ${BACKEND_DEFINES}
 )
 
 # Compiler options
@@ -60,17 +162,26 @@ target_compile_options(ipb-transport-mqtt PRIVATE
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-transport-mqtt PRIVATE -O3 -march=native)
+    target_compile_options(ipb-transport-mqtt PRIVATE -O3)
+    if(NOT APPLE)
+        target_compile_options(ipb-transport-mqtt PRIVATE -march=native)
+    endif()
 endif()
 
-# Set library properties
+#=============================================================================
+# Library Properties
+#=============================================================================
+
 set_target_properties(ipb-transport-mqtt PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 1
     OUTPUT_NAME ipb-transport-mqtt
 )
 
-# Install targets
+#=============================================================================
+# Installation
+#=============================================================================
+
 install(TARGETS ipb-transport-mqtt
     EXPORT ipb-transport-mqtt-targets
     LIBRARY DESTINATION lib
@@ -111,5 +222,18 @@ install(FILES
     DESTINATION lib/cmake/ipb-transport-mqtt
 )
 
-# Alias for use in parent project
+#=============================================================================
+# Alias for Parent Project
+#=============================================================================
+
 add_library(ipb::transport-mqtt ALIAS ipb-transport-mqtt)
+
+#=============================================================================
+# Summary
+#=============================================================================
+
+message(STATUS "")
+message(STATUS "MQTT Transport Configuration:")
+message(STATUS "  Available backends: ${BACKENDS_AVAILABLE}")
+message(STATUS "  Backend sources: ${BACKEND_SOURCES}")
+message(STATUS "")

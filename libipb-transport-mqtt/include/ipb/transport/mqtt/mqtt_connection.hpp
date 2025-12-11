@@ -10,11 +10,16 @@
  *
  * Architecture:
  * - MQTTConnectionManager: Singleton managing shared connections
- * - MQTTConnection: Individual connection wrapper
- * - Shared enums and configurations
+ * - MQTTConnection: Individual connection wrapper (backend-agnostic)
+ * - IMQTTBackend: Abstract backend interface (Paho, coreMQTT, Native)
+ *
+ * Backend selection:
+ * - Compile time: -DIPB_MQTT_DEFAULT_COREMQTT=1
+ * - Runtime: ConnectionConfig::backend field
  */
 
-#include <mqtt/async_client.h>
+#include "backends/mqtt_backend.hpp"
+
 #include <memory>
 #include <string>
 #include <functional>
@@ -27,39 +32,7 @@
 
 namespace ipb::transport::mqtt {
 
-//=============================================================================
-// Shared Enums (used by all MQTT-based sinks/scoops)
-//=============================================================================
-
-/**
- * @brief MQTT Quality of Service levels
- */
-enum class QoS : int {
-    AT_MOST_ONCE = 0,   ///< Fire and forget
-    AT_LEAST_ONCE = 1,  ///< Acknowledged delivery
-    EXACTLY_ONCE = 2    ///< Assured delivery
-};
-
-/**
- * @brief MQTT connection security modes
- */
-enum class SecurityMode {
-    NONE,               ///< No security (plain TCP)
-    TLS,                ///< TLS encryption only
-    TLS_PSK,            ///< TLS with Pre-Shared Key
-    TLS_CLIENT_CERT     ///< TLS with client certificate authentication
-};
-
-/**
- * @brief Connection state
- */
-enum class ConnectionState {
-    DISCONNECTED,
-    CONNECTING,
-    CONNECTED,
-    RECONNECTING,
-    FAILED
-};
+// Note: QoS, SecurityMode, ConnectionState, BackendType are defined in backends/mqtt_backend.hpp
 
 //=============================================================================
 // Shared Configurations
@@ -76,6 +49,7 @@ struct TLSConfig {
     std::string psk_key;                ///< PSK key (for TLS_PSK)
     bool verify_hostname = true;        ///< Verify server hostname
     bool verify_certificate = true;     ///< Verify server certificate
+    bool verify_server = true;          ///< Verify server (alias for verify_certificate)
     std::vector<std::string> alpn_protocols;  ///< ALPN protocols
 };
 
@@ -94,6 +68,9 @@ struct LWTConfig {
  * @brief MQTT connection configuration (shared by all MQTT components)
  */
 struct ConnectionConfig {
+    // Backend selection
+    BackendType backend = default_backend_type();  ///< Which backend to use
+
     // Broker settings
     std::string broker_url = "tcp://localhost:1883";
     std::string client_id;              ///< Empty = auto-generated
@@ -104,6 +81,7 @@ struct ConnectionConfig {
 
     // Connection parameters
     std::chrono::seconds keep_alive{60};
+    uint16_t keep_alive_seconds = 60;   ///< Keep-alive in seconds (for backends)
     std::chrono::seconds connect_timeout{30};
     bool clean_session = true;
 
@@ -111,6 +89,7 @@ struct ConnectionConfig {
     bool auto_reconnect = true;
     std::chrono::seconds min_reconnect_delay{1};
     std::chrono::seconds max_reconnect_delay{60};
+    uint32_t reconnect_delay_seconds = 5;  ///< For backends
     int max_reconnect_attempts = -1;    ///< -1 = infinite
 
     // Security
@@ -119,10 +98,24 @@ struct ConnectionConfig {
 
     // Last Will and Testament
     LWTConfig lwt;
+    std::string lwt_topic;              ///< For backends
+    std::string lwt_payload;            ///< For backends
+    QoS lwt_qos = QoS::AT_LEAST_ONCE;   ///< For backends
+    bool lwt_retained = false;          ///< For backends
 
     // Performance
     size_t max_inflight = 100;          ///< Max in-flight messages
     size_t max_buffered = 10000;        ///< Max buffered messages when disconnected
+
+    // Sync LWT fields from LWTConfig
+    void sync_lwt() {
+        if (lwt.enabled) {
+            lwt_topic = lwt.topic;
+            lwt_payload = lwt.payload;
+            lwt_qos = lwt.qos;
+            lwt_retained = lwt.retained;
+        }
+    }
 
     // Validation
     bool is_valid() const noexcept;
@@ -144,11 +137,14 @@ using DeliveryCallback = std::function<void(int token, bool success, const std::
 /**
  * @brief MQTT Connection wrapper
  *
- * Provides a high-level interface to the Paho MQTT client with:
+ * Provides a high-level, backend-agnostic interface with:
+ * - Multiple backend support (Paho, coreMQTT, Native)
  * - Automatic reconnection
  * - Thread-safe operations
  * - Callback-based message handling
  * - Statistics collection
+ *
+ * Backend selection via ConnectionConfig::backend or compile-time default.
  */
 class MQTTConnection {
 public:
@@ -199,6 +195,28 @@ public:
      * @brief Get the client ID being used
      */
     std::string get_client_id() const;
+
+    /**
+     * @brief Get the backend type being used
+     */
+    BackendType get_backend_type() const noexcept;
+
+    /**
+     * @brief Get the underlying backend (for advanced use)
+     */
+    IMQTTBackend* get_backend() noexcept;
+
+    /**
+     * @brief Process events (required for non-threaded backends like coreMQTT)
+     * @param timeout_ms Maximum time to block
+     * @return Number of events processed, -1 on error
+     */
+    int process_events(uint32_t timeout_ms = 0);
+
+    /**
+     * @brief Check if backend requires manual event processing
+     */
+    bool requires_event_loop() const noexcept;
 
     //=========================================================================
     // Publishing
