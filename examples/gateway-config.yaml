@@ -23,8 +23,8 @@ router:
   routing_table_size: 1000
   routing_timeout_us: 500
 
-# Protocol Adapters Configuration
-adapters:
+# Protocol Scoops Configuration (Data Collectors)
+scoops:
   - id: "modbus_plc_001"
     type: "modbus"
     enabled: true

@@ -10,7 +10,7 @@ namespace ipb::sink::mqtt {
 // MQTTSinkConfig preset implementations
 MQTTSinkConfig MQTTSinkConfig::create_high_throughput() {
     MQTTSinkConfig config;
-    
+
     // Optimize for throughput
     config.performance.enable_batching = true;
     config.performance.batch_size = 500;
@@ -18,58 +18,58 @@ MQTTSinkConfig MQTTSinkConfig::create_high_throughput() {
     config.performance.enable_async = true;
     config.performance.queue_size = 50000;
     config.performance.thread_pool_size = 4;
-    
-    config.messages.qos = MQTTQoS::AT_MOST_ONCE;
+
+    config.messages.qos = QoS::AT_MOST_ONCE;
     config.messages.enable_compression = true;
     config.messages.format = MQTTMessageFormat::JSON_COMPACT;
-    
+
     return config;
 }
 
 MQTTSinkConfig MQTTSinkConfig::create_low_latency() {
     MQTTSinkConfig config;
-    
+
     // Optimize for latency
     config.performance.enable_batching = false;
     config.performance.enable_async = true;
     config.performance.queue_size = 1000;
     config.performance.thread_pool_size = 1;
     config.performance.flush_interval = std::chrono::milliseconds{1};
-    
-    config.messages.qos = MQTTQoS::AT_MOST_ONCE;
+
+    config.messages.qos = QoS::AT_MOST_ONCE;
     config.messages.format = MQTTMessageFormat::JSON_COMPACT;
-    
+
     return config;
 }
 
 MQTTSinkConfig MQTTSinkConfig::create_reliable() {
     MQTTSinkConfig config;
-    
+
     // Optimize for reliability
     config.performance.enable_batching = true;
     config.performance.batch_size = 50;
     config.performance.batch_timeout = std::chrono::milliseconds{500};
-    
-    config.messages.qos = MQTTQoS::EXACTLY_ONCE;
+
+    config.messages.qos = QoS::EXACTLY_ONCE;
     config.messages.retain = true;
-    
-    config.connection.enable_automatic_reconnect = true;
+
+    config.connection.auto_reconnect = true;
     config.connection.max_reconnect_attempts = -1;
     config.connection.clean_session = false;
-    
+
     return config;
 }
 
 MQTTSinkConfig MQTTSinkConfig::create_minimal() {
     MQTTSinkConfig config;
-    
+
     // Minimal configuration
     config.performance.enable_batching = false;
     config.performance.enable_async = false;
     config.messages.format = MQTTMessageFormat::JSON;
-    config.messages.qos = MQTTQoS::AT_MOST_ONCE;
+    config.messages.qos = QoS::AT_MOST_ONCE;
     config.monitoring.enable_statistics = false;
-    
+
     return config;
 }
 
@@ -162,26 +162,29 @@ MQTTSink::~MQTTSink() {
 
 common::Result<void> MQTTSink::initialize(const std::string& config_path) {
     try {
-        // Create MQTT client
-        mqtt_client_ = std::make_unique<::mqtt::async_client>(
-            config_.connection.broker_url,
-            config_.connection.client_id
-        );
-        
-        // Setup connection options
-        setup_connection_options();
-        
+        // Get or create shared MQTT connection from MQTTConnectionManager
+        auto& manager = transport::mqtt::MQTTConnectionManager::instance();
+        connection_ = manager.get_or_create(config_.connection_id, config_.connection);
+
+        if (!connection_) {
+            return common::Result<void>::failure("Failed to create MQTT connection");
+        }
+
         // Setup callbacks
-        mqtt_client_->set_connection_lost_handler([this](const std::string& cause) {
-            handle_connection_lost(cause);
-        });
-        
-        mqtt_client_->set_message_callback([this](::mqtt::const_message_ptr msg) {
-            handle_message_arrived(msg);
-        });
-        
+        connection_->set_connection_callback(
+            [this](transport::mqtt::ConnectionState state, const std::string& reason) {
+                handle_connection_state(state, reason);
+            }
+        );
+
+        connection_->set_delivery_callback(
+            [this](int token, bool success, const std::string& error) {
+                handle_delivery_complete(token, success, error);
+            }
+        );
+
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
         return common::Result<void>::failure(
             "Failed to initialize MQTT sink: " + std::string(e.what())
@@ -292,12 +295,12 @@ common::Result<void> MQTTSink::shutdown() {
     }
     
     try {
-        // Clean up MQTT client
-        mqtt_client_.reset();
-        connect_options_.reset();
-        
+        // Note: Don't disconnect shared connection - other components may use it
+        // The MQTTConnectionManager handles cleanup when all references are released
+        connection_.reset();
+
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
         return common::Result<void>::failure(
             "Failed to shutdown MQTT sink: " + std::string(e.what())
@@ -306,7 +309,7 @@ common::Result<void> MQTTSink::shutdown() {
 }
 
 bool MQTTSink::is_connected() const {
-    return connected_.load() && mqtt_client_ && mqtt_client_->is_connected();
+    return connected_.load() && connection_ && connection_->is_connected();
 }
 
 bool MQTTSink::is_healthy() const {
@@ -426,63 +429,27 @@ std::string MQTTSink::get_sink_info() const {
 }
 
 // Private implementation methods
-void MQTTSink::setup_connection_options() {
-    connect_options_ = std::make_unique<::mqtt::connect_options>();
-    
-    connect_options_->set_keep_alive_interval(config_.connection.keep_alive_interval);
-    connect_options_->set_clean_session(config_.connection.clean_session);
-    connect_options_->set_automatic_reconnect(config_.connection.enable_automatic_reconnect);
-    
-    if (!config_.connection.username.empty()) {
-        connect_options_->set_user_name(config_.connection.username);
-        connect_options_->set_password(config_.connection.password);
-    }
-    
-    if (config_.connection.security != MQTTSecurity::NONE) {
-        setup_ssl_options();
-    }
-}
-
-void MQTTSink::setup_ssl_options() {
-    auto ssl_options = ::mqtt::ssl_options{};
-    
-    switch (config_.connection.security) {
-        case MQTTSecurity::TLS:
-            if (!config_.connection.ca_cert_path.empty()) {
-                ssl_options.set_trust_store(config_.connection.ca_cert_path);
-            }
-            break;
-            
-        case MQTTSecurity::TLS_CERT:
-            ssl_options.set_trust_store(config_.connection.ca_cert_path);
-            ssl_options.set_key_store(config_.connection.client_cert_path);
-            ssl_options.set_private_key(config_.connection.client_key_path);
-            break;
-            
-        case MQTTSecurity::TLS_PSK:
-            // PSK configuration would go here
-            break;
-            
-        default:
-            break;
-    }
-    
-    ssl_options.set_verify(config_.connection.verify_certificate);
-    connect_options_->set_ssl(ssl_options);
-}
-
 common::Result<void> MQTTSink::connect_to_broker() {
     try {
         statistics_.connection_attempts.fetch_add(1);
-        
-        auto token = mqtt_client_->connect(*connect_options_);
-        token->wait_for(config_.connection.connection_timeout);
-        
-        if (token->get_return_code() != MQTTASYNC_SUCCESS) {
+
+        if (!connection_) {
             statistics_.connection_failures.fetch_add(1);
-            return common::Result<void>::failure(
-                "Failed to connect to MQTT broker: " + std::to_string(token->get_return_code())
-            );
+            return common::Result<void>::failure("MQTT connection not initialized");
+        }
+
+        // Connect using shared transport
+        if (!connection_->connect()) {
+            statistics_.connection_failures.fetch_add(1);
+            return common::Result<void>::failure("Failed to connect to MQTT broker");
+        }
+
+        // Wait a bit for connection to establish
+        std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+        if (!connection_->is_connected()) {
+            statistics_.connection_failures.fetch_add(1);
+            return common::Result<void>::failure("MQTT connection not established");
         }
         
         connected_.store(true);
@@ -502,20 +469,46 @@ common::Result<void> MQTTSink::connect_to_broker() {
 
 common::Result<void> MQTTSink::disconnect_from_broker() {
     try {
-        if (mqtt_client_ && mqtt_client_->is_connected()) {
-            auto token = mqtt_client_->disconnect();
-            token->wait_for(std::chrono::seconds{10});
-        }
-        
+        // Note: Don't disconnect shared connection - just update our state
+        // Other components may still be using the same connection
         connected_.store(false);
         statistics_.is_connected.store(false);
-        
+
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
         return common::Result<void>::failure(
             "Exception during MQTT disconnection: " + std::string(e.what())
         );
+    }
+}
+
+void MQTTSink::handle_connection_state(transport::mqtt::ConnectionState state, const std::string& reason) {
+    switch (state) {
+        case transport::mqtt::ConnectionState::CONNECTED:
+            connected_.store(true);
+            statistics_.is_connected.store(true);
+            statistics_.last_connection_time.store(std::chrono::system_clock::now());
+            break;
+
+        case transport::mqtt::ConnectionState::DISCONNECTED:
+        case transport::mqtt::ConnectionState::FAILED:
+            connected_.store(false);
+            statistics_.is_connected.store(false);
+            break;
+
+        case transport::mqtt::ConnectionState::RECONNECTING:
+            statistics_.reconnections.fetch_add(1);
+            break;
+
+        default:
+            break;
+    }
+}
+
+void MQTTSink::handle_delivery_complete(int token, bool success, const std::string& error) {
+    if (!success) {
+        statistics_.messages_failed.fetch_add(1);
     }
 }
 
@@ -591,28 +584,33 @@ common::Result<void> MQTTSink::publish_data_point_internal(const common::DataPoi
     }
 }
 
-common::Result<void> MQTTSink::publish_message(const std::string& topic, 
-                                              const std::string& payload, 
-                                              MQTTQoS qos,
+common::Result<void> MQTTSink::publish_message(const std::string& topic,
+                                              const std::string& payload,
+                                              QoS qos,
                                               bool retain) {
     if (!is_connected()) {
         return common::Result<void>::failure("MQTT client is not connected");
     }
-    
+
     try {
-        auto message = ::mqtt::make_message(topic, payload);
-        message->set_qos(static_cast<int>(qos));
-        message->set_retained(retain);
-        
-        auto token = mqtt_client_->publish(message);
-        
-        if (qos != MQTTQoS::AT_MOST_ONCE) {
+        // Use shared transport to publish
+        if (qos == QoS::AT_MOST_ONCE) {
+            // Fire and forget
+            int token = connection_->publish(topic, payload, qos, retain);
+            if (token < 0) {
+                return common::Result<void>::failure("Failed to publish message");
+            }
+        } else {
             // Wait for delivery confirmation for QoS 1 and 2
-            token->wait_for(config_.performance.publish_timeout);
+            bool success = connection_->publish_sync(topic, payload, qos, retain,
+                config_.performance.publish_timeout);
+            if (!success) {
+                return common::Result<void>::failure("Failed to publish message with confirmation");
+            }
         }
-        
+
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
         return common::Result<void>::failure(
             "Failed to publish MQTT message: " + std::string(e.what())

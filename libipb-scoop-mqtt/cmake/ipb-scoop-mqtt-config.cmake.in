@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(ipb-common)
+find_dependency(ipb-transport-mqtt)
+
+include("${CMAKE_CURRENT_LIST_DIR}/ipb-scoop-mqtt-targets.cmake")
+
+check_required_components(ipb-scoop-mqtt)

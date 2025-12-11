@@ -17,9 +17,9 @@
 #include <functional>
 
 // Forward declarations for dynamic loading
-namespace ipb::adapter::modbus { class ModbusAdapter; }
-namespace ipb::adapter::opcua { class OPCUAAdapter; }
-namespace ipb::adapter::mqtt { class MQTTAdapter; }
+namespace ipb::scoop::modbus { class ModbusScoop; }
+namespace ipb::scoop::opcua { class OPCUAScoop; }
+namespace ipb::scoop::mqtt { class MQTTScoop; }
 namespace ipb::sink::kafka { class KafkaSink; }
 namespace ipb::sink::zmq { class ZMQSink; }
 namespace ipb::sink::console { class ConsoleSink; }
@@ -56,8 +56,8 @@ struct GatewayConfig {
         std::chrono::microseconds routing_timeout{500};
     } router;
     
-    // Adapter configurations
-    std::map<std::string, YAML::Node> adapters;
+    // Scoop configurations (data collectors)
+    std::map<std::string, YAML::Node> scoops;
     
     // Sink configurations
     std::map<std::string, YAML::Node> sinks;
@@ -104,7 +104,7 @@ struct GatewayMetrics {
     std::atomic<uint64_t> messages_routed{0};
     std::atomic<uint64_t> messages_dropped{0};
     std::atomic<uint64_t> routing_errors{0};
-    std::atomic<uint64_t> adapter_errors{0};
+    std::atomic<uint64_t> scoop_errors{0};
     std::atomic<uint64_t> sink_errors{0};
     
     std::chrono::steady_clock::time_point start_time;
@@ -140,8 +140,8 @@ struct GatewayMetrics {
  */
 enum class MQTTCommandType {
     RELOAD_CONFIG,
-    START_ADAPTER,
-    STOP_ADAPTER,
+    START_SCOOP,
+    STOP_SCOOP,
     START_SINK,
     STOP_SINK,
     ADD_ROUTING_RULE,
@@ -168,7 +168,7 @@ struct MQTTCommand {
  * 
  * This class manages the entire lifecycle of the IPB gateway, including:
  * - Loading and managing configuration
- * - Dynamic loading of protocol adapters and sinks
+ * - Dynamic loading of protocol scoops and sinks
  * - EDF scheduling and routing
  * - MQTT command interface
  * - Health monitoring and metrics
@@ -255,7 +255,7 @@ private:
     std::unique_ptr<router::IPBRouter> router_;
     
     // Dynamic components
-    std::map<std::string, std::shared_ptr<common::IProtocolSource>> adapters_;
+    std::map<std::string, std::shared_ptr<common::IProtocolSource>> scoops_;
     std::map<std::string, std::shared_ptr<common::IIPBSink>> sinks_;
     
     // State management
@@ -272,7 +272,7 @@ private:
     mutable GatewayMetrics metrics_;
     
     // MQTT command interface
-    std::shared_ptr<common::IProtocolSource> mqtt_command_adapter_;
+    std::shared_ptr<common::IProtocolSource> mqtt_command_scoop_;
     std::shared_ptr<common::IIPBSink> mqtt_response_sink_;
     std::queue<MQTTCommand> command_queue_;
     mutable std::mutex command_queue_mutex_;
@@ -286,17 +286,17 @@ private:
     void monitor_config_file();
     
     // Component management
-    common::Result<void> load_adapters();
+    common::Result<void> load_scoops();
     common::Result<void> load_sinks();
     common::Result<void> setup_routing();
-    
-    common::Result<void> start_adapter(const std::string& adapter_id);
-    common::Result<void> stop_adapter(const std::string& adapter_id);
+
+    common::Result<void> start_scoop(const std::string& scoop_id);
+    common::Result<void> stop_scoop(const std::string& scoop_id);
     common::Result<void> start_sink(const std::string& sink_id);
     common::Result<void> stop_sink(const std::string& sink_id);
-    
+
     // Dynamic loading
-    std::shared_ptr<common::IProtocolSource> create_adapter(const std::string& type, const YAML::Node& config);
+    std::shared_ptr<common::IProtocolSource> create_scoop(const std::string& type, const YAML::Node& config);
     std::shared_ptr<common::IIPBSink> create_sink(const std::string& type, const YAML::Node& config);
     
     // MQTT command processing
@@ -305,7 +305,7 @@ private:
     void process_command_queue();
     
     common::Result<YAML::Node> handle_reload_config_command(const MQTTCommand& command);
-    common::Result<YAML::Node> handle_adapter_command(const MQTTCommand& command);
+    common::Result<YAML::Node> handle_scoop_command(const MQTTCommand& command);
     common::Result<YAML::Node> handle_sink_command(const MQTTCommand& command);
     common::Result<YAML::Node> handle_routing_command(const MQTTCommand& command);
     common::Result<YAML::Node> handle_status_command(const MQTTCommand& command);

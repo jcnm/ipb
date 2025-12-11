@@ -65,9 +65,9 @@ common::Result<void> IPBOrchestrator::initialize() {
         }
         
         // Load adapters
-        auto adapters_result = load_adapters();
-        if (!adapters_result.is_success()) {
-            return adapters_result;
+        auto scoops_result = load_scoops();
+        if (!scoops_result.is_success()) {
+            return scoops_result;
         }
         
         // Load sinks
@@ -116,13 +116,13 @@ common::Result<void> IPBOrchestrator::start() {
         }
         
         // Start all adapters
-        for (auto& [adapter_id, adapter] : adapters_) {
-            auto start_result = start_adapter(adapter_id);
+        for (auto& [scoop_id, adapter] : scoops_) {
+            auto start_result = start_scoop(scoop_id);
             if (!start_result.is_success()) {
                 // Log error but continue with other adapters
-                std::cerr << "Failed to start adapter " << adapter_id << ": " 
+                std::cerr << "Failed to start adapter " << scoop_id << ": " 
                          << start_result.get_error() << std::endl;
-                metrics_.adapter_errors.fetch_add(1);
+                metrics_.scoop_errors.fetch_add(1);
             }
         }
         
@@ -195,10 +195,10 @@ common::Result<void> IPBOrchestrator::stop() {
         }
         
         // Stop all adapters
-        for (auto& [adapter_id, adapter] : adapters_) {
-            auto stop_result = stop_adapter(adapter_id);
+        for (auto& [scoop_id, adapter] : scoops_) {
+            auto stop_result = stop_scoop(scoop_id);
             if (!stop_result.is_success()) {
-                std::cerr << "Failed to stop adapter " << adapter_id << ": " 
+                std::cerr << "Failed to stop adapter " << scoop_id << ": " 
                          << stop_result.get_error() << std::endl;
             }
         }
@@ -239,10 +239,10 @@ common::Result<void> IPBOrchestrator::shutdown() {
     
     try {
         // Shutdown all components
-        for (auto& [adapter_id, adapter] : adapters_) {
+        for (auto& [scoop_id, adapter] : scoops_) {
             adapter->shutdown();
         }
-        adapters_.clear();
+        scoops_.clear();
         
         for (auto& [sink_id, sink] : sinks_) {
             sink->shutdown();
@@ -274,7 +274,7 @@ bool IPBOrchestrator::is_healthy() const {
     }
     
     // Check adapter health
-    for (const auto& [adapter_id, adapter] : adapters_) {
+    for (const auto& [scoop_id, adapter] : scoops_) {
         if (!adapter->is_healthy()) {
             return false;
         }
@@ -351,8 +351,8 @@ common::Result<void> IPBOrchestrator::load_config() {
         if (yaml_config["adapters"]) {
             config_.adapters.clear();
             for (const auto& adapter_node : yaml_config["adapters"]) {
-                std::string adapter_id = adapter_node["id"].as<std::string>();
-                config_.adapters[adapter_id] = adapter_node;
+                std::string scoop_id = adapter_node["id"].as<std::string>();
+                config_.adapters[scoop_id] = adapter_node;
             }
         }
         
@@ -627,9 +627,9 @@ void IPBOrchestrator::health_check() {
         std::cerr << "Warning: Router is not healthy" << std::endl;
     }
     
-    for (const auto& [adapter_id, adapter] : adapters_) {
+    for (const auto& [scoop_id, adapter] : scoops_) {
         if (!adapter->is_healthy()) {
-            std::cerr << "Warning: Adapter " << adapter_id << " is not healthy" << std::endl;
+            std::cerr << "Warning: Scoop " << scoop_id << " is not healthy" << std::endl;
         }
     }
     
@@ -706,7 +706,7 @@ common::Result<void> IPBOrchestrator::reload_config() {
 }
 
 // Stub implementations for missing methods
-common::Result<void> IPBOrchestrator::load_adapters() {
+common::Result<void> IPBOrchestrator::load_scoops() {
     // TODO: Implement adapter loading
     return common::Result<void>::success();
 }
@@ -716,17 +716,17 @@ common::Result<void> IPBOrchestrator::setup_routing() {
     return common::Result<void>::success();
 }
 
-std::shared_ptr<common::IProtocolSource> IPBOrchestrator::create_adapter(const std::string& type, const YAML::Node& config) {
+std::shared_ptr<common::IProtocolSource> IPBOrchestrator::create_scoop(const std::string& type, const YAML::Node& config) {
     // TODO: Implement adapter creation
     return nullptr;
 }
 
-common::Result<void> IPBOrchestrator::start_adapter(const std::string& adapter_id) {
+common::Result<void> IPBOrchestrator::start_scoop(const std::string& scoop_id) {
     // TODO: Implement adapter start
     return common::Result<void>::success();
 }
 
-common::Result<void> IPBOrchestrator::stop_adapter(const std::string& adapter_id) {
+common::Result<void> IPBOrchestrator::stop_scoop(const std::string& scoop_id) {
     // TODO: Implement adapter stop
     return common::Result<void>::success();
 }

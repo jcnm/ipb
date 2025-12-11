@@ -31,6 +31,7 @@ endif()
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/libipb-common/include
+    ${CMAKE_SOURCE_DIR}/libipb-transport-mqtt/include
 )
 
 # Source files
@@ -41,12 +42,11 @@ set(MQTT_SINK_SOURCES
 # Create shared library
 add_library(ipb-sink-mqtt SHARED ${MQTT_SINK_SOURCES})
 
-# Link libraries
+# Link libraries - uses shared transport layer
 target_link_libraries(ipb-sink-mqtt
     ipb-common
+    ipb-transport-mqtt
     jsoncpp_lib
-    ${PAHO_MQTT_CPP_LIB}
-    ${PAHO_MQTT_C_LIB}
     ZLIB::ZLIB
     pthread
 )

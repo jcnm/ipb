@@ -10,7 +10,7 @@ IPB is a revolutionary mono-repository architecture for industrial protocol comm
 - **libipb-common**: Core data structures and interfaces
 - **libipb-router**: High-performance message routing with EDF scheduling  
 - **libipb-sink-x**: Modular output sinks (Console, Syslog, MQTT, ZeroMQ, Kafka)
-- **libipb-adapter-x**: Protocol adapters (Modbus, OPC UA, MQTT, etc.)
+- **libipb-scoop-x**: Protocol scoops/data collectors (Modbus, OPC UA, MQTT, etc.)
 - **ipb-gate**: Main orchestrator with YAML configuration and MQTT control
 
 ### Key Features
@@ -151,9 +151,9 @@ mosquitto_pub -t "ipb/gateway/commands" \
 mosquitto_pub -t "ipb/gateway/commands" \
   -m '{"type":"RELOAD_CONFIG","request_id":"reload_001"}'
 
-# Start specific adapter
+# Start specific scoop
 mosquitto_pub -t "ipb/gateway/commands" \
-  -m '{"type":"START_ADAPTER","adapter_id":"modbus_line1","request_id":"start_001"}'
+  -m '{"type":"START_SCOOP","scoop_id":"modbus_line1","request_id":"start_001"}'
 
 # Stop specific sink
 mosquitto_pub -t "ipb/gateway/commands" \
