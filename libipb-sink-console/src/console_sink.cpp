@@ -1,10 +1,20 @@
 #include "ipb/sink/console/console_sink.hpp"
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
+
 #include <json/json.h>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
 
 namespace ipb::sink::console {
+
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::GENERAL;
+} // anonymous namespace
 
 ConsoleSink::ConsoleSink(const ConsoleSinkConfig& config) 
     : config_(config) {
@@ -50,30 +60,39 @@ common::Result<void> ConsoleSink::initialize(const std::string& config_path) {
 }
 
 common::Result<void> ConsoleSink::start() {
-    if (running_.load()) {
+    IPB_SPAN_CAT("ConsoleSink::start", LOG_CAT);
+
+    if (IPB_UNLIKELY(running_.load())) {
+        IPB_LOG_WARN(LOG_CAT, "Console sink is already running");
         return common::Result<void>::failure("Console sink is already running");
     }
-    
+
+    IPB_LOG_INFO(LOG_CAT, "Starting console sink...");
+
     try {
         running_.store(true);
         shutdown_requested_.store(false);
-        
+
         // Start worker thread for async processing
         if (config_.enable_async_output) {
+            IPB_LOG_DEBUG(LOG_CAT, "Starting async worker thread");
             worker_thread_ = std::thread(&ConsoleSink::worker_loop, this);
         }
-        
+
         // Start statistics thread if enabled
         if (config_.enable_statistics) {
+            IPB_LOG_DEBUG(LOG_CAT, "Starting statistics thread");
             statistics_thread_ = std::thread(&ConsoleSink::statistics_loop, this);
         }
-        
+
         statistics_.reset();
-        
+
+        IPB_LOG_INFO(LOG_CAT, "Console sink started");
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
         running_.store(false);
+        IPB_LOG_ERROR(LOG_CAT, "Failed to start console sink: " << e.what());
         return common::Result<void>::failure(
             "Failed to start console sink: " + std::string(e.what())
         );
@@ -81,33 +100,40 @@ common::Result<void> ConsoleSink::start() {
 }
 
 common::Result<void> ConsoleSink::stop() {
-    if (!running_.load()) {
+    IPB_SPAN_CAT("ConsoleSink::stop", LOG_CAT);
+
+    if (IPB_UNLIKELY(!running_.load())) {
+        IPB_LOG_DEBUG(LOG_CAT, "Console sink stop called but not running");
         return common::Result<void>::success();
     }
-    
+
+    IPB_LOG_INFO(LOG_CAT, "Stopping console sink...");
+
     try {
         running_.store(false);
-        
+
         // Wake up worker thread
         if (config_.enable_async_output) {
             queue_condition_.notify_all();
-            
+
             if (worker_thread_.joinable()) {
                 worker_thread_.join();
             }
         }
-        
+
         // Stop statistics thread
         if (statistics_thread_.joinable()) {
             statistics_thread_.join();
         }
-        
+
         // Flush any remaining output
         flush();
-        
+
+        IPB_LOG_INFO(LOG_CAT, "Console sink stopped");
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
+        IPB_LOG_ERROR(LOG_CAT, "Failed to stop console sink: " << e.what());
         return common::Result<void>::failure(
             "Failed to stop console sink: " + std::string(e.what())
         );

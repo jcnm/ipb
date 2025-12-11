@@ -1,6 +1,10 @@
 #include "ipb/gate/orchestrator.hpp"
 #include "ipb/sink/console/console_sink.hpp"
 #include "ipb/sink/syslog/syslog_sink.hpp"
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
+
 #include <json/json.h>
 #include <fstream>
 #include <sstream>
@@ -10,6 +14,12 @@
 #include <sched.h>
 
 namespace ipb::gate {
+
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::GENERAL;
+} // anonymous namespace
 
 IPBOrchestrator::IPBOrchestrator(const std::string& config_file_path)
     : config_file_path_(config_file_path) {
@@ -27,30 +37,41 @@ IPBOrchestrator::~IPBOrchestrator() {
 }
 
 common::Result<void> IPBOrchestrator::initialize() {
+    IPB_SPAN_CAT("Orchestrator::initialize", LOG_CAT);
+    IPB_LOG_INFO(LOG_CAT, "Initializing IPB Orchestrator...");
+
     try {
         // Load configuration
+        IPB_LOG_DEBUG(LOG_CAT, "Loading configuration from: " << config_file_path_);
         auto load_result = load_config();
-        if (!load_result.is_success()) {
+        if (IPB_UNLIKELY(!load_result.is_success())) {
+            IPB_LOG_ERROR(LOG_CAT, "Failed to load configuration: " << load_result.get_error());
             return load_result;
         }
-        
+
         // Validate configuration
+        IPB_LOG_DEBUG(LOG_CAT, "Validating configuration...");
         auto validate_result = validate_config();
-        if (!validate_result.is_success()) {
+        if (IPB_UNLIKELY(!validate_result.is_success())) {
+            IPB_LOG_ERROR(LOG_CAT, "Configuration validation failed: " << validate_result.get_error());
             return validate_result;
         }
-        
+
         // Setup real-time scheduling if enabled
         if (config_.scheduler.enable_realtime_priority) {
+            IPB_LOG_INFO(LOG_CAT, "Setting up real-time scheduling with priority "
+                        << config_.scheduler.realtime_priority);
             setup_realtime_scheduling();
         }
-        
+
         // Setup CPU affinity if enabled
         if (config_.scheduler.enable_cpu_affinity) {
+            IPB_LOG_INFO(LOG_CAT, "Setting up CPU affinity");
             setup_cpu_affinity();
         }
-        
+
         // Initialize router
+        IPB_LOG_DEBUG(LOG_CAT, "Initializing router...");
         router::RouterConfig router_config;
         router_config.thread_pool_size = config_.router.thread_pool_size;
         router_config.enable_lock_free = config_.router.enable_lock_free;
@@ -100,40 +121,51 @@ common::Result<void> IPBOrchestrator::initialize() {
 }
 
 common::Result<void> IPBOrchestrator::start() {
-    if (running_.load()) {
+    IPB_SPAN_CAT("Orchestrator::start", LOG_CAT);
+
+    if (IPB_UNLIKELY(running_.load())) {
+        IPB_LOG_WARN(LOG_CAT, "Orchestrator is already running");
         return common::Result<void>::failure("Orchestrator is already running");
     }
-    
+
+    IPB_LOG_INFO(LOG_CAT, "Starting IPB Orchestrator...");
+
     try {
         running_.store(true);
         shutdown_requested_.store(false);
-        
+
         // Start router
+        IPB_LOG_DEBUG(LOG_CAT, "Starting router...");
         auto router_start_result = router_->start();
-        if (!router_start_result.is_success()) {
+        if (IPB_UNLIKELY(!router_start_result.is_success())) {
             running_.store(false);
+            IPB_LOG_ERROR(LOG_CAT, "Failed to start router: " << router_start_result.get_error());
             return router_start_result;
         }
-        
+
         // Start all adapters
+        IPB_LOG_DEBUG(LOG_CAT, "Starting " << scoops_.size() << " scoops...");
         for (auto& [scoop_id, adapter] : scoops_) {
             auto start_result = start_scoop(scoop_id);
             if (!start_result.is_success()) {
-                // Log error but continue with other adapters
-                std::cerr << "Failed to start adapter " << scoop_id << ": " 
-                         << start_result.get_error() << std::endl;
+                IPB_LOG_ERROR(LOG_CAT, "Failed to start scoop " << scoop_id << ": "
+                             << start_result.get_error());
                 metrics_.scoop_errors.fetch_add(1);
+            } else {
+                IPB_LOG_DEBUG(LOG_CAT, "Started scoop: " << scoop_id);
             }
         }
-        
+
         // Start all sinks
+        IPB_LOG_DEBUG(LOG_CAT, "Starting " << sinks_.size() << " sinks...");
         for (auto& [sink_id, sink] : sinks_) {
             auto start_result = start_sink(sink_id);
             if (!start_result.is_success()) {
-                // Log error but continue with other sinks
-                std::cerr << "Failed to start sink " << sink_id << ": " 
-                         << start_result.get_error() << std::endl;
+                IPB_LOG_ERROR(LOG_CAT, "Failed to start sink " << sink_id << ": "
+                             << start_result.get_error());
                 metrics_.sink_errors.fetch_add(1);
+            } else {
+                IPB_LOG_DEBUG(LOG_CAT, "Started sink: " << sink_id);
             }
         }
         
@@ -169,60 +201,74 @@ common::Result<void> IPBOrchestrator::start() {
 }
 
 common::Result<void> IPBOrchestrator::stop() {
-    if (!running_.load()) {
+    IPB_SPAN_CAT("Orchestrator::stop", LOG_CAT);
+
+    if (IPB_UNLIKELY(!running_.load())) {
+        IPB_LOG_DEBUG(LOG_CAT, "Orchestrator stop called but not running");
         return common::Result<void>::success();
     }
-    
+
+    IPB_LOG_INFO(LOG_CAT, "Stopping IPB Orchestrator...");
+
     try {
         running_.store(false);
-        
+
         // Stop all threads
+        IPB_LOG_DEBUG(LOG_CAT, "Stopping maintenance thread...");
         if (maintenance_thread_.joinable()) {
             maintenance_thread_.join();
         }
-        
+
         if (config_monitor_thread_.joinable()) {
+            IPB_LOG_DEBUG(LOG_CAT, "Stopping config monitor thread...");
             config_monitor_thread_.join();
         }
-        
+
         if (mqtt_command_thread_.joinable()) {
+            IPB_LOG_DEBUG(LOG_CAT, "Stopping MQTT command thread...");
             command_queue_condition_.notify_all();
             mqtt_command_thread_.join();
         }
-        
+
         if (metrics_thread_.joinable()) {
+            IPB_LOG_DEBUG(LOG_CAT, "Stopping metrics thread...");
             metrics_thread_.join();
         }
-        
+
         // Stop all adapters
+        IPB_LOG_DEBUG(LOG_CAT, "Stopping scoops...");
         for (auto& [scoop_id, adapter] : scoops_) {
             auto stop_result = stop_scoop(scoop_id);
             if (!stop_result.is_success()) {
-                std::cerr << "Failed to stop adapter " << scoop_id << ": " 
-                         << stop_result.get_error() << std::endl;
+                IPB_LOG_WARN(LOG_CAT, "Failed to stop scoop " << scoop_id << ": "
+                            << stop_result.get_error());
             }
         }
-        
+
         // Stop all sinks
+        IPB_LOG_DEBUG(LOG_CAT, "Stopping sinks...");
         for (auto& [sink_id, sink] : sinks_) {
             auto stop_result = stop_sink(sink_id);
             if (!stop_result.is_success()) {
-                std::cerr << "Failed to stop sink " << sink_id << ": " 
-                         << stop_result.get_error() << std::endl;
+                IPB_LOG_WARN(LOG_CAT, "Failed to stop sink " << sink_id << ": "
+                            << stop_result.get_error());
             }
         }
-        
+
         // Stop router
         if (router_) {
+            IPB_LOG_DEBUG(LOG_CAT, "Stopping router...");
             auto router_stop_result = router_->stop();
             if (!router_stop_result.is_success()) {
-                std::cerr << "Failed to stop router: " << router_stop_result.get_error() << std::endl;
+                IPB_LOG_WARN(LOG_CAT, "Failed to stop router: " << router_stop_result.get_error());
             }
         }
-        
+
+        IPB_LOG_INFO(LOG_CAT, "IPB Orchestrator stopped");
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
+        IPB_LOG_ERROR(LOG_CAT, "Exception during orchestrator stop: " << e.what());
         return common::Result<void>::failure(
             "Failed to stop orchestrator: " + std::string(e.what())
         );
