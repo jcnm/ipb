@@ -1,5 +1,8 @@
 #include "ipb/core/scoop_registry/scoop_registry.hpp"
 #include <ipb/common/endpoint.hpp>
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
 
 #include <algorithm>
 #include <shared_mutex>
@@ -7,6 +10,12 @@
 #include <unordered_map>
 
 namespace ipb::core {
+
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::PROTOCOL;  // Scoops are protocol sources
+} // anonymous namespace
 
 // ============================================================================
 // AggregatedSubscription Implementation
@@ -65,31 +74,42 @@ public:
     }
 
     bool start() {
-        if (running_.exchange(true)) {
+        IPB_SPAN_CAT("ScoopRegistry::start", LOG_CAT);
+
+        if (IPB_UNLIKELY(running_.exchange(true))) {
+            IPB_LOG_WARN(LOG_CAT, "ScoopRegistry already running");
             return false;
         }
 
         stop_requested_.store(false);
 
         if (config_.enable_health_check) {
+            IPB_LOG_DEBUG(LOG_CAT, "Starting health check thread");
             health_check_thread_ = std::thread([this]() {
                 health_check_loop();
             });
         }
 
         if (config_.enable_auto_reconnect) {
+            IPB_LOG_DEBUG(LOG_CAT, "Starting auto-reconnect thread");
             reconnect_thread_ = std::thread([this]() {
                 reconnect_loop();
             });
         }
 
+        IPB_LOG_INFO(LOG_CAT, "ScoopRegistry started");
         return true;
     }
 
     void stop() {
-        if (!running_.exchange(false)) {
+        IPB_SPAN_CAT("ScoopRegistry::stop", LOG_CAT);
+
+        if (IPB_UNLIKELY(!running_.exchange(false))) {
+            IPB_LOG_DEBUG(LOG_CAT, "ScoopRegistry stop called but not running");
             return;
         }
+
+        IPB_LOG_INFO(LOG_CAT, "Stopping ScoopRegistry...");
 
         stop_requested_.store(true);
 
@@ -100,6 +120,8 @@ public:
         if (reconnect_thread_.joinable()) {
             reconnect_thread_.join();
         }
+
+        IPB_LOG_INFO(LOG_CAT, "ScoopRegistry stopped");
     }
 
     bool is_running() const noexcept {
@@ -108,10 +130,14 @@ public:
 
     bool register_scoop(std::string_view id, std::shared_ptr<common::IProtocolSource> scoop,
                        bool is_primary, uint32_t priority) {
+        IPB_PRECONDITION(!id.empty());
+        IPB_PRECONDITION(scoop != nullptr);
+
         std::unique_lock lock(scoops_mutex_);
 
         std::string id_str(id);
-        if (scoops_.find(id_str) != scoops_.end()) {
+        if (IPB_UNLIKELY(scoops_.find(id_str) != scoops_.end())) {
+            IPB_LOG_WARN(LOG_CAT, "Scoop already registered: " << id);
             return false;
         }
 
@@ -126,22 +152,29 @@ public:
         scoops_[id_str] = std::move(info);
         stats_.active_scoops.fetch_add(1, std::memory_order_relaxed);
 
+        IPB_LOG_INFO(LOG_CAT, "Registered scoop: " << id << " (type=" << info->type
+                    << ", primary=" << is_primary << ", priority=" << priority << ")");
         return true;
     }
 
     bool unregister_scoop(std::string_view id) {
+        IPB_PRECONDITION(!id.empty());
+
         std::unique_lock lock(scoops_mutex_);
 
         auto it = scoops_.find(std::string(id));
-        if (it == scoops_.end()) {
+        if (IPB_UNLIKELY(it == scoops_.end())) {
+            IPB_LOG_WARN(LOG_CAT, "Cannot unregister unknown scoop: " << id);
             return false;
         }
 
         // Disconnect first
         if (it->second->connected) {
+            IPB_LOG_DEBUG(LOG_CAT, "Disconnecting scoop before unregister: " << id);
             it->second->scoop->disconnect();
         }
 
+        IPB_LOG_INFO(LOG_CAT, "Unregistering scoop: " << id);
         scoops_.erase(it);
         stats_.active_scoops.fetch_sub(1, std::memory_order_relaxed);
 

@@ -140,6 +140,9 @@ add_library(ipb-common STATIC
     src/endpoint.cpp
     src/interfaces.cpp
     src/rt_primitives.cpp
+    src/platform.cpp
+    src/error.cpp
+    src/debug.cpp
 )
 
 # Set target properties

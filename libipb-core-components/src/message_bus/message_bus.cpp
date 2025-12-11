@@ -1,6 +1,10 @@
 #include "ipb/core/message_bus/message_bus.hpp"
 #include "ipb/core/message_bus/channel.hpp"
 
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
+
 #include <algorithm>
 #include <condition_variable>
 #include <mutex>
@@ -9,6 +13,12 @@
 #include <unordered_map>
 
 namespace ipb::core {
+
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::MESSAGING;
+} // anonymous namespace
 
 // ============================================================================
 // Subscription Implementation
@@ -51,11 +61,16 @@ public:
     }
 
     bool start() {
-        if (running_.exchange(true)) {
+        IPB_SPAN_CAT("MessageBus::start", LOG_CAT);
+
+        if (IPB_UNLIKELY(running_.exchange(true))) {
+            IPB_LOG_WARN(LOG_CAT, "MessageBus already running");
             return false;  // Already running
         }
 
         stop_requested_.store(false);
+
+        IPB_LOG_INFO(LOG_CAT, "Starting MessageBus with " << config_.dispatcher_threads << " dispatcher threads");
 
         // Start dispatcher threads
         for (size_t i = 0; i < config_.dispatcher_threads; ++i) {
@@ -78,13 +93,19 @@ public:
             }
         }
 
+        IPB_LOG_INFO(LOG_CAT, "MessageBus started successfully");
         return true;
     }
 
     void stop() {
-        if (!running_.exchange(false)) {
+        IPB_SPAN_CAT("MessageBus::stop", LOG_CAT);
+
+        if (IPB_UNLIKELY(!running_.exchange(false))) {
+            IPB_LOG_DEBUG(LOG_CAT, "MessageBus stop called but not running");
             return;  // Not running
         }
+
+        IPB_LOG_INFO(LOG_CAT, "Stopping MessageBus...");
 
         stop_requested_.store(true);
         dispatch_cv_.notify_all();
@@ -95,6 +116,8 @@ public:
             }
         }
         dispatcher_threads_.clear();
+
+        IPB_LOG_INFO(LOG_CAT, "MessageBus stopped");
     }
 
     bool is_running() const noexcept {
@@ -102,21 +125,26 @@ public:
     }
 
     bool publish(std::string_view topic, Message msg) {
+        IPB_PRECONDITION(!topic.empty());
+
         auto channel = get_or_create_channel(topic);
-        if (!channel) {
+        if (IPB_UNLIKELY(!channel)) {
             stats_.messages_dropped.fetch_add(1, std::memory_order_relaxed);
+            IPB_LOG_WARN(LOG_CAT, "Failed to get/create channel for topic: " << topic);
             return false;
         }
 
         msg.topic = std::string(topic);
         bool success = channel->publish(std::move(msg));
 
-        if (success) {
+        if (IPB_LIKELY(success)) {
             stats_.messages_published.fetch_add(1, std::memory_order_relaxed);
             dispatch_cv_.notify_one();
+            IPB_LOG_TRACE(LOG_CAT, "Published message to topic: " << topic);
         } else {
             stats_.messages_dropped.fetch_add(1, std::memory_order_relaxed);
             stats_.queue_overflows.fetch_add(1, std::memory_order_relaxed);
+            IPB_LOG_WARN(LOG_CAT, "Queue overflow on topic: " << topic);
         }
 
         return success;
@@ -146,19 +174,26 @@ public:
     }
 
     Subscription subscribe(std::string_view topic_pattern, SubscriberCallback callback) {
+        IPB_PRECONDITION(!topic_pattern.empty());
+        IPB_PRECONDITION(callback != nullptr);
+
+        IPB_LOG_DEBUG(LOG_CAT, "Subscribing to topic pattern: " << topic_pattern);
+
         // For wildcard patterns, we need to track them separately
         if (TopicMatcher::has_wildcards(topic_pattern)) {
             return subscribe_wildcard(topic_pattern, std::move(callback), nullptr);
         }
 
         auto channel = get_or_create_channel(topic_pattern);
-        if (!channel) {
+        if (IPB_UNLIKELY(!channel)) {
+            IPB_LOG_ERROR(LOG_CAT, "Failed to create channel for subscription: " << topic_pattern);
             return Subscription();
         }
 
         uint64_t id = channel->subscribe(std::move(callback));
         stats_.active_subscriptions.fetch_add(1, std::memory_order_relaxed);
 
+        IPB_LOG_DEBUG(LOG_CAT, "Created subscription id=" << id << " for topic: " << topic_pattern);
         return Subscription(id, channel);
     }
 
@@ -203,7 +238,9 @@ public:
         }
 
         // Check capacity
-        if (channels_.size() >= config_.max_channels) {
+        if (IPB_UNLIKELY(channels_.size() >= config_.max_channels)) {
+            IPB_LOG_ERROR(LOG_CAT, "Max channels reached (" << config_.max_channels
+                         << "), cannot create channel: " << topic);
             return nullptr;
         }
 
@@ -211,6 +248,7 @@ public:
         channels_[topic_str] = channel;
         stats_.active_channels.fetch_add(1, std::memory_order_relaxed);
 
+        IPB_LOG_DEBUG(LOG_CAT, "Created new channel: " << topic);
         return channel;
     }
 
@@ -245,6 +283,8 @@ public:
 
 private:
     void dispatcher_loop(size_t thread_id) {
+        IPB_LOG_DEBUG(LOG_CAT, "Dispatcher thread " << thread_id << " started");
+
         while (!stop_requested_.load(std::memory_order_acquire)) {
             size_t total_dispatched = 0;
 
@@ -259,14 +299,17 @@ private:
             // Dispatch to wildcard subscribers
             dispatch_wildcard_subscriptions();
 
-            if (total_dispatched > 0) {
+            if (IPB_LIKELY(total_dispatched > 0)) {
                 stats_.messages_delivered.fetch_add(total_dispatched, std::memory_order_relaxed);
+                IPB_LOG_TRACE(LOG_CAT, "Thread " << thread_id << " dispatched " << total_dispatched << " messages");
             } else {
                 // No messages - wait for notification
                 std::unique_lock lock(dispatch_mutex_);
                 dispatch_cv_.wait_for(lock, std::chrono::microseconds(100));
             }
         }
+
+        IPB_LOG_DEBUG(LOG_CAT, "Dispatcher thread " << thread_id << " stopped");
     }
 
     Subscription subscribe_wildcard(

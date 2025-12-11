@@ -1,12 +1,21 @@
 #include "ipb/core/rule_engine/rule_engine.hpp"
 #include "ipb/core/rule_engine/pattern_matcher.hpp"
 #include <ipb/common/endpoint.hpp>
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
 
 #include <algorithm>
 #include <shared_mutex>
 #include <unordered_map>
 
 namespace ipb::core {
+
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::ROUTER;  // Rules are part of routing
+} // anonymous namespace
 
 // ============================================================================
 // ValueCondition Implementation
@@ -222,8 +231,13 @@ public:
         uint32_t id = next_rule_id_++;
         rule.id = id;
 
+        IPB_LOG_DEBUG(LOG_CAT, "Adding rule id=" << id << " name=\"" << rule.name
+                     << "\" type=" << static_cast<int>(rule.type)
+                     << " priority=" << static_cast<int>(rule.priority));
+
         // Pre-compile pattern if configured
         if (config_.precompile_patterns && rule.type == RuleType::PATTERN) {
+            IPB_LOG_TRACE(LOG_CAT, "Pre-compiling pattern: " << rule.address_pattern);
             compiled_patterns_[id] = PatternMatcherFactory::create(
                 rule.address_pattern,
                 config_.prefer_ctre ?
@@ -242,8 +256,10 @@ public:
         // Invalidate cache
         if (config_.enable_cache) {
             cache_.clear();
+            IPB_LOG_TRACE(LOG_CAT, "Cache invalidated after rule addition");
         }
 
+        IPB_LOG_INFO(LOG_CAT, "Added routing rule: " << rule.name << " (id=" << id << ")");
         return id;
     }
 
@@ -357,11 +373,14 @@ public:
         std::vector<RuleMatchResult> results;
         std::string address(dp.address());
 
+        IPB_LOG_TRACE(LOG_CAT, "Evaluating rules for address: " << address);
+
         // Check cache first
         if (config_.enable_cache) {
             auto cached = check_cache(address);
             if (cached) {
                 stats_.cache_hits.fetch_add(1, std::memory_order_relaxed);
+                IPB_LOG_TRACE(LOG_CAT, "Cache hit for address: " << address);
                 return *cached;
             }
             stats_.cache_misses.fetch_add(1, std::memory_order_relaxed);
@@ -375,9 +394,10 @@ public:
                 if (!rule.enabled) continue;
 
                 auto result = evaluate_rule(rule, dp);
-                if (result.matched) {
+                if (IPB_UNLIKELY(result.matched)) {
                     results.push_back(std::move(result));
                     stats_.total_matches.fetch_add(1, std::memory_order_relaxed);
+                    IPB_LOG_TRACE(LOG_CAT, "Rule matched: id=" << rule.id << " name=\"" << rule.name << "\"");
                 }
             }
         }
@@ -391,6 +411,9 @@ public:
 
         auto elapsed = timer.elapsed();
         update_timing_stats(elapsed.count());
+
+        IPB_LOG_TRACE(LOG_CAT, "Evaluation complete: " << results.size() << " matches in "
+                     << elapsed.count() / 1000.0 << "us");
 
         return results;
     }

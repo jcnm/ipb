@@ -1,6 +1,10 @@
 #include "ipb/core/scheduler/edf_scheduler.hpp"
 #include "ipb/core/scheduler/task_queue.hpp"
 
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
+
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -8,6 +12,12 @@
 #include <unordered_set>
 
 namespace ipb::core {
+
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::SCHEDULER;
+} // anonymous namespace
 
 // ============================================================================
 // EDFSchedulerImpl - Private Implementation
@@ -28,11 +38,16 @@ public:
     }
 
     bool start() {
-        if (running_.exchange(true)) {
+        IPB_SPAN_CAT("EDFScheduler::start", LOG_CAT);
+
+        if (IPB_UNLIKELY(running_.exchange(true))) {
+            IPB_LOG_WARN(LOG_CAT, "EDFScheduler already running");
             return false;  // Already running
         }
 
         stop_requested_.store(false);
+
+        IPB_LOG_INFO(LOG_CAT, "Starting EDFScheduler with " << config_.worker_threads << " workers");
 
         // Start worker threads
         for (size_t i = 0; i < config_.worker_threads; ++i) {
@@ -42,6 +57,8 @@ public:
 
             // Set CPU affinity if configured
             if (config_.cpu_affinity_start >= 0) {
+                IPB_LOG_DEBUG(LOG_CAT, "Setting CPU affinity for worker " << i
+                             << " to CPU " << (config_.cpu_affinity_start + static_cast<int>(i)));
                 common::rt::CPUAffinity::set_thread_affinity(
                     workers_.back().get_id(),
                     config_.cpu_affinity_start + static_cast<int>(i));
@@ -49,6 +66,8 @@ public:
 
             // Set real-time priority if configured
             if (config_.enable_realtime) {
+                IPB_LOG_DEBUG(LOG_CAT, "Setting real-time priority " << config_.realtime_priority
+                             << " for worker " << i);
                 common::rt::ThreadPriority::set_realtime_priority(
                     workers_.back().get_id(),
                     config_.realtime_priority);
@@ -56,17 +75,24 @@ public:
         }
 
         // Start deadline checker thread
+        IPB_LOG_DEBUG(LOG_CAT, "Starting deadline checker thread");
         deadline_checker_ = std::thread([this]() {
             deadline_check_loop();
         });
 
+        IPB_LOG_INFO(LOG_CAT, "EDFScheduler started successfully");
         return true;
     }
 
     void stop() {
-        if (!running_.exchange(false)) {
+        IPB_SPAN_CAT("EDFScheduler::stop", LOG_CAT);
+
+        if (IPB_UNLIKELY(!running_.exchange(false))) {
+            IPB_LOG_DEBUG(LOG_CAT, "EDFScheduler stop called but not running");
             return;
         }
+
+        IPB_LOG_INFO(LOG_CAT, "Stopping EDFScheduler...");
 
         stop_requested_.store(true);
         task_cv_.notify_all();
@@ -81,6 +107,8 @@ public:
         if (deadline_checker_.joinable()) {
             deadline_checker_.join();
         }
+
+        IPB_LOG_INFO(LOG_CAT, "EDFScheduler stopped");
     }
 
     void stop_immediate() {
@@ -118,7 +146,8 @@ public:
     SubmitResult submit(ScheduledTask task) {
         SubmitResult result;
 
-        if (!running_.load(std::memory_order_acquire)) {
+        if (IPB_UNLIKELY(!running_.load(std::memory_order_acquire))) {
+            IPB_LOG_WARN(LOG_CAT, "Cannot submit task: scheduler not running");
             result.error_message = "Scheduler not running";
             return result;
         }
@@ -127,10 +156,14 @@ public:
         task.arrival_time = common::Timestamp::now();
         task.state = TaskState::PENDING;
 
+        IPB_LOG_TRACE(LOG_CAT, "Submitting task id=" << task.id << " name=\"" << task.name << "\"");
+
         // Check if deadline already passed
-        if (task.deadline <= task.arrival_time) {
+        if (IPB_UNLIKELY(task.deadline <= task.arrival_time)) {
             task.state = TaskState::DEADLINE_MISSED;
             stats_.deadlines_missed.fetch_add(1, std::memory_order_relaxed);
+
+            IPB_LOG_WARN(LOG_CAT, "Task " << task.id << " deadline already passed at submission");
 
             if (deadline_miss_callback_) {
                 deadline_miss_callback_(task);
@@ -145,8 +178,10 @@ public:
             return result;
         }
 
-        if (!task_queue_.push(std::move(task))) {
+        if (IPB_UNLIKELY(!task_queue_.push(std::move(task)))) {
             // Queue full - apply overflow policy
+            IPB_LOG_WARN(LOG_CAT, "Task queue full (size=" << task_queue_.size() << ")");
+
             if (config_.overflow_policy == EDFSchedulerConfig::OverflowPolicy::REJECT) {
                 result.error_message = "Queue full";
                 return result;
@@ -172,6 +207,7 @@ public:
 
         result.success = true;
         result.task_id = task.id;
+        IPB_LOG_TRACE(LOG_CAT, "Task " << task.id << " submitted successfully");
         return result;
     }
 
@@ -291,6 +327,8 @@ public:
 
 private:
     void worker_loop(size_t worker_id) {
+        IPB_LOG_DEBUG(LOG_CAT, "Worker " << worker_id << " started");
+
         while (!stop_requested_.load(std::memory_order_acquire)) {
             ScheduledTask task;
 
@@ -314,14 +352,18 @@ private:
 
             stats_.current_queue_size.store(task_queue_.size(), std::memory_order_relaxed);
 
+            IPB_LOG_TRACE(LOG_CAT, "Worker " << worker_id << " executing task " << task.id);
+
             // Check deadline before execution
             auto now = common::Timestamp::now();
             auto latency = now - task.arrival_time;
 
-            if (now > task.deadline) {
+            if (IPB_UNLIKELY(now > task.deadline)) {
                 // Deadline missed before execution started
                 task.state = TaskState::DEADLINE_MISSED;
                 stats_.deadlines_missed.fetch_add(1, std::memory_order_relaxed);
+
+                IPB_LOG_WARN(LOG_CAT, "Task " << task.id << " missed deadline before execution");
 
                 if (config_.enable_miss_callbacks && deadline_miss_callback_) {
                     std::lock_guard lock(callback_mutex_);
@@ -344,9 +386,14 @@ private:
                 task.task_function();
                 task.state = TaskState::COMPLETED;
                 stats_.tasks_completed.fetch_add(1, std::memory_order_relaxed);
+            } catch (const std::exception& e) {
+                task.state = TaskState::FAILED;
+                stats_.tasks_failed.fetch_add(1, std::memory_order_relaxed);
+                IPB_LOG_ERROR(LOG_CAT, "Task " << task.id << " failed with exception: " << e.what());
             } catch (...) {
                 task.state = TaskState::FAILED;
                 stats_.tasks_failed.fetch_add(1, std::memory_order_relaxed);
+                IPB_LOG_ERROR(LOG_CAT, "Task " << task.id << " failed with unknown exception");
             }
 
             auto exec_time = exec_timer.elapsed();
@@ -356,10 +403,12 @@ private:
             auto finish_time = common::Timestamp::now();
             task.deadline_met = finish_time <= task.deadline;
 
-            if (task.deadline_met) {
+            if (IPB_LIKELY(task.deadline_met)) {
                 stats_.deadlines_met.fetch_add(1, std::memory_order_relaxed);
+                IPB_LOG_TRACE(LOG_CAT, "Task " << task.id << " completed in " << exec_time.count() / 1000.0 << "us");
             } else {
                 stats_.deadlines_missed.fetch_add(1, std::memory_order_relaxed);
+                IPB_LOG_WARN(LOG_CAT, "Task " << task.id << " missed deadline during execution");
 
                 if (config_.enable_miss_callbacks && deadline_miss_callback_) {
                     std::lock_guard lock(callback_mutex_);
@@ -380,6 +429,8 @@ private:
 
             record_completed(task.id, task.state);
         }
+
+        IPB_LOG_DEBUG(LOG_CAT, "Worker " << worker_id << " stopped");
     }
 
     void deadline_check_loop() {

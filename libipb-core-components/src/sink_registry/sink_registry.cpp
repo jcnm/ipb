@@ -1,12 +1,21 @@
 #include "ipb/core/sink_registry/sink_registry.hpp"
 #include "ipb/core/sink_registry/load_balancer.hpp"
 #include <ipb/common/endpoint.hpp>
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
 
 #include <shared_mutex>
 #include <thread>
 #include <unordered_map>
 
 namespace ipb::core {
+
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::ROUTER;  // Sinks are part of routing
+} // anonymous namespace
 
 // ============================================================================
 // SinkRegistryImpl - Private Implementation
@@ -28,31 +37,43 @@ public:
     }
 
     bool start() {
-        if (running_.exchange(true)) {
+        IPB_SPAN_CAT("SinkRegistry::start", LOG_CAT);
+
+        if (IPB_UNLIKELY(running_.exchange(true))) {
+            IPB_LOG_WARN(LOG_CAT, "SinkRegistry already running");
             return false;
         }
 
         stop_requested_.store(false);
 
         if (config_.enable_health_check) {
+            IPB_LOG_DEBUG(LOG_CAT, "Starting health check thread");
             health_check_thread_ = std::thread([this]() {
                 health_check_loop();
             });
         }
 
+        IPB_LOG_INFO(LOG_CAT, "SinkRegistry started");
         return true;
     }
 
     void stop() {
-        if (!running_.exchange(false)) {
+        IPB_SPAN_CAT("SinkRegistry::stop", LOG_CAT);
+
+        if (IPB_UNLIKELY(!running_.exchange(false))) {
+            IPB_LOG_DEBUG(LOG_CAT, "SinkRegistry stop called but not running");
             return;
         }
+
+        IPB_LOG_INFO(LOG_CAT, "Stopping SinkRegistry...");
 
         stop_requested_.store(true);
 
         if (health_check_thread_.joinable()) {
             health_check_thread_.join();
         }
+
+        IPB_LOG_INFO(LOG_CAT, "SinkRegistry stopped");
     }
 
     bool is_running() const noexcept {
@@ -61,10 +82,14 @@ public:
 
     bool register_sink(std::string_view id, std::shared_ptr<common::IIPBSink> sink,
                       uint32_t weight) {
+        IPB_PRECONDITION(!id.empty());
+        IPB_PRECONDITION(sink != nullptr);
+
         std::unique_lock lock(sinks_mutex_);
 
         std::string id_str(id);
-        if (sinks_.find(id_str) != sinks_.end()) {
+        if (IPB_UNLIKELY(sinks_.find(id_str) != sinks_.end())) {
+            IPB_LOG_WARN(LOG_CAT, "Sink already registered: " << id);
             return false;  // Already registered
         }
 
@@ -78,17 +103,22 @@ public:
         sinks_[id_str] = std::move(info);
         stats_.active_sinks.fetch_add(1, std::memory_order_relaxed);
 
+        IPB_LOG_INFO(LOG_CAT, "Registered sink: " << id << " (type=" << info->type << ", weight=" << weight << ")");
         return true;
     }
 
     bool unregister_sink(std::string_view id) {
+        IPB_PRECONDITION(!id.empty());
+
         std::unique_lock lock(sinks_mutex_);
 
         auto it = sinks_.find(std::string(id));
-        if (it == sinks_.end()) {
+        if (IPB_UNLIKELY(it == sinks_.end())) {
+            IPB_LOG_WARN(LOG_CAT, "Cannot unregister unknown sink: " << id);
             return false;
         }
 
+        IPB_LOG_INFO(LOG_CAT, "Unregistering sink: " << id);
         sinks_.erase(it);
         stats_.active_sinks.fetch_sub(1, std::memory_order_relaxed);
 
@@ -314,13 +344,16 @@ public:
 
     common::Result<> write_to_sink(std::string_view sink_id,
                                    const common::DataPoint& data_point) {
+        IPB_PRECONDITION(!sink_id.empty());
+
         std::shared_ptr<SinkInfo> info;
 
         {
             std::shared_lock lock(sinks_mutex_);
 
             auto it = sinks_.find(std::string(sink_id));
-            if (it == sinks_.end()) {
+            if (IPB_UNLIKELY(it == sinks_.end())) {
+                IPB_LOG_WARN(LOG_CAT, "Write to unknown sink: " << sink_id);
                 return common::Result<>(common::Result<>::ErrorCode::INVALID_ARGUMENT,
                                        "Sink not found");
             }
@@ -328,12 +361,15 @@ public:
             info = it->second;
         }
 
-        if (!info->enabled) {
+        if (IPB_UNLIKELY(!info->enabled)) {
+            IPB_LOG_DEBUG(LOG_CAT, "Write to disabled sink: " << sink_id);
             return common::Result<>(common::Result<>::ErrorCode::INVALID_ARGUMENT,
                                    "Sink is disabled");
         }
 
         info->pending_count.fetch_add(1, std::memory_order_relaxed);
+
+        IPB_LOG_TRACE(LOG_CAT, "Writing to sink: " << sink_id << " address=" << data_point.address());
 
         common::rt::HighResolutionTimer timer;
         auto result = info->sink->write(data_point);
@@ -341,12 +377,13 @@ public:
 
         info->pending_count.fetch_sub(1, std::memory_order_relaxed);
 
-        if (result.is_success()) {
+        if (IPB_LIKELY(result.is_success())) {
             info->messages_sent.fetch_add(1, std::memory_order_relaxed);
             info->total_latency_ns.fetch_add(elapsed.count(), std::memory_order_relaxed);
         } else {
             info->messages_failed.fetch_add(1, std::memory_order_relaxed);
             update_sink_health_on_failure(info);
+            IPB_LOG_WARN(LOG_CAT, "Write to sink " << sink_id << " failed: " << result.error_message());
         }
 
         return result;

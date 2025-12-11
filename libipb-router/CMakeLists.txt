@@ -34,8 +34,6 @@ set(ROUTER_SOURCES
 
 set(ROUTER_HEADERS
     include/ipb/router/router.hpp
-    include/ipb/router/edf_scheduler.hpp
-    include/ipb/router/routing_rule.hpp
 )
 
 # Create library

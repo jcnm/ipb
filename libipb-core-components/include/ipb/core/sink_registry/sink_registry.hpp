@@ -15,6 +15,9 @@
 
 #include <ipb/common/interfaces.hpp>
 #include <ipb/common/data_point.hpp>
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
 
 #include <atomic>
 #include <functional>
