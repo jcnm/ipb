@@ -112,3 +112,8 @@ install(EXPORT ipb-core-components-targets
     NAMESPACE ipb::
     DESTINATION lib/cmake/ipb-core-components
 )
+
+# Tests
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    add_subdirectory(tests)
+endif()
