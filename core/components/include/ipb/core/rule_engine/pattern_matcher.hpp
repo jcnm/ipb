@@ -165,6 +165,110 @@ private:
     std::string pattern_;
 };
 
+/**
+ * @brief Trie-based matcher for O(m) prefix/exact matching
+ *
+ * Uses a trie data structure to efficiently match addresses against
+ * multiple patterns. Ideal for large routing tables with static or
+ * prefix-based rules.
+ *
+ * Performance:
+ * - Lookup: O(m) where m is input string length
+ * - Insert: O(m) where m is pattern length
+ * - Memory: O(n*avg_len) where n is number of patterns
+ *
+ * This is much more efficient than checking each pattern individually
+ * (O(n*m)) when there are many static routing rules.
+ */
+class TrieMatcher {
+public:
+    TrieMatcher();
+    ~TrieMatcher();
+
+    // Non-copyable but movable
+    TrieMatcher(const TrieMatcher&) = delete;
+    TrieMatcher& operator=(const TrieMatcher&) = delete;
+    TrieMatcher(TrieMatcher&&) noexcept;
+    TrieMatcher& operator=(TrieMatcher&&) noexcept;
+
+    /**
+     * @brief Add an exact pattern to match
+     * @param pattern The exact string to match
+     * @param rule_id Associated rule ID for this pattern
+     */
+    void add_exact(std::string_view pattern, uint32_t rule_id);
+
+    /**
+     * @brief Add a prefix pattern to match
+     * @param prefix The prefix to match (input must start with this)
+     * @param rule_id Associated rule ID for this pattern
+     */
+    void add_prefix(std::string_view prefix, uint32_t rule_id);
+
+    /**
+     * @brief Find all matching rule IDs for an input string
+     * @param input The input string to match
+     * @return Vector of matching rule IDs (exact matches first, then prefix)
+     *
+     * Complexity: O(m) where m is input length
+     */
+    std::vector<uint32_t> find_matches(std::string_view input) const noexcept;
+
+    /**
+     * @brief Check if there's any exact match for input
+     * @param input The input string to check
+     * @return Optional rule ID if exact match found
+     *
+     * Complexity: O(m) where m is input length
+     */
+    std::optional<uint32_t> find_exact(std::string_view input) const noexcept;
+
+    /**
+     * @brief Check if any pattern (exact or prefix) matches input
+     * @param input The input string to check
+     * @return true if any match found
+     *
+     * Complexity: O(m) where m is input length
+     */
+    bool matches(std::string_view input) const noexcept;
+
+    /**
+     * @brief Remove a pattern from the trie
+     * @param pattern The pattern to remove
+     * @return true if pattern was found and removed
+     */
+    bool remove(std::string_view pattern);
+
+    /**
+     * @brief Clear all patterns
+     */
+    void clear();
+
+    /**
+     * @brief Get number of patterns stored
+     */
+    size_t size() const noexcept;
+
+    /**
+     * @brief Check if trie is empty
+     */
+    bool empty() const noexcept;
+
+    /**
+     * @brief Get memory usage statistics
+     */
+    struct Stats {
+        size_t pattern_count = 0;
+        size_t node_count = 0;
+        size_t memory_bytes = 0;
+    };
+    Stats stats() const noexcept;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
 #ifdef IPB_HAS_CTRE
 /**
  * @brief Compile-time regex matcher using CTRE

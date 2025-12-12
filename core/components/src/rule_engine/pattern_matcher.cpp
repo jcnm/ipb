@@ -1,7 +1,9 @@
 #include "ipb/core/rule_engine/pattern_matcher.hpp"
 #include "ipb/core/rule_engine/compiled_pattern_cache.hpp"
-#include <regex>
 #include <algorithm>
+#include <regex>
+#include <unordered_map>
+#include <optional>
 
 namespace ipb::core {
 
@@ -195,6 +197,246 @@ bool RegexMatcher::is_valid_regex(std::string_view pattern) noexcept {
     } catch (...) {
         return false;
     }
+}
+
+// ============================================================================
+// TrieMatcher Implementation - O(m) lookup for static/prefix patterns
+// ============================================================================
+
+/**
+ * @brief Trie node for efficient prefix/exact matching
+ *
+ * Uses a hash map for children to handle arbitrary character sets
+ * while maintaining O(1) child lookup.
+ */
+struct TrieNode {
+    std::unordered_map<char, std::unique_ptr<TrieNode>> children;
+    std::optional<uint32_t> exact_rule_id;      // Rule ID if this is end of exact pattern
+    std::vector<uint32_t> prefix_rule_ids;       // Rule IDs for prefix patterns ending here
+
+    bool is_end_of_pattern() const noexcept {
+        return exact_rule_id.has_value() || !prefix_rule_ids.empty();
+    }
+};
+
+class TrieMatcher::Impl {
+public:
+    Impl() : root_(std::make_unique<TrieNode>()), pattern_count_(0), node_count_(1) {}
+
+    void add_exact(std::string_view pattern, uint32_t rule_id) {
+        TrieNode* node = root_.get();
+
+        for (char c : pattern) {
+            auto& child = node->children[c];
+            if (!child) {
+                child = std::make_unique<TrieNode>();
+                ++node_count_;
+            }
+            node = child.get();
+        }
+
+        node->exact_rule_id = rule_id;
+        ++pattern_count_;
+    }
+
+    void add_prefix(std::string_view prefix, uint32_t rule_id) {
+        TrieNode* node = root_.get();
+
+        for (char c : prefix) {
+            auto& child = node->children[c];
+            if (!child) {
+                child = std::make_unique<TrieNode>();
+                ++node_count_;
+            }
+            node = child.get();
+        }
+
+        node->prefix_rule_ids.push_back(rule_id);
+        ++pattern_count_;
+    }
+
+    std::vector<uint32_t> find_matches(std::string_view input) const noexcept {
+        std::vector<uint32_t> results;
+        const TrieNode* node = root_.get();
+
+        // Collect prefix matches as we traverse
+        for (size_t i = 0; i < input.size(); ++i) {
+            char c = input[i];
+
+            auto it = node->children.find(c);
+            if (it == node->children.end()) {
+                break;  // No more matches possible
+            }
+
+            node = it->second.get();
+
+            // Add any prefix rule IDs at this position
+            for (uint32_t id : node->prefix_rule_ids) {
+                results.push_back(id);
+            }
+        }
+
+        // Check for exact match at the end
+        if (node && node->exact_rule_id.has_value()) {
+            // Insert exact match at beginning (higher priority)
+            results.insert(results.begin(), *node->exact_rule_id);
+        }
+
+        return results;
+    }
+
+    std::optional<uint32_t> find_exact(std::string_view input) const noexcept {
+        const TrieNode* node = root_.get();
+
+        for (char c : input) {
+            auto it = node->children.find(c);
+            if (it == node->children.end()) {
+                return std::nullopt;
+            }
+            node = it->second.get();
+        }
+
+        return node->exact_rule_id;
+    }
+
+    bool matches(std::string_view input) const noexcept {
+        const TrieNode* node = root_.get();
+
+        for (size_t i = 0; i < input.size(); ++i) {
+            char c = input[i];
+
+            auto it = node->children.find(c);
+            if (it == node->children.end()) {
+                return false;
+            }
+
+            node = it->second.get();
+
+            // Check for prefix match
+            if (!node->prefix_rule_ids.empty()) {
+                return true;
+            }
+        }
+
+        // Check for exact match
+        return node && node->exact_rule_id.has_value();
+    }
+
+    bool remove(std::string_view pattern) {
+        // Find the node for this pattern
+        std::vector<std::pair<TrieNode*, char>> path;
+        TrieNode* node = root_.get();
+
+        for (char c : pattern) {
+            auto it = node->children.find(c);
+            if (it == node->children.end()) {
+                return false;  // Pattern not found
+            }
+            path.push_back({node, c});
+            node = it->second.get();
+        }
+
+        // Remove the pattern markers
+        bool removed = false;
+        if (node->exact_rule_id.has_value()) {
+            node->exact_rule_id.reset();
+            removed = true;
+            --pattern_count_;
+        }
+
+        if (!node->prefix_rule_ids.empty()) {
+            pattern_count_ -= node->prefix_rule_ids.size();
+            node->prefix_rule_ids.clear();
+            removed = true;
+        }
+
+        // Clean up empty nodes (bottom-up)
+        for (auto it = path.rbegin(); it != path.rend(); ++it) {
+            TrieNode* parent = it->first;
+            char c = it->second;
+
+            auto child_it = parent->children.find(c);
+            if (child_it != parent->children.end()) {
+                TrieNode* child = child_it->second.get();
+                if (child->children.empty() && !child->is_end_of_pattern()) {
+                    parent->children.erase(child_it);
+                    --node_count_;
+                } else {
+                    break;  // Can't remove, has children or is pattern end
+                }
+            }
+        }
+
+        return removed;
+    }
+
+    void clear() {
+        root_ = std::make_unique<TrieNode>();
+        pattern_count_ = 0;
+        node_count_ = 1;
+    }
+
+    size_t size() const noexcept { return pattern_count_; }
+    bool empty() const noexcept { return pattern_count_ == 0; }
+
+    TrieMatcher::Stats stats() const noexcept {
+        TrieMatcher::Stats s;
+        s.pattern_count = pattern_count_;
+        s.node_count = node_count_;
+        // Approximate memory: each node has map overhead + pointers
+        s.memory_bytes = node_count_ * (sizeof(TrieNode) + 64);  // 64 for map overhead
+        return s;
+    }
+
+private:
+    std::unique_ptr<TrieNode> root_;
+    size_t pattern_count_;
+    size_t node_count_;
+};
+
+TrieMatcher::TrieMatcher() : impl_(std::make_unique<Impl>()) {}
+TrieMatcher::~TrieMatcher() = default;
+TrieMatcher::TrieMatcher(TrieMatcher&&) noexcept = default;
+TrieMatcher& TrieMatcher::operator=(TrieMatcher&&) noexcept = default;
+
+void TrieMatcher::add_exact(std::string_view pattern, uint32_t rule_id) {
+    impl_->add_exact(pattern, rule_id);
+}
+
+void TrieMatcher::add_prefix(std::string_view prefix, uint32_t rule_id) {
+    impl_->add_prefix(prefix, rule_id);
+}
+
+std::vector<uint32_t> TrieMatcher::find_matches(std::string_view input) const noexcept {
+    return impl_->find_matches(input);
+}
+
+std::optional<uint32_t> TrieMatcher::find_exact(std::string_view input) const noexcept {
+    return impl_->find_exact(input);
+}
+
+bool TrieMatcher::matches(std::string_view input) const noexcept {
+    return impl_->matches(input);
+}
+
+bool TrieMatcher::remove(std::string_view pattern) {
+    return impl_->remove(pattern);
+}
+
+void TrieMatcher::clear() {
+    impl_->clear();
+}
+
+size_t TrieMatcher::size() const noexcept {
+    return impl_->size();
+}
+
+bool TrieMatcher::empty() const noexcept {
+    return impl_->empty();
+}
+
+TrieMatcher::Stats TrieMatcher::stats() const noexcept {
+    return impl_->stats();
 }
 
 // ============================================================================
