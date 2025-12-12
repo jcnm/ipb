@@ -417,7 +417,111 @@
     #define IPB_ALIGNOF(T) sizeof(T)
 #endif
 
-// Cache line size (typical)
+// ============================================================================
+// HOT PATH OPTIMIZATION MACROS
+// ============================================================================
+
+// Prefetch hints for data locality optimization
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    // Read prefetch (data will be read)
+    #define IPB_PREFETCH_READ(addr) __builtin_prefetch((addr), 0, 3)
+    // Write prefetch (data will be written)
+    #define IPB_PREFETCH_WRITE(addr) __builtin_prefetch((addr), 1, 3)
+    // Non-temporal prefetch (data won't be reused soon)
+    #define IPB_PREFETCH_NTA(addr) __builtin_prefetch((addr), 0, 0)
+#elif defined(IPB_COMPILER_MSVC) && defined(_M_X64)
+    #include <intrin.h>
+    #define IPB_PREFETCH_READ(addr) _mm_prefetch((const char*)(addr), _MM_HINT_T0)
+    #define IPB_PREFETCH_WRITE(addr) _mm_prefetch((const char*)(addr), _MM_HINT_T0)
+    #define IPB_PREFETCH_NTA(addr) _mm_prefetch((const char*)(addr), _MM_HINT_NTA)
+#else
+    #define IPB_PREFETCH_READ(addr) ((void)(addr))
+    #define IPB_PREFETCH_WRITE(addr) ((void)(addr))
+    #define IPB_PREFETCH_NTA(addr) ((void)(addr))
+#endif
+
+// Restrict pointer hint (no aliasing)
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    #define IPB_RESTRICT __restrict__
+#elif defined(IPB_COMPILER_MSVC)
+    #define IPB_RESTRICT __restrict
+#else
+    #define IPB_RESTRICT
+#endif
+
+// Hot function (frequently called, optimize for speed)
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    #define IPB_HOT __attribute__((hot))
+#else
+    #define IPB_HOT
+#endif
+
+// Cold function (rarely called, optimize for size)
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    #define IPB_COLD __attribute__((cold))
+#else
+    #define IPB_COLD
+#endif
+
+// Pure function (no side effects, depends only on args and global state)
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    #define IPB_PURE __attribute__((pure))
+#else
+    #define IPB_PURE
+#endif
+
+// Const function (no side effects, depends only on args)
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    #define IPB_CONST __attribute__((const))
+#else
+    #define IPB_CONST
+#endif
+
+// Assume pointer is aligned (for SIMD optimizations)
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    #define IPB_ASSUME_ALIGNED(ptr, alignment) __builtin_assume_aligned((ptr), (alignment))
+#else
+    #define IPB_ASSUME_ALIGNED(ptr, alignment) (ptr)
+#endif
+
+// Assume condition is true (helps optimizer)
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    #define IPB_ASSUME(cond) do { if (!(cond)) __builtin_unreachable(); } while(0)
+#elif defined(IPB_COMPILER_MSVC)
+    #define IPB_ASSUME(cond) __assume(cond)
+#else
+    #define IPB_ASSUME(cond) ((void)(cond))
+#endif
+
+// CPU pause instruction (for spin loops, reduces power and contention)
+#if defined(IPB_ARCH_X86_64) || defined(IPB_ARCH_X86)
+    #if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+        #define IPB_CPU_PAUSE() __builtin_ia32_pause()
+    #elif defined(IPB_COMPILER_MSVC)
+        #define IPB_CPU_PAUSE() _mm_pause()
+    #else
+        #define IPB_CPU_PAUSE() ((void)0)
+    #endif
+#elif defined(IPB_ARCH_ARM64)
+    #if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+        #define IPB_CPU_PAUSE() __asm__ __volatile__("yield" ::: "memory")
+    #else
+        #define IPB_CPU_PAUSE() ((void)0)
+    #endif
+#else
+    #define IPB_CPU_PAUSE() ((void)0)
+#endif
+
+// Memory barrier (compiler barrier, not CPU barrier)
+#if defined(IPB_COMPILER_GCC) || defined(IPB_COMPILER_CLANG)
+    #define IPB_COMPILER_BARRIER() __asm__ __volatile__("" ::: "memory")
+#elif defined(IPB_COMPILER_MSVC)
+    #define IPB_COMPILER_BARRIER() _ReadWriteBarrier()
+#else
+    #define IPB_COMPILER_BARRIER() ((void)0)
+#endif
+
+// Cache line size (architecture-dependent)
 #if defined(IPB_ARCH_X86) || defined(IPB_ARCH_X86_64)
     #define IPB_CACHE_LINE_SIZE 64
 #elif defined(IPB_ARCH_ARM64)
@@ -427,6 +531,9 @@
 #else
     #define IPB_CACHE_LINE_SIZE 64
 #endif
+
+// Macro for cache-line aligned structures
+#define IPB_CACHE_ALIGNED IPB_ALIGNAS(IPB_CACHE_LINE_SIZE)
 
 namespace ipb::common::platform {
 
