@@ -288,12 +288,12 @@ private:
     }
 
     void update_in_use(int64_t delta) {
-        auto current = stats_.in_use.fetch_add(delta, std::memory_order_relaxed);
-        auto new_value = current + delta;
+        uint64_t current = stats_.in_use.fetch_add(delta, std::memory_order_relaxed);
+        uint64_t new_value = static_cast<uint64_t>(static_cast<int64_t>(current) + delta);
 
         // Update high water mark
-        auto hwm = stats_.high_water_mark.load(std::memory_order_relaxed);
-        while (new_value > static_cast<int64_t>(hwm)) {
+        uint64_t hwm = stats_.high_water_mark.load(std::memory_order_relaxed);
+        while (new_value > hwm) {
             if (stats_.high_water_mark.compare_exchange_weak(hwm, new_value)) {
                 break;
             }

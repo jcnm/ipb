@@ -211,6 +211,11 @@ if(IPB_COMMON_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
+# Benchmarks
+if(IPB_COMMON_ENABLE_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()
+
 # Installation
 include(GNUInstallDirs)
 
