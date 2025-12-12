@@ -190,12 +190,18 @@ jobs:
       - name: Generate Coverage Report
         if: matrix.coverage
         run: |
-          # Capture coverage with branch coverage enabled
+          # Install gcovr for coverage reporting
+          pip3 install gcovr --quiet
+
+          # Run the test report script with XML output for CI
+          chmod +x scripts/run-tests.sh
+          ./scripts/run-tests.sh --xml --output-dir test-reports
+
+          # Also generate lcov format for Codecov
           lcov --capture --directory build --output-file coverage.info \
             --ignore-errors mismatch \
             --rc lcov_branch_coverage=1
 
-          # Remove external files
           lcov --remove coverage.info \
             '/usr/*' \
             '*/tests/*' \
@@ -204,17 +210,16 @@ jobs:
             --output-file coverage.info \
             --rc lcov_branch_coverage=1
 
-          # Display summary with branch coverage
           lcov --list coverage.info --rc lcov_branch_coverage=1
 
-          # Extract coverage percentage for threshold check
-          COVERAGE=$(lcov --summary coverage.info 2>&1 | grep "lines" | grep -oP '\d+\.\d+%' | head -1 | tr -d '%')
-          echo "Line coverage: ${COVERAGE}%"
-
-          # Fail if coverage is below 70% (warning threshold)
-          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
-            echo "::warning::Coverage is below 70%: ${COVERAGE}%"
-          fi
+      - name: Upload Test Reports
+        if: matrix.coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.os }}-${{ matrix.compiler }}
+          path: |
+            test-reports/
+          retention-days: 14
 
       - name: Upload Coverage to Codecov
         if: matrix.coverage
