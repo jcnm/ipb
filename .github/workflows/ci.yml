@@ -190,14 +190,31 @@ jobs:
       - name: Generate Coverage Report
         if: matrix.coverage
         run: |
+          # Capture coverage with branch coverage enabled
           lcov --capture --directory build --output-file coverage.info \
-            --ignore-errors mismatch
+            --ignore-errors mismatch \
+            --rc lcov_branch_coverage=1
+
+          # Remove external files
           lcov --remove coverage.info \
             '/usr/*' \
             '*/tests/*' \
             '*/examples/*' \
-            --output-file coverage.info
-          lcov --list coverage.info
+            '*/googletest/*' \
+            --output-file coverage.info \
+            --rc lcov_branch_coverage=1
+
+          # Display summary with branch coverage
+          lcov --list coverage.info --rc lcov_branch_coverage=1
+
+          # Extract coverage percentage for threshold check
+          COVERAGE=$(lcov --summary coverage.info 2>&1 | grep "lines" | grep -oP '\d+\.\d+%' | head -1 | tr -d '%')
+          echo "Line coverage: ${COVERAGE}%"
+
+          # Fail if coverage is below 70% (warning threshold)
+          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
+            echo "::warning::Coverage is below 70%: ${COVERAGE}%"
+          fi
 
       - name: Upload Coverage to Codecov
         if: matrix.coverage
@@ -207,6 +224,8 @@ jobs:
           flags: unittests
           name: codecov-${{ matrix.os }}-${{ matrix.compiler }}
           fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload Build Artifacts
         if: matrix.build_type == 'Release'

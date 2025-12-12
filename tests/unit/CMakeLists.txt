@@ -129,6 +129,22 @@ set_tests_properties(test_sink_registry PROPERTIES
     TIMEOUT 180
 )
 
+# Scoop Registry test
+add_executable(test_scoop_registry test_scoop_registry.cpp)
+target_link_libraries(test_scoop_registry PRIVATE
+    ipb-core-components
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_scoop_registry COMMAND test_scoop_registry)
+set_tests_properties(test_scoop_registry PROPERTIES
+    LABELS "unit;core;components"
+    TIMEOUT 180
+)
+
 # ============================================================================
 # Core/Router Tests - Coverage of router functionality
 # ============================================================================
@@ -172,6 +188,8 @@ if(ENABLE_COVERAGE)
     target_link_options(test_rule_engine PRIVATE --coverage)
     target_compile_options(test_sink_registry PRIVATE --coverage)
     target_link_options(test_sink_registry PRIVATE --coverage)
+    target_compile_options(test_scoop_registry PRIVATE --coverage)
+    target_link_options(test_scoop_registry PRIVATE --coverage)
 
     # Core/Router tests
     target_compile_options(test_router PRIVATE --coverage)
@@ -192,5 +210,6 @@ message(STATUS "    - test_scheduler (EDFScheduler, ScheduledTask, TaskQueue)")
 message(STATUS "    - test_message_bus (MessageBus, Message, Subscription, Channel)")
 message(STATUS "    - test_rule_engine (RuleEngine, RoutingRule, PatternMatcher)")
 message(STATUS "    - test_sink_registry (SinkRegistry, LoadBalancer, SinkInfo)")
+message(STATUS "    - test_scoop_registry (ScoopRegistry, ReadStrategy, AggregatedSubscription)")
 message(STATUS "  Core/Router:")
 message(STATUS "    - test_router (Router, RuleBuilder, RouterConfig)")

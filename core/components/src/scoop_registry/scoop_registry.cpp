@@ -149,10 +149,12 @@ public:
         info->type = std::string(info->scoop->protocol_name());
         info->health = ScoopHealth::UNKNOWN;
 
+        // Capture type before moving info
+        std::string scoop_type = info->type;
         scoops_[id_str] = std::move(info);
         stats_.active_scoops.fetch_add(1, std::memory_order_relaxed);
 
-        IPB_LOG_INFO(LOG_CAT, "Registered scoop: " << id << " (type=" << info->type
+        IPB_LOG_INFO(LOG_CAT, "Registered scoop: " << id << " (type=" << scoop_type
                     << ", primary=" << is_primary << ", priority=" << priority << ")");
         return true;
     }
