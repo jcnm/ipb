@@ -1,178 +1,251 @@
-# Rapport d'Analyse Architecturale - IPB (Industrial Protocol Bridge)
+# Architecture Analysis Report - IPB (Industrial Protocol Bridge)
 
-**Version**: 1.0
-**Date**: 2025-12-10
-**Auteur**: Analyse automatisée
-
----
-
-## 1. Résumé Exécutif
-
-**IPB (Industrial Protocol Bridge)** est un middleware de communication industrielle haute performance conçu pour des environnements temps-réel avec des exigences de latence en microsecondes. Le projet est structuré en mono-repo C++20 avec une architecture modulaire basée sur des scoops (collecteurs de données en entrée) et des sinks (sorties).
-
-### Points Forts Identifiés
-- Architecture modulaire bien définie
-- Utilisation de C++20 moderne
-- Structures de données lock-free pour le temps-réel
-- Configuration CMake mature
-
-### Points d'Amélioration Critiques
-- **Absence de gestionnaire de dépendances moderne** (vcpkg/Conan)
-- **Couverture de tests quasi inexistante** (2 fichiers de tests, non fonctionnels)
-- **Router monolithique** avec trop de responsabilités
-- **Absence d'intégration continue** (CI/CD)
-- **Pas de vérification statique du code** (clang-tidy, cppcheck)
+**Version**: 2.0
+**Date**: 2025-12-12
+**Language**: English
 
 ---
 
-## 2. Analyse de la Structure du Mono-Repo
+## 1. Executive Summary
 
-### 2.1 Structure Actuelle
+**IPB (Industrial Protocol Bridge)** is a high-performance industrial communication middleware designed for real-time environments with microsecond latency requirements. The project is structured as a C++20 mono-repository with a modular architecture based on scoops (input data collectors) and sinks (outputs).
+
+### Key Strengths
+- Well-defined modular architecture
+- Modern C++20 usage
+- Lock-free data structures for real-time performance
+- Mature CMake configuration with modular build options
+- Separate transport layer abstraction
+- Refactored components (message bus, rule engine, scheduler, registries)
+
+### Areas for Improvement
+- **Lack of modern dependency manager** (vcpkg/Conan)
+- **Limited test coverage**
+- **Router still monolithic** with multiple responsibilities
+- **No CI/CD integration**
+- **No static code analysis** (clang-tidy, cppcheck)
+
+---
+
+## 2. Mono-Repository Structure Analysis
+
+### 2.1 Current Structure (v1.5.0)
 
 ```
 ipb/
-├── libipb-common/          # Bibliothèque centrale (CRITIQUE - 100% coverage requis)
-│   ├── include/ipb/common/
-│   │   ├── data_point.hpp   # Structure de données principale
-│   │   ├── dataset.hpp      # Collection de DataPoints
-│   │   ├── endpoint.hpp     # Abstractions réseau + primitives RT
-│   │   └── interfaces.hpp   # Interfaces de base (IIPBComponent, etc.)
-│   ├── src/
-│   └── tests/               # Tests quasi vides
+├── apps/                        # Applications
+│   ├── ipb-gate/                # Main orchestrator application
+│   │   ├── src/
+│   │   │   ├── main.cpp         # Application entry point
+│   │   │   ├── orchestrator.cpp # Main orchestration logic
+│   │   │   ├── config_loader.cpp# YAML configuration loading
+│   │   │   ├── daemon_utils.cpp # Daemon mode utilities
+│   │   │   └── signal_handler.cpp
+│   │   ├── include/ipb/gate/
+│   │   └── config/
+│   │
+│   └── ipb-bridge/              # Lightweight bridge application
+│       ├── src/
+│       │   ├── main.cpp
+│       │   ├── bridge.cpp       # Bridge logic
+│       │   └── config.cpp
+│       └── include/
 │
-├── libipb-router/          # Routeur de messages (CRITIQUE - 100% coverage requis)
-│   ├── include/ipb/router/
-│   │   └── router.hpp       # ~485 lignes - TROP MONOLITHIQUE
-│   └── src/
+├── core/                        # Core libraries
+│   ├── common/                  # libipb-common - CRITICAL (100% coverage required)
+│   │   ├── include/ipb/common/
+│   │   │   ├── data_point.hpp   # Main data structure (~600 lines)
+│   │   │   ├── dataset.hpp      # Collection of DataPoints
+│   │   │   ├── endpoint.hpp     # Network abstractions + RT primitives
+│   │   │   ├── error.hpp        # Comprehensive error handling
+│   │   │   ├── interfaces.hpp   # Base interfaces (IIPBComponent, etc.)
+│   │   │   ├── debug.hpp        # Debugging utilities
+│   │   │   ├── platform.hpp     # Platform-specific abstractions
+│   │   │   └── protocol_capabilities.hpp
+│   │   ├── src/
+│   │   ├── tests/
+│   │   └── examples/
+│   │
+│   ├── components/              # Refactored modular components (NEW)
+│   │   ├── include/ipb/core/
+│   │   │   ├── config/          # Configuration loading
+│   │   │   ├── message_bus/     # Pub/Sub pattern implementation
+│   │   │   ├── rule_engine/     # Pattern matching & routing rules
+│   │   │   ├── scheduler/       # EDF scheduling
+│   │   │   ├── scoop_registry/  # Dynamic scoop management
+│   │   │   └── sink_registry/   # Dynamic sink management + load balancing
+│   │   └── src/
+│   │
+│   ├── router/                  # libipb-router - CRITICAL (100% coverage required)
+│   │   └── include/ipb/router/
+│   │       └── router.hpp       # ~485 lines - Still needs decomposition
+│   │
+│   └── security/                # Security components
+│       └── include/ipb/security/
 │
-├── libipb-sink-*/          # Sinks (sortie) - plugins dynamiques
-├── libipb-scoop-*/         # Scoops (collecteurs de données) - plugins dynamiques
-├── ipb-gate/               # Application principale
-└── CMakeLists.txt          # Configuration build racine
+├── sinks/                       # Output adapters (6 modules)
+│   ├── console/                 # Console output sink (6 format options)
+│   ├── syslog/                  # Syslog sink (RFC compliant, remote support)
+│   ├── mqtt/                    # MQTT sink (50K msg/s, 6 formats, 5 topic strategies)
+│   ├── kafka/                   # Apache Kafka sink
+│   ├── sparkplug/               # Sparkplug B sink
+│   └── zmq/                     # ZeroMQ sink
+│
+├── scoops/                      # Data collectors (5 modules)
+│   ├── console/                 # Console input scoop
+│   ├── modbus/                  # Modbus protocol scoop
+│   ├── mqtt/                    # MQTT subscriber scoop
+│   ├── opcua/                   # OPC UA scoop
+│   └── sparkplug/               # Sparkplug B scoop
+│
+├── transport/                   # Transport layers (NEW)
+│   ├── mqtt/                    # MQTT transport
+│   │   └── (Paho MQTT / CoreMQTT backend support)
+│   └── http/                    # HTTP transport
+│       └── (libcurl backend)
+│
+├── cmake/                       # CMake build system
+│   ├── IPBDependencies.cmake    # Dependency management
+│   ├── IPBOptions.cmake         # Build options
+│   ├── IPBPrintConfig.cmake     # Configuration printing
+│   ├── build_config.hpp.in      # Build configuration template
+│   └── build_info.hpp.in        # Build info template
+│
+├── examples/                    # Example applications
+│   ├── complete_industrial_setup.cpp
+│   ├── mock_data_flow_test.cpp
+│   └── gateway-config.yaml
+│
+├── scripts/                     # Build & installation scripts
+│   ├── build.sh                 # Main build script
+│   ├── install-deps-linux.sh
+│   └── install-deps-macos.sh
+│
+├── tests/                       # Test suite
+│   └── unit/
+│
+├── docs/                        # Documentation
+│   └── MQTT_V5_NATIVE_PROPOSAL.md
+│
+├── CMakeLists.txt               # Root CMake configuration
+├── README.md                    # Project README
+├── ARCHITECTURE.md              # This document
+└── CHANGELOG.md                 # Version history
 ```
 
-### 2.2 Évaluation de la Structure
+### 2.2 Structure Evaluation
 
-| Composant | État | Priorité |
-|-----------|------|----------|
-| `libipb-common` | Structure OK, tests absents | CRITIQUE |
-| `libipb-router` | Monolithique, à refactorer | CRITIQUE |
-| `libipb-sink-*` | Bien modularisé | OK |
-| `libipb-scoop-*` | Bien modularisé | OK |
-| `ipb-gate` | Bien structuré | OK |
+| Component | Status | Priority |
+|-----------|--------|----------|
+| `core/common` | Structure OK, needs more tests | CRITICAL |
+| `core/components` | Well modularized (NEW) | OK |
+| `core/router` | Still monolithic, needs decomposition | HIGH |
+| `sinks/*` | Well modularized | OK |
+| `scoops/*` | Well modularized | OK |
+| `transport/*` | New abstraction layer | OK |
+| `apps/ipb-gate` | Well structured | OK |
+| `apps/ipb-bridge` | New lightweight option | OK |
 
 ---
 
-## 3. Analyse Critique du Router
+## 3. Critical Analysis of Router
 
-### 3.1 Problèmes Identifiés
+### 3.1 Identified Issues
 
-Le fichier `libipb-router/include/ipb/router/router.hpp` présente plusieurs anti-patterns :
+The file `core/router/include/ipb/router/router.hpp` still has some architectural concerns:
 
-#### 3.1.1 Violation du Principe de Responsabilité Unique (SRP)
-La classe `Router` (~485 lignes) gère :
-- Ordonnancement EDF (Earliest Deadline First)
-- Gestion des sinks
-- Règles de routage
+#### 3.1.1 Single Responsibility Principle Violation
+The `Router` class (~485 lines) manages:
+- EDF (Earliest Deadline First) scheduling
+- Sink management
+- Routing rules
 - Load balancing
-- Statistiques
+- Statistics
 - Hot-reload
-- Pools mémoire
+- Memory pools
 - Dead letter queue
 
-**Recommandation** : Extraire en composants séparés.
+**Status**: Partially addressed by extracting components to `core/components/`, but router still orchestrates all of these.
 
-#### 3.1.2 Utilisation de `std::regex` en temps-réel
+#### 3.1.2 Use of `std::regex` in Real-Time Context
 
 ```cpp
 // router.hpp:18
 #include <regex>
-// Dans RoutingRule::address_pattern
+// In RoutingRule::address_pattern
 std::string address_pattern;  // Regex pattern for addresses
 ```
 
-**Problème Critique** : `std::regex` n'est pas conçu pour le temps-réel :
-- Allocations dynamiques imprévisibles
-- Performances non déterministes
-- Peut provoquer des dépassements de deadline
+**Critical Issue**: `std::regex` is not designed for real-time:
+- Unpredictable dynamic allocations
+- Non-deterministic performance
+- Can cause deadline overruns
 
-**Alternatives Recommandées** :
-1. **CTRE (Compile-Time Regular Expressions)** - Évaluation à la compilation
-2. **RE2** (Google) - Garanties de temps linéaire
-3. **Hyperscan** (Intel) - Optimisé pour le matching à haut débit
-4. **Trie/Radix Tree** - Pour les patterns d'adresses simples
+**Recommended Alternatives**:
+1. **CTRE (Compile-Time Regular Expressions)** - Compile-time evaluation
+2. **RE2** (Google) - Linear time guarantees
+3. **Hyperscan** (Intel) - Optimized for high-throughput matching
+4. **Trie/Radix Tree** - For simple address patterns
 
-#### 3.1.3 Mutex Standard vs Lock-Free
+### 3.2 Proposed Refactored Architecture
 
-```cpp
-// router.hpp:329
-mutable std::shared_mutex sinks_mutex_;
-// router.hpp:334
-mutable std::shared_mutex rules_mutex_;
-// router.hpp:349
-mutable std::mutex edf_mutex_;
-```
-
-**Problème** : Mélange de structures lock-free et mutex classiques, créant des points de contention potentiels.
-
-### 3.2 Architecture Alternative Proposée
+The `core/components/` directory now contains extracted components:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      MessageBus (nouveau)                    │
-│  - Interface simplifiée publish/subscribe                    │
-│  - Découplage total producteurs/consommateurs               │
+│                      MessageBus                              │
+│  - Simplified publish/subscribe interface                    │
+│  - Complete decoupling of producers/consumers               │
 └─────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
 ┌─────────────────┐  ┌────────────────┐  ┌─────────────────┐
 │  RuleEngine     │  │  EDFScheduler  │  │  SinkRegistry   │
-│  - Évaluation   │  │  - Ordonnance- │  │  - Enregistre-  │
-│    des règles   │  │    ment EDF    │  │    ment sinks   │
+│  - Rule         │  │  - EDF         │  │  - Sink         │
+│    evaluation   │  │    scheduling  │  │    registration │
 │  - Pattern      │  │  - Deadlines   │  │  - Load balance │
-│    matching     │  │  - Priorités   │  │  - Failover     │
-│    optimisé     │  │                │  │                 │
+│    matching     │  │  - Priorities  │  │  - Failover     │
 └─────────────────┘  └────────────────┘  └─────────────────┘
 ```
 
-### 3.3 Comparaison des Approches
+### 3.3 Approach Comparison
 
-| Critère | Router Actuel | MessageBus Proposé |
-|---------|---------------|---------------------|
-| Couplage | Fort | Faible |
-| Testabilité | Difficile | Facile (composants isolés) |
-| Extensibilité | Modification centrale | Ajout de plugins |
-| Performance | ~2M msg/s | Potentiel >5M msg/s |
-| Déterminisme | Moyen (regex, mutex) | Élevé (lock-free, CTRE) |
+| Criterion | Current Router | Modular Components |
+|-----------|----------------|---------------------|
+| Coupling | High | Low |
+| Testability | Difficult | Easy (isolated components) |
+| Extensibility | Central modification | Plugin addition |
+| Performance | ~2M msg/s | Potential >5M msg/s |
+| Determinism | Medium (regex, mutex) | High (lock-free, CTRE) |
 
 ---
 
-## 4. Gestion des Dépendances - Proposition Moderne
+## 4. Dependency Management - Modern Solution Proposal
 
-### 4.1 État Actuel (Problématique)
+### 4.1 Current State
 
 ```cmake
-# Dépendances trouvées manuellement ou via pkg-config
+# Dependencies found manually or via pkg-config
 find_package(jsoncpp QUIET)
 find_package(yaml-cpp QUIET)
 find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
 ```
 
-**Problèmes** :
-- Installation manuelle requise
-- Pas de versioning des dépendances
-- Non reproductible entre machines
+**Issues**:
+- Manual installation required
+- No dependency versioning
+- Not reproducible across machines
 
-### 4.2 Solution Recommandée : vcpkg
+### 4.2 Recommended Solution: vcpkg
 
-Créer un fichier `vcpkg.json` à la racine :
+Create a `vcpkg.json` file at the root:
 
 ```json
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "ipb",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "dependencies": [
     "jsoncpp",
     "yaml-cpp",
@@ -201,53 +274,25 @@ Créer un fichier `vcpkg.json` à la racine :
 }
 ```
 
-### 4.3 Alternative : Conan 2.0
-
-Créer un fichier `conanfile.py` :
-
-```python
-from conan import ConanFile
-from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout
-
-class IPBRecipe(ConanFile):
-    name = "ipb"
-    version = "1.4.0"
-    settings = "os", "compiler", "build_type", "arch"
-
-    requires = [
-        "jsoncpp/1.9.5",
-        "yaml-cpp/0.8.0",
-        "gtest/1.14.0",
-        "benchmark/1.8.3",
-        "ctre/3.8.1",
-        "fmt/10.2.1",
-        "spdlog/1.13.0",
-    ]
-
-    def configure(self):
-        if self.options.get_safe("with_mqtt"):
-            self.requires("paho-mqtt-cpp/1.3.2")
-```
-
 ---
 
-## 5. Stratégie de Tests - Plan pour 100% de Couverture
+## 5. Test Strategy - Plan for 100% Coverage
 
-### 5.1 État Actuel des Tests
+### 5.1 Current Test State
 
-| Fichier | Lignes | Tests Existants | Couverture |
-|---------|--------|-----------------|------------|
-| `data_point.hpp` | 565 | 2 tests (non fonctionnels) | ~0% |
-| `endpoint.hpp` | 525 | 0 | 0% |
-| `interfaces.hpp` | 398 | 0 | 0% |
-| `router.hpp` | 487 | 0 | 0% |
-| **Total** | ~2000 | 2 | **<1%** |
+| File | Lines | Existing Tests | Coverage |
+|------|-------|----------------|----------|
+| `data_point.hpp` | ~600 | Minimal | <5% |
+| `endpoint.hpp` | ~525 | 0 | 0% |
+| `interfaces.hpp` | ~425 | 0 | 0% |
+| `router.hpp` | ~485 | 0 | 0% |
+| **Total** | ~2000 | Minimal | **<5%** |
 
-### 5.2 Structure de Tests Proposée
+### 5.2 Proposed Test Structure
 
 ```
 tests/
-├── unit/                         # Tests unitaires (rapides, isolés)
+├── unit/                         # Unit tests (fast, isolated)
 │   ├── common/
 │   │   ├── test_timestamp.cpp
 │   │   ├── test_value.cpp
@@ -256,6 +301,12 @@ tests/
 │   │   ├── test_endpoint.cpp
 │   │   ├── test_spsc_ringbuffer.cpp
 │   │   └── test_memory_pool.cpp
+│   ├── components/
+│   │   ├── test_message_bus.cpp
+│   │   ├── test_rule_engine.cpp
+│   │   ├── test_scheduler.cpp
+│   │   ├── test_scoop_registry.cpp
+│   │   └── test_sink_registry.cpp
 │   ├── router/
 │   │   ├── test_routing_rule.cpp
 │   │   ├── test_value_condition.cpp
@@ -263,8 +314,8 @@ tests/
 │   │   └── test_router.cpp
 │   └── CMakeLists.txt
 │
-├── integration/                  # Tests d'intégration
-│   ├── test_adapter_sink_flow.cpp
+├── integration/                  # Integration tests
+│   ├── test_scoop_sink_flow.cpp
 │   ├── test_router_with_sinks.cpp
 │   ├── test_hot_reload.cpp
 │   └── CMakeLists.txt
@@ -275,127 +326,18 @@ tests/
 │   ├── bench_latency.cpp
 │   └── CMakeLists.txt
 │
-└── fuzzing/                      # Tests de fuzzing
+└── fuzzing/                      # Fuzzing tests
     ├── fuzz_data_point_deserialize.cpp
     └── fuzz_config_parser.cpp
 ```
 
-### 5.3 Framework de Test Recommandé
-
-```cmake
-# tests/CMakeLists.txt
-find_package(GTest REQUIRED)
-find_package(benchmark REQUIRED)
-
-# Tests unitaires
-add_executable(test_common
-    unit/common/test_timestamp.cpp
-    unit/common/test_value.cpp
-    unit/common/test_data_point.cpp
-    unit/common/test_dataset.cpp
-    unit/common/test_endpoint.cpp
-    unit/common/test_spsc_ringbuffer.cpp
-    unit/common/test_memory_pool.cpp
-)
-target_link_libraries(test_common
-    PRIVATE ipb::common GTest::gtest_main
-)
-gtest_discover_tests(test_common)
-
-# Couverture de code
-if(ENABLE_COVERAGE)
-    target_compile_options(test_common PRIVATE --coverage)
-    target_link_options(test_common PRIVATE --coverage)
-endif()
-```
-
-### 5.4 Plan de Tests pour libipb-common (100% Coverage)
-
-#### Timestamp (data_point.hpp:21-146)
-```cpp
-// Tests requis :
-TEST(TimestampTest, DefaultConstruction)
-TEST(TimestampTest, NowIsMonotonic)
-TEST(TimestampTest, SystemTimeConversion)
-TEST(TimestampTest, ArithmeticOperations)
-TEST(TimestampTest, ComparisonOperators)
-TEST(TimestampTest, OutputStreamOperator)
-```
-
-#### Value (data_point.hpp:153-300)
-```cpp
-TEST(ValueTest, DefaultConstruction)
-TEST(ValueTest, SetAndGetAllTypes)
-TEST(ValueTest, InlineStorageThreshold)
-TEST(ValueTest, ExternalStorageAllocation)
-TEST(ValueTest, ZeroCopyStringView)
-TEST(ValueTest, ZeroCopyBinary)
-TEST(ValueTest, CopySemantics)
-TEST(ValueTest, MoveSemantics)
-TEST(ValueTest, Serialization)
-TEST(ValueTest, Deserialization)
-```
-
-#### DataPoint (data_point.hpp:330-484)
-```cpp
-TEST(DataPointTest, DefaultConstruction)
-TEST(DataPointTest, AddressInlineStorage)
-TEST(DataPointTest, AddressExternalStorage)
-TEST(DataPointTest, ValueSetAndGet)
-TEST(DataPointTest, QualityStates)
-TEST(DataPointTest, StaleDetection)
-TEST(DataPointTest, CopySemantics)
-TEST(DataPointTest, MoveSemantics)
-TEST(DataPointTest, HashFunction)
-TEST(DataPointTest, EqualityOperator)
-TEST(DataPointTest, Serialization)
-```
-
-#### SPSCRingBuffer (endpoint.hpp:304-374)
-```cpp
-TEST(SPSCRingBufferTest, EmptyBuffer)
-TEST(SPSCRingBufferTest, PushPop)
-TEST(SPSCRingBufferTest, FullBuffer)
-TEST(SPSCRingBufferTest, ConcurrentAccess)
-TEST(SPSCRingBufferTest, PowerOfTwoSize)
-```
-
-#### MemoryPool (endpoint.hpp:379-445)
-```cpp
-TEST(MemoryPoolTest, AcquireRelease)
-TEST(MemoryPoolTest, PoolExhaustion)
-TEST(MemoryPoolTest, ConcurrentAccess)
-```
-
-### 5.5 Plan de Tests pour libipb-router (100% Coverage)
-
-```cpp
-// RoutingRule
-TEST(RoutingRuleTest, StaticRouting)
-TEST(RoutingRuleTest, RegexPatternMatching)
-TEST(RoutingRuleTest, QualityBasedRouting)
-TEST(RoutingRuleTest, ValueConditions)
-TEST(RoutingRuleTest, LoadBalancing)
-TEST(RoutingRuleTest, Failover)
-
-// Router
-TEST(RouterTest, StartStop)
-TEST(RouterTest, RegisterUnregisterSink)
-TEST(RouterTest, AddRemoveRule)
-TEST(RouterTest, RouteMessage)
-TEST(RouterTest, BatchRouting)
-TEST(RouterTest, DeadlineEnforcement)
-TEST(RouterTest, HotReload)
-TEST(RouterTest, Statistics)
-```
-
 ---
 
-## 6. Outils de Qualité de Code
+## 6. Code Quality Tools
 
-### 6.1 Configuration clang-tidy
+### 6.1 clang-tidy Configuration
 
-Créer `.clang-tidy` :
+Create `.clang-tidy`:
 
 ```yaml
 ---
@@ -428,9 +370,9 @@ CheckOptions:
     value: 'std::string_view;std::span'
 ```
 
-### 6.2 Configuration clang-format
+### 6.2 clang-format Configuration
 
-Créer `.clang-format` :
+Create `.clang-format`:
 
 ```yaml
 ---
@@ -460,36 +402,13 @@ IncludeCategories:
     Priority: 4
 ```
 
-### 6.3 Configuration cppcheck
-
-Créer `cppcheck.cfg` :
-
-```xml
-<?xml version="1.0"?>
-<cppcheck>
-  <check-config/>
-  <platform>unix64</platform>
-  <enable>all</enable>
-  <std>c++20</std>
-  <inconclusive/>
-  <force/>
-  <suppress>
-    <id>unusedFunction</id>
-    <file>*/tests/*</file>
-  </suppress>
-  <suppress>
-    <id>missingIncludeSystem</id>
-  </suppress>
-</cppcheck>
-```
-
 ---
 
-## 7. Pipeline CI/CD Proposé
+## 7. Proposed CI/CD Pipeline
 
 ### 7.1 GitHub Actions
 
-Créer `.github/workflows/ci.yml` :
+Create `.github/workflows/ci.yml`:
 
 ```yaml
 name: CI Pipeline
@@ -574,7 +493,7 @@ jobs:
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DENABLE_${{ matrix.sanitizer | upper }}_SANITIZER=ON
+            -DENABLE_SANITIZERS=ON
           cmake --build build
 
       - name: Run Tests
@@ -583,60 +502,67 @@ jobs:
 
 ---
 
-## 8. Recommandations Prioritaires
+## 8. Priority Recommendations
 
-### 8.1 Court Terme (1-2 sprints)
+### 8.1 Short Term (1-2 sprints)
 
-1. **Ajouter vcpkg** pour la gestion des dépendances
-2. **Corriger les tests existants** (actuellement non compilables)
-3. **Ajouter clang-tidy et clang-format** avec pre-commit hooks
-4. **Créer les tests de base** pour `Timestamp`, `Value`, `DataPoint`
+1. **Add vcpkg** for dependency management
+2. **Fix existing tests** (currently not compiling)
+3. **Add clang-tidy and clang-format** with pre-commit hooks
+4. **Create basic tests** for `Timestamp`, `Value`, `DataPoint`
 
-### 8.2 Moyen Terme (3-6 sprints)
+### 8.2 Medium Term (3-6 sprints)
 
-1. **Atteindre 100% de couverture** sur `libipb-common`
-2. **Refactorer le Router** en composants séparés :
-   - `RuleEngine` (évaluation des règles)
-   - `EDFScheduler` (ordonnancement)
-   - `SinkRegistry` (gestion des sinks)
-3. **Remplacer `std::regex`** par CTRE ou RE2
-4. **Ajouter les tests d'intégration**
+1. **Achieve 100% coverage** on `core/common`
+2. **Continue Router decomposition** into separate components:
+   - Complete integration with `core/components/`
+   - Use extracted `RuleEngine`, `EDFScheduler`, `SinkRegistry`
+3. **Replace `std::regex`** with CTRE or RE2
+4. **Add integration tests**
 
-### 8.3 Long Terme
+### 8.3 Long Term
 
-1. **Atteindre 100% de couverture** sur `libipb-router`
-2. **Ajouter le fuzzing** pour les parsers
-3. **Implémenter un MessageBus** découplé
-4. **Documentation Doxygen** complète
+1. **Achieve 100% coverage** on `core/router`
+2. **Add fuzzing** for parsers
+3. **Implement MessageBus** fully decoupled
+4. **Complete Doxygen documentation**
 
 ---
 
 ## 9. Conclusion
 
-IPB est un projet bien architecturé avec des bases solides pour le temps-réel. Cependant, les lacunes majeures sont :
+IPB is a well-architected project with solid foundations for real-time systems. The recent restructuring (v1.5.0) has improved the modularity significantly with:
 
-1. **Tests inexistants** - Risque critique pour un système industriel
-2. **Router monolithique** - Difficile à maintenir et tester
-3. **Pas de gestion moderne des dépendances** - Non reproductible
-4. **Absence de CI/CD** - Qualité non garantie
+- New `core/components/` for extracted, testable components
+- New `transport/` layer for backend abstraction
+- New `ipb-bridge` application for lightweight deployments
+- Cleaner separation between sinks and scoops
 
-L'adoption des recommandations de ce rapport permettra de transformer IPB en un projet industriel de qualité production avec des garanties de fiabilité et de déterminisme.
+However, major gaps remain:
+
+1. **Insufficient tests** - Critical risk for industrial systems
+2. **Router still partially monolithic** - Difficult to maintain and test
+3. **No modern dependency management** - Not reproducible
+4. **No CI/CD** - Quality not guaranteed
+
+Adopting the recommendations in this report will transform IPB into a production-quality industrial project with reliability and determinism guarantees.
 
 ---
 
-## Annexes
+## Appendices
 
-### A. Matrice de Couverture Cible
+### A. Target Coverage Matrix
 
-| Composant | État Actuel | Cible Phase 1 | Cible Phase 2 |
-|-----------|-------------|---------------|---------------|
-| `libipb-common` | <1% | 80% | **100%** |
-| `libipb-router` | 0% | 60% | **100%** |
-| `libipb-sink-*` | 0% | 50% | 80% |
-| `libipb-adapter-*` | 0% | 50% | 80% |
-| `ipb-gate` | 0% | 40% | 70% |
+| Component | Current | Phase 1 Target | Phase 2 Target |
+|-----------|---------|----------------|----------------|
+| `core/common` | <5% | 80% | **100%** |
+| `core/components` | 0% | 60% | **100%** |
+| `core/router` | 0% | 60% | **100%** |
+| `sinks/*` | 0% | 50% | 80% |
+| `scoops/*` | 0% | 50% | 80% |
+| `apps/*` | 0% | 40% | 70% |
 
-### B. Références
+### B. References
 
 - [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/)
 - [CTRE - Compile Time Regular Expressions](https://github.com/hanickadot/compile-time-regular-expressions)
