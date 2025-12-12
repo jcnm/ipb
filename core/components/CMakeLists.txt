@@ -45,6 +45,7 @@ set(SOURCES
     # Rule Engine
     src/rule_engine/rule_engine.cpp
     src/rule_engine/pattern_matcher.cpp
+    src/rule_engine/compiled_pattern_cache.cpp
 
     # EDF Scheduler
     src/scheduler/edf_scheduler.cpp

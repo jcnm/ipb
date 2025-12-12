@@ -1,8 +1,11 @@
 #include <ipb/router/router.hpp>
+#include <ipb/core/rule_engine/compiled_pattern_cache.hpp>
 
 #include <algorithm>
 #include <regex>
 #include <stdexcept>
+#include <string>
+#include <cmath>
 
 namespace ipb::router {
 
@@ -10,19 +13,218 @@ using namespace common;
 using namespace common::debug;
 
 // ============================================================================
-// ValueCondition Implementation
+// ValueCondition Implementation - COMPLETE with all operators
 // ============================================================================
 
+namespace {
+
+/**
+ * @brief Check if a Value::Type is numeric
+ */
+constexpr bool is_numeric_type(Value::Type t) noexcept {
+    switch (t) {
+        case Value::Type::INT8:
+        case Value::Type::INT16:
+        case Value::Type::INT32:
+        case Value::Type::INT64:
+        case Value::Type::UINT8:
+        case Value::Type::UINT16:
+        case Value::Type::UINT32:
+        case Value::Type::UINT64:
+        case Value::Type::FLOAT32:
+        case Value::Type::FLOAT64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/**
+ * @brief Convert a numeric Value to double
+ */
+double value_to_double(const Value& v) noexcept {
+    switch (v.type()) {
+        case Value::Type::INT8:    return static_cast<double>(v.get<int8_t>());
+        case Value::Type::INT16:   return static_cast<double>(v.get<int16_t>());
+        case Value::Type::INT32:   return static_cast<double>(v.get<int32_t>());
+        case Value::Type::INT64:   return static_cast<double>(v.get<int64_t>());
+        case Value::Type::UINT8:   return static_cast<double>(v.get<uint8_t>());
+        case Value::Type::UINT16:  return static_cast<double>(v.get<uint16_t>());
+        case Value::Type::UINT32:  return static_cast<double>(v.get<uint32_t>());
+        case Value::Type::UINT64:  return static_cast<double>(v.get<uint64_t>());
+        case Value::Type::FLOAT32: return static_cast<double>(v.get<float>());
+        case Value::Type::FLOAT64: return v.get<double>();
+        default: return 0.0;
+    }
+}
+
+/**
+ * @brief Convert a Value to string representation
+ */
+std::string value_to_string(const Value& v) noexcept {
+    switch (v.type()) {
+        case Value::Type::EMPTY:   return "";
+        case Value::Type::BOOL:    return v.get<bool>() ? "true" : "false";
+        case Value::Type::INT8:    return std::to_string(v.get<int8_t>());
+        case Value::Type::INT16:   return std::to_string(v.get<int16_t>());
+        case Value::Type::INT32:   return std::to_string(v.get<int32_t>());
+        case Value::Type::INT64:   return std::to_string(v.get<int64_t>());
+        case Value::Type::UINT8:   return std::to_string(v.get<uint8_t>());
+        case Value::Type::UINT16:  return std::to_string(v.get<uint16_t>());
+        case Value::Type::UINT32:  return std::to_string(v.get<uint32_t>());
+        case Value::Type::UINT64:  return std::to_string(v.get<uint64_t>());
+        case Value::Type::FLOAT32: return std::to_string(v.get<float>());
+        case Value::Type::FLOAT64: return std::to_string(v.get<double>());
+        case Value::Type::STRING:  return std::string(v.as_string_view());
+        case Value::Type::BINARY: {
+            auto bin = v.as_binary();
+            return std::string(reinterpret_cast<const char*>(bin.data()), bin.size());
+        }
+        default: return "";
+    }
+}
+
+/**
+ * @brief Compare two Values for ordering
+ * @return -1 if a < b, 0 if a == b, 1 if a > b
+ */
+int compare_values(const Value& a, const Value& b) noexcept {
+    // Handle type mismatches by comparing as doubles when possible
+    if (a.type() != b.type()) {
+        // Try numeric comparison
+        if (is_numeric_type(a.type()) && is_numeric_type(b.type())) {
+            double da = value_to_double(a);
+            double db = value_to_double(b);
+            if (std::abs(da - db) < 1e-9) return 0;
+            return da < db ? -1 : 1;
+        }
+        // Fall back to string comparison
+        auto sa = value_to_string(a);
+        auto sb = value_to_string(b);
+        if (sa == sb) return 0;
+        return sa < sb ? -1 : 1;
+    }
+
+    // Same type comparison
+    switch (a.type()) {
+        case Value::Type::BOOL:
+            if (a.get<bool>() == b.get<bool>()) return 0;
+            return a.get<bool>() ? 1 : -1;
+
+        case Value::Type::INT8:
+            if (a.get<int8_t>() == b.get<int8_t>()) return 0;
+            return a.get<int8_t>() < b.get<int8_t>() ? -1 : 1;
+
+        case Value::Type::INT16:
+            if (a.get<int16_t>() == b.get<int16_t>()) return 0;
+            return a.get<int16_t>() < b.get<int16_t>() ? -1 : 1;
+
+        case Value::Type::INT32:
+            if (a.get<int32_t>() == b.get<int32_t>()) return 0;
+            return a.get<int32_t>() < b.get<int32_t>() ? -1 : 1;
+
+        case Value::Type::INT64:
+            if (a.get<int64_t>() == b.get<int64_t>()) return 0;
+            return a.get<int64_t>() < b.get<int64_t>() ? -1 : 1;
+
+        case Value::Type::UINT8:
+            if (a.get<uint8_t>() == b.get<uint8_t>()) return 0;
+            return a.get<uint8_t>() < b.get<uint8_t>() ? -1 : 1;
+
+        case Value::Type::UINT16:
+            if (a.get<uint16_t>() == b.get<uint16_t>()) return 0;
+            return a.get<uint16_t>() < b.get<uint16_t>() ? -1 : 1;
+
+        case Value::Type::UINT32:
+            if (a.get<uint32_t>() == b.get<uint32_t>()) return 0;
+            return a.get<uint32_t>() < b.get<uint32_t>() ? -1 : 1;
+
+        case Value::Type::UINT64:
+            if (a.get<uint64_t>() == b.get<uint64_t>()) return 0;
+            return a.get<uint64_t>() < b.get<uint64_t>() ? -1 : 1;
+
+        case Value::Type::FLOAT32:
+            if (std::abs(a.get<float>() - b.get<float>()) < 1e-6f) return 0;
+            return a.get<float>() < b.get<float>() ? -1 : 1;
+
+        case Value::Type::FLOAT64:
+            if (std::abs(a.get<double>() - b.get<double>()) < 1e-9) return 0;
+            return a.get<double>() < b.get<double>() ? -1 : 1;
+
+        case Value::Type::STRING: {
+            auto sa = a.as_string_view();
+            auto sb = b.as_string_view();
+            if (sa == sb) return 0;
+            return sa < sb ? -1 : 1;
+        }
+
+        case Value::Type::BINARY: {
+            auto ba = a.as_binary();
+            auto bb = b.as_binary();
+            if (ba.size() != bb.size()) {
+                return ba.size() < bb.size() ? -1 : 1;
+            }
+            int cmp = std::memcmp(ba.data(), bb.data(), ba.size());
+            if (cmp == 0) return 0;
+            return cmp < 0 ? -1 : 1;
+        }
+
+        default:
+            return 0;
+    }
+}
+
+/**
+ * @brief Check if string a contains string b
+ */
+bool string_contains(const Value& haystack, const Value& needle) noexcept {
+    auto hs = value_to_string(haystack);
+    auto ns = value_to_string(needle);
+    return hs.find(ns) != std::string::npos;
+}
+
+} // anonymous namespace
+
 bool ValueCondition::evaluate(const Value& value) const {
-    // TODO: Implement actual value comparison based on operator
-    // This is a placeholder implementation
     switch (op) {
         case ValueOperator::EQUAL:
-            return value == reference_value;
+            return compare_values(value, reference_value) == 0;
+
         case ValueOperator::NOT_EQUAL:
-            return !(value == reference_value);
-        // Add other operators as needed
+            return compare_values(value, reference_value) != 0;
+
+        case ValueOperator::LESS_THAN:
+            return compare_values(value, reference_value) < 0;
+
+        case ValueOperator::LESS_EQUAL:
+            return compare_values(value, reference_value) <= 0;
+
+        case ValueOperator::GREATER_THAN:
+            return compare_values(value, reference_value) > 0;
+
+        case ValueOperator::GREATER_EQUAL:
+            return compare_values(value, reference_value) >= 0;
+
+        case ValueOperator::CONTAINS:
+            return string_contains(value, reference_value);
+
+        case ValueOperator::REGEX_MATCH: {
+            if (regex_pattern.empty()) {
+                return false;
+            }
+            // Use cached pattern matcher to avoid ReDoS
+            core::CachedPatternMatcher matcher(regex_pattern);
+            if (!matcher.is_valid()) {
+                IPB_LOG_WARN(category::ROUTER, "Invalid regex pattern in value condition: "
+                             << matcher.error());
+                return false;
+            }
+            return matcher.matches(value_to_string(value));
+        }
+
         default:
+            IPB_LOG_WARN(category::ROUTER, "Unknown ValueOperator: "
+                         << static_cast<int>(op));
             return false;
     }
 }
@@ -54,13 +256,19 @@ bool RoutingRule::is_valid() const noexcept {
             if (address_pattern.empty()) {
                 return false;
             }
-            // Validate regex pattern
-            try {
-                std::regex test_regex(address_pattern);
-                (void)test_regex;
-                return true;
-            } catch (...) {
-                return false;
+            // Validate regex pattern using cached validation (ReDoS protection)
+            {
+                auto validation = core::CompiledPatternCache::global_instance()
+                    .validate(address_pattern);
+                if (!validation.is_safe) {
+                    IPB_LOG_WARN(category::ROUTER, "Pattern validation failed for rule '"
+                                 << name << "': " << validation.reason);
+                    return false;
+                }
+                // Pre-compile to verify syntax
+                auto compile_result = core::CompiledPatternCache::global_instance()
+                    .precompile(address_pattern);
+                return compile_result.is_success();
             }
 
         case RuleType::QUALITY_BASED:
@@ -99,14 +307,19 @@ bool RoutingRule::matches(const DataPoint& data_point) const {
             return std::find(protocol_ids.begin(), protocol_ids.end(),
                            data_point.protocol_id()) != protocol_ids.end();
 
-        case RuleType::REGEX_PATTERN:
-            try {
-                std::regex pattern(address_pattern);
-                auto addr = data_point.address();
-                return std::regex_match(addr.begin(), addr.end(), pattern);
-            } catch (...) {
+        case RuleType::REGEX_PATTERN: {
+            // FIX: Use cached compiled pattern instead of compiling per-message
+            // This eliminates the ReDoS vulnerability (CVE-potential)
+            core::CachedPatternMatcher matcher(address_pattern);
+            if (!matcher.is_valid()) {
+                // Pattern should have been validated at rule creation time
+                // Log warning but don't crash
+                IPB_LOG_WARN(category::ROUTER, "Invalid pattern in rule '"
+                             << name << "': " << matcher.error());
                 return false;
             }
+            return matcher.matches(data_point.address());
+        }
 
         case RuleType::QUALITY_BASED:
             return std::find(quality_levels.begin(), quality_levels.end(),
