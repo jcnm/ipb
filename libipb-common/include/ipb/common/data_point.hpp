@@ -261,6 +261,38 @@ public:
     Type type() const noexcept { return type_; }
     size_t size() const noexcept { return size_; }
     bool empty() const noexcept { return type_ == Type::EMPTY; }
+
+    // Comparison operators
+    bool operator==(const Value& other) const noexcept {
+        if (type_ != other.type_) return false;
+        if (type_ == Type::EMPTY) return true;
+
+        switch (type_) {
+            case Type::BOOL: return get<bool>() == other.get<bool>();
+            case Type::INT8: return get<int8_t>() == other.get<int8_t>();
+            case Type::INT16: return get<int16_t>() == other.get<int16_t>();
+            case Type::INT32: return get<int32_t>() == other.get<int32_t>();
+            case Type::INT64: return get<int64_t>() == other.get<int64_t>();
+            case Type::UINT8: return get<uint8_t>() == other.get<uint8_t>();
+            case Type::UINT16: return get<uint16_t>() == other.get<uint16_t>();
+            case Type::UINT32: return get<uint32_t>() == other.get<uint32_t>();
+            case Type::UINT64: return get<uint64_t>() == other.get<uint64_t>();
+            case Type::FLOAT32: return get<float>() == other.get<float>();
+            case Type::FLOAT64: return get<double>() == other.get<double>();
+            case Type::STRING: return as_string_view() == other.as_string_view();
+            case Type::BINARY: {
+                auto a = as_binary();
+                auto b = other.as_binary();
+                return a.size() == b.size() &&
+                       std::memcmp(a.data(), b.data(), a.size()) == 0;
+            }
+            default: return false;
+        }
+    }
+
+    bool operator!=(const Value& other) const noexcept {
+        return !(*this == other);
+    }
     
     // Serialization support
     size_t serialized_size() const noexcept {

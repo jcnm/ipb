@@ -3,6 +3,7 @@
 #include "data_point.hpp"
 #include "dataset.hpp"
 #include "endpoint.hpp"
+#include "error.hpp"  // For Result<T> and ErrorCode
 #include <memory>
 #include <functional>
 #include <future>
@@ -13,100 +14,51 @@
 
 namespace ipb::common {
 
-/**
- * @brief Common error codes for Result type
- */
-enum class ResultErrorCode : uint32_t {
-    SUCCESS = 0,
-    INVALID_ARGUMENT,
-    TIMEOUT,
-    CONNECTION_FAILED,
-    PROTOCOL_ERROR,
-    BUFFER_OVERFLOW,
-    INSUFFICIENT_MEMORY,
-    PERMISSION_DENIED,
-    DEVICE_NOT_FOUND,
-    OPERATION_CANCELLED,
-    NOT_FOUND,
-    NOT_SUPPORTED,
-    CONFIG_ERROR,
-    IO_ERROR,
-    INTERNAL_ERROR
-};
+// ============================================================================
+// BACKWARD COMPATIBILITY ALIASES
+// ============================================================================
 
 /**
- * @brief Result type for operations with error handling (non-void specialization)
+ * @brief Legacy error code type alias
+ * @deprecated Use ErrorCode instead
+ *
+ * Mapping from legacy ResultErrorCode to modern ErrorCode:
+ * - SUCCESS           -> ErrorCode::SUCCESS
+ * - INVALID_ARGUMENT  -> ErrorCode::INVALID_ARGUMENT
+ * - TIMEOUT           -> ErrorCode::OPERATION_TIMEOUT
+ * - CONNECTION_FAILED -> ErrorCode::CONNECTION_FAILED
+ * - PROTOCOL_ERROR    -> ErrorCode::PROTOCOL_ERROR
+ * - BUFFER_OVERFLOW   -> ErrorCode::BUFFER_OVERFLOW
+ * - INSUFFICIENT_MEMORY -> ErrorCode::OUT_OF_MEMORY
+ * - PERMISSION_DENIED -> ErrorCode::PERMISSION_DENIED
+ * - DEVICE_NOT_FOUND  -> ErrorCode::DEVICE_NOT_FOUND
+ * - OPERATION_CANCELLED -> ErrorCode::OPERATION_CANCELLED
+ * - NOT_FOUND         -> ErrorCode::NOT_FOUND
+ * - NOT_SUPPORTED     -> ErrorCode::NOT_IMPLEMENTED
+ * - CONFIG_ERROR      -> ErrorCode::CONFIG_INVALID
+ * - IO_ERROR          -> ErrorCode::READ_ERROR or ErrorCode::WRITE_ERROR
+ * - INTERNAL_ERROR    -> ErrorCode::UNKNOWN_ERROR
  */
-template<typename T>
-class Result {
-public:
-    using ErrorCode = ResultErrorCode;
+using ResultErrorCode = ErrorCode;
 
-    // Success constructor with value
-    Result(T value) noexcept : value_(std::move(value)), error_code_(ErrorCode::SUCCESS) {}
-
-    // Error constructor
-    Result(ErrorCode error, std::string_view message = {}) noexcept
-        : error_code_(error) {
-        if (!message.empty()) {
-            error_message_ = std::string(message);
-        }
-    }
-
-    // Status checks
-    bool is_success() const noexcept { return error_code_ == ErrorCode::SUCCESS; }
-    bool is_error() const noexcept { return error_code_ != ErrorCode::SUCCESS; }
-
-    ErrorCode error_code() const noexcept { return error_code_; }
-    const std::string& error_message() const noexcept { return error_message_; }
-
-    // Value access
-    const T& value() const& noexcept { return value_; }
-    T& value() & noexcept { return value_; }
-    T&& value() && noexcept { return std::move(value_); }
-
-    // Conversion operators
-    explicit operator bool() const noexcept { return is_success(); }
-
-private:
-    T value_{};
-    ErrorCode error_code_;
-    std::string error_message_;
-};
-
-/**
- * @brief Result type specialization for void (no value)
- */
-template<>
-class Result<void> {
-public:
-    using ErrorCode = ResultErrorCode;
-
-    // Success constructor
-    Result() noexcept : error_code_(ErrorCode::SUCCESS) {}
-
-    // Error constructor
-    Result(ErrorCode error, std::string_view message = {}) noexcept
-        : error_code_(error) {
-        if (!message.empty()) {
-            error_message_ = std::string(message);
-        }
-    }
-
-    // Status checks
-    bool is_success() const noexcept { return error_code_ == ErrorCode::SUCCESS; }
-    bool is_error() const noexcept { return error_code_ != ErrorCode::SUCCESS; }
-
-    ErrorCode error_code() const noexcept { return error_code_; }
-    const std::string& error_message() const noexcept { return error_message_; }
-
-    // Conversion operators
-    explicit operator bool() const noexcept { return is_success(); }
-
-private:
-    ErrorCode error_code_;
-    std::string error_message_;
-};
+// Legacy error code values as inline constexpr for backward compatibility
+namespace legacy_error {
+    inline constexpr ErrorCode SUCCESS = ErrorCode::SUCCESS;
+    inline constexpr ErrorCode INVALID_ARGUMENT = ErrorCode::INVALID_ARGUMENT;
+    inline constexpr ErrorCode TIMEOUT = ErrorCode::OPERATION_TIMEOUT;
+    inline constexpr ErrorCode CONNECTION_FAILED = ErrorCode::CONNECTION_FAILED;
+    inline constexpr ErrorCode PROTOCOL_ERROR = ErrorCode::PROTOCOL_ERROR;
+    inline constexpr ErrorCode BUFFER_OVERFLOW = ErrorCode::BUFFER_OVERFLOW;
+    inline constexpr ErrorCode INSUFFICIENT_MEMORY = ErrorCode::OUT_OF_MEMORY;
+    inline constexpr ErrorCode PERMISSION_DENIED = ErrorCode::PERMISSION_DENIED;
+    inline constexpr ErrorCode DEVICE_NOT_FOUND = ErrorCode::DEVICE_NOT_FOUND;
+    inline constexpr ErrorCode OPERATION_CANCELLED = ErrorCode::OPERATION_CANCELLED;
+    inline constexpr ErrorCode NOT_FOUND = ErrorCode::NOT_FOUND;
+    inline constexpr ErrorCode NOT_SUPPORTED = ErrorCode::NOT_IMPLEMENTED;
+    inline constexpr ErrorCode CONFIG_ERROR = ErrorCode::CONFIG_INVALID;
+    inline constexpr ErrorCode IO_ERROR = ErrorCode::WRITE_ERROR;
+    inline constexpr ErrorCode INTERNAL_ERROR = ErrorCode::UNKNOWN_ERROR;
+} // namespace legacy_error
 
 /**
  * @brief Statistics for performance monitoring
@@ -147,6 +99,49 @@ struct Statistics {
         start_time = Timestamp::now();
         last_update_time = start_time;
     }
+};
+
+/**
+ * @brief Metrics for sink monitoring
+ */
+struct SinkMetrics {
+    std::string sink_id;
+    uint64_t messages_sent = 0;
+    uint64_t messages_failed = 0;
+    uint64_t bytes_sent = 0;
+    bool is_connected = false;
+    bool is_healthy = true;
+    std::chrono::nanoseconds avg_processing_time{0};
+};
+
+/**
+ * @brief Base interface for IPB sinks (simplified version for inheritance)
+ *
+ * This interface provides the basic contract that sink implementations
+ * should follow. Unlike IIPBSinkBase which is designed for type-erasure,
+ * this interface is designed for direct inheritance.
+ */
+class ISink {
+public:
+    virtual ~ISink() = default;
+
+    // Lifecycle management
+    virtual Result<void> initialize(const std::string& config_path) = 0;
+    virtual Result<void> start() = 0;
+    virtual Result<void> stop() = 0;
+    virtual Result<void> shutdown() = 0;
+
+    // Data sending
+    virtual Result<void> send_data_point(const DataPoint& data_point) = 0;
+    virtual Result<void> send_data_set(const DataSet& data_set) = 0;
+
+    // Status
+    virtual bool is_connected() const = 0;
+    virtual bool is_healthy() const = 0;
+
+    // Metrics and info
+    virtual SinkMetrics get_metrics() const = 0;
+    virtual std::string get_sink_info() const = 0;
 };
 
 /**
@@ -207,7 +202,7 @@ public:
     
     // Subscription interface for real-time data
     using DataCallback = std::function<void(DataSet)>;
-    using ErrorCallback = std::function<void(Result<void>::ErrorCode, std::string_view)>;
+    using ErrorCallback = std::function<void(ErrorCode, std::string_view)>;
     
     virtual Result<void> subscribe(DataCallback data_cb, ErrorCallback error_cb) = 0;
     virtual Result<void> unsubscribe() = 0;

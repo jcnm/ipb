@@ -102,7 +102,8 @@ bool RoutingRule::matches(const DataPoint& data_point) const {
         case RuleType::REGEX_PATTERN:
             try {
                 std::regex pattern(address_pattern);
-                return std::regex_match(data_point.address(), pattern);
+                auto addr = data_point.address();
+                return std::regex_match(addr.begin(), addr.end(), pattern);
             } catch (...) {
                 return false;
             }
@@ -259,8 +260,30 @@ Router::~Router() {
     stop();
 }
 
-Router::Router(Router&&) noexcept = default;
-Router& Router::operator=(Router&&) noexcept = default;
+Router::Router(Router&& other) noexcept
+    : config_(std::move(other.config_))
+    , message_bus_(std::move(other.message_bus_))
+    , rule_engine_(std::move(other.rule_engine_))
+    , scheduler_(std::move(other.scheduler_))
+    , sink_registry_(std::move(other.sink_registry_))
+    , running_(other.running_.load())
+    , routing_subscription_(std::move(other.routing_subscription_)) {
+    other.running_.store(false);
+}
+
+Router& Router::operator=(Router&& other) noexcept {
+    if (this != &other) {
+        config_ = std::move(other.config_);
+        message_bus_ = std::move(other.message_bus_);
+        rule_engine_ = std::move(other.rule_engine_);
+        scheduler_ = std::move(other.scheduler_);
+        sink_registry_ = std::move(other.sink_registry_);
+        running_.store(other.running_.load());
+        routing_subscription_ = std::move(other.routing_subscription_);
+        other.running_.store(false);
+    }
+    return *this;
+}
 
 // ============================================================================
 // IIPBComponent Interface

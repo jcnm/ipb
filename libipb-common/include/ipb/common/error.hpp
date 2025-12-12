@@ -522,6 +522,39 @@ public:
     Error(ErrorCode code, std::string message, SourceLocation loc) noexcept
         : code_(code), message_(std::move(message)), location_(loc) {}
 
+    // Copy constructor (deep copy cause chain)
+    Error(const Error& other)
+        : code_(other.code_)
+        , message_(other.message_)
+        , location_(other.location_)
+        , context_(other.context_) {
+        if (other.cause_.has_value() && *other.cause_) {
+            cause_ = std::make_optional(std::make_unique<Error>(**other.cause_));
+        }
+    }
+
+    // Move constructor
+    Error(Error&& other) noexcept = default;
+
+    // Copy assignment (deep copy cause chain)
+    Error& operator=(const Error& other) {
+        if (this != &other) {
+            code_ = other.code_;
+            message_ = other.message_;
+            location_ = other.location_;
+            context_ = other.context_;
+            if (other.cause_.has_value() && *other.cause_) {
+                cause_ = std::make_optional(std::make_unique<Error>(**other.cause_));
+            } else {
+                cause_.reset();
+            }
+        }
+        return *this;
+    }
+
+    // Move assignment
+    Error& operator=(Error&& other) noexcept = default;
+
     // Accessors
     constexpr ErrorCode code() const noexcept { return code_; }
     constexpr ErrorCategory category() const noexcept { return get_category(code_); }
@@ -620,7 +653,9 @@ class Result {
 public:
     // Success with value
     Result(T value) noexcept(std::is_nothrow_move_constructible_v<T>)
-        : value_(std::move(value)), has_value_(true) {}
+        : has_value_(true) {
+        new (&storage_) T(std::move(value));
+    }
 
     // Error from code
     Result(ErrorCode code) noexcept : error_(code), has_value_(false) {}
@@ -633,23 +668,69 @@ public:
     // Error from Error object
     Result(Error error) noexcept : error_(std::move(error)), has_value_(false) {}
 
+    // Copy constructor
+    Result(const Result& other) : error_(other.error_), has_value_(other.has_value_) {
+        if (has_value_) {
+            new (&storage_) T(other.value_ref());
+        }
+    }
+
+    // Move constructor
+    Result(Result&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
+        : error_(std::move(other.error_)), has_value_(other.has_value_) {
+        if (has_value_) {
+            new (&storage_) T(std::move(other.value_ref()));
+        }
+    }
+
+    // Copy assignment
+    Result& operator=(const Result& other) {
+        if (this != &other) {
+            destroy_value();
+            error_ = other.error_;
+            has_value_ = other.has_value_;
+            if (has_value_) {
+                new (&storage_) T(other.value_ref());
+            }
+        }
+        return *this;
+    }
+
+    // Move assignment
+    Result& operator=(Result&& other) noexcept(std::is_nothrow_move_constructible_v<T>) {
+        if (this != &other) {
+            destroy_value();
+            error_ = std::move(other.error_);
+            has_value_ = other.has_value_;
+            if (has_value_) {
+                new (&storage_) T(std::move(other.value_ref()));
+            }
+        }
+        return *this;
+    }
+
+    // Destructor
+    ~Result() {
+        destroy_value();
+    }
+
     // Status
     bool is_success() const noexcept { return has_value_; }
     bool is_error() const noexcept { return !has_value_; }
     explicit operator bool() const noexcept { return is_success(); }
 
     // Value access (only call if is_success())
-    T& value() & noexcept { return value_; }
-    const T& value() const& noexcept { return value_; }
-    T&& value() && noexcept { return std::move(value_); }
+    T& value() & noexcept { return value_ref(); }
+    const T& value() const& noexcept { return value_ref(); }
+    T&& value() && noexcept { return std::move(value_ref()); }
 
     // Value access with default
     T value_or(T default_value) const& noexcept(std::is_nothrow_copy_constructible_v<T>) {
-        return has_value_ ? value_ : std::move(default_value);
+        return has_value_ ? value_ref() : std::move(default_value);
     }
 
     T value_or(T default_value) && noexcept(std::is_nothrow_move_constructible_v<T>) {
-        return has_value_ ? std::move(value_) : std::move(default_value);
+        return has_value_ ? std::move(value_ref()) : std::move(default_value);
     }
 
     // Error access
@@ -672,7 +753,7 @@ public:
     auto map(F&& func) const& -> Result<decltype(func(std::declval<const T&>()))> {
         using ReturnType = Result<decltype(func(std::declval<const T&>()))>;
         if (has_value_) {
-            return ReturnType(func(value_));
+            return ReturnType(func(value_ref()));
         }
         return ReturnType(error_);
     }
@@ -681,18 +762,33 @@ public:
     auto map(F&& func) && -> Result<decltype(func(std::declval<T&&>()))> {
         using ReturnType = Result<decltype(func(std::declval<T&&>()))>;
         if (has_value_) {
-            return ReturnType(func(std::move(value_)));
+            return ReturnType(func(std::move(value_ref())));
         }
         return ReturnType(error_);
     }
 
 private:
-    union {
-        T value_;
-        char dummy_;
-    };
+    // Aligned storage for T
+    alignas(T) unsigned char storage_[sizeof(T)];
     Error error_;
     bool has_value_;
+
+    // Helper to access value
+    T& value_ref() noexcept {
+        return *reinterpret_cast<T*>(&storage_);
+    }
+
+    const T& value_ref() const noexcept {
+        return *reinterpret_cast<const T*>(&storage_);
+    }
+
+    // Helper to destroy value if present
+    void destroy_value() noexcept {
+        if (has_value_) {
+            value_ref().~T();
+            has_value_ = false;
+        }
+    }
 };
 
 // ============================================================================

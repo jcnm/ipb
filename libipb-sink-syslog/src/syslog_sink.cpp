@@ -44,18 +44,17 @@ common::Result<void> SyslogSink::initialize(const std::string& config_path) {
             );
         }
         
-        return common::Result<void>::success();
-        
+        return common::Result<void>();
+
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
-            "Failed to initialize syslog sink: " + std::string(e.what())
-        );
+        return common::Result<void>(common::ErrorCode::CONFIG_INVALID,
+            "Failed to initialize syslog sink: " + std::string(e.what()));
     }
 }
 
 common::Result<void> SyslogSink::start() {
     if (running_.load()) {
-        return common::Result<void>::failure("Syslog sink is already running");
+        return common::Result<void>(common::ErrorCode::ALREADY_EXISTS, "Syslog sink is already running");
     }
     
     try {
@@ -68,8 +67,8 @@ common::Result<void> SyslogSink::start() {
         if (config_.enable_remote_syslog) {
             auto result = establish_remote_connection();
             if (!result.is_success()) {
-                syslog(LOG_WARNING, "Failed to establish remote syslog connection: %s", 
-                       result.get_error().c_str());
+                ::syslog(LOG_WARNING, "Failed to establish remote syslog connection: %s",
+                       result.message().c_str());
                 activate_fallback();
             }
         }
@@ -88,114 +87,111 @@ common::Result<void> SyslogSink::start() {
         recovery_thread_ = std::thread(&SyslogSink::recovery_loop, this);
         
         statistics_.reset();
-        
-        return common::Result<void>::success();
-        
+
+        return common::Result<void>();
+
     } catch (const std::exception& e) {
         running_.store(false);
-        return common::Result<void>::failure(
-            "Failed to start syslog sink: " + std::string(e.what())
-        );
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
+            "Failed to start syslog sink: " + std::string(e.what()));
     }
 }
 
 common::Result<void> SyslogSink::stop() {
     if (!running_.load()) {
-        return common::Result<void>::success();
+        return common::Result<void>();
     }
-    
+
     try {
         running_.store(false);
-        
+
         // Wake up worker thread
         if (config_.enable_async_logging) {
             queue_condition_.notify_all();
-            
+
             if (worker_thread_.joinable()) {
                 worker_thread_.join();
             }
         }
-        
+
         // Stop other threads
         if (statistics_thread_.joinable()) {
             statistics_thread_.join();
         }
-        
+
         if (recovery_thread_.joinable()) {
             recovery_thread_.join();
         }
-        
+
         // Close remote connection
         close_remote_connection();
-        
-        return common::Result<void>::success();
-        
+
+        return common::Result<void>();
+
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
-            "Failed to stop syslog sink: " + std::string(e.what())
-        );
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
+            "Failed to stop syslog sink: " + std::string(e.what()));
     }
 }
 
 common::Result<void> SyslogSink::shutdown() {
     shutdown_requested_.store(true);
-    
+
     auto stop_result = stop();
     if (!stop_result.is_success()) {
         return stop_result;
     }
-    
+
     try {
         // Close local syslog
         closelog();
-        
+
         // Close fallback file
         if (fallback_file_stream_ && fallback_file_stream_->is_open()) {
             fallback_file_stream_->close();
         }
-        
-        return common::Result<void>::success();
-        
+
+        return common::Result<void>();
+
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
-            "Failed to shutdown syslog sink: " + std::string(e.what())
-        );
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
+            "Failed to shutdown syslog sink: " + std::string(e.what()));
     }
 }
 
 common::Result<void> SyslogSink::send_data_point(const common::DataPoint& data_point) {
     if (!running_.load()) {
-        return common::Result<void>::failure("Syslog sink is not running");
+        return common::Result<void>(common::ErrorCode::INVALID_STATE, "Syslog sink is not running");
     }
-    
+
     auto start_time = std::chrono::high_resolution_clock::now();
-    
+
     try {
         // Apply filtering
         if (should_filter_message(data_point)) {
             statistics_.messages_filtered.fetch_add(1);
-            return common::Result<void>::success();
+            return common::Result<void>();
         }
-        
+
         if (config_.enable_async_logging) {
             // Add to queue for async processing
             {
                 std::lock_guard<std::mutex> lock(queue_mutex_);
-                
+
                 if (message_queue_.size() >= config_.queue_size) {
                     statistics_.messages_dropped.fetch_add(1);
-                    return common::Result<void>::failure("Message queue is full");
+                    return common::Result<void>(common::ErrorCode::QUEUE_FULL, "Message queue is full");
                 }
-                
+
                 message_queue_.push(data_point);
             }
-            
+
             queue_condition_.notify_one();
         } else {
             // Process synchronously
             auto priority = determine_priority(data_point);
             std::string formatted_message = format_message(data_point, priority);
-            
+
             common::Result<void> result;
             if (config_.enable_remote_syslog && !fallback_active_.load()) {
                 result = send_to_remote_syslog(formatted_message);
@@ -206,51 +202,49 @@ common::Result<void> SyslogSink::send_data_point(const common::DataPoint& data_p
             } else {
                 result = send_to_local_syslog(formatted_message, priority);
             }
-            
+
             if (!result.is_success()) {
                 statistics_.messages_failed.fetch_add(1);
                 return result;
             }
         }
-        
+
         statistics_.messages_processed.fetch_add(1);
-        
+
         auto end_time = std::chrono::high_resolution_clock::now();
         auto processing_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
             end_time - start_time
         );
         statistics_.update_processing_time(processing_time);
-        
-        return common::Result<void>::success();
-        
+
+        return common::Result<void>();
+
     } catch (const std::exception& e) {
         statistics_.messages_failed.fetch_add(1);
-        return common::Result<void>::failure(
-            "Failed to send data point: " + std::string(e.what())
-        );
+        return common::Result<void>(common::ErrorCode::WRITE_ERROR,
+            "Failed to send data point: " + std::string(e.what()));
     }
 }
 
 common::Result<void> SyslogSink::send_data_set(const common::DataSet& data_set) {
     if (!running_.load()) {
-        return common::Result<void>::failure("Syslog sink is not running");
+        return common::Result<void>(common::ErrorCode::INVALID_STATE, "Syslog sink is not running");
     }
-    
+
     try {
         // Process each data point in the set
-        for (const auto& data_point : data_set.get_data_points()) {
+        for (const auto& data_point : data_set) {
             auto result = send_data_point(data_point);
             if (!result.is_success()) {
                 return result;
             }
         }
-        
-        return common::Result<void>::success();
-        
+
+        return common::Result<void>();
+
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
-            "Failed to send data set: " + std::string(e.what())
-        );
+        return common::Result<void>(common::ErrorCode::WRITE_ERROR,
+            "Failed to send data set: " + std::string(e.what()));
     }
 }
 
@@ -361,7 +355,7 @@ void SyslogSink::recovery_loop() {
         if (running_.load() && fallback_active_.load()) {
             auto result = recover_from_fallback();
             if (result.is_success()) {
-                syslog(LOG_INFO, "Successfully recovered from fallback mode");
+                ::syslog(LOG_INFO, "Successfully recovered from fallback mode");
             }
         }
     }
@@ -375,10 +369,11 @@ bool SyslogSink::should_filter_message(const common::DataPoint& data_point) cons
     // Check address filters
     if (!config_.address_filters.empty()) {
         bool address_match = false;
+        const auto address = data_point.get_address();
         for (const auto& pattern : config_.address_filters) {
             try {
                 std::regex regex(pattern);
-                if (std::regex_match(data_point.get_address(), regex)) {
+                if (std::regex_match(address.begin(), address.end(), regex)) {
                     address_match = true;
                     break;
                 }
@@ -424,7 +419,7 @@ SyslogPriority SyslogSink::determine_priority(const common::DataPoint& data_poin
     }
     
     // Check address-based mapping
-    auto addr_it = mapping.address_priority_map.find(data_point.get_address());
+    auto addr_it = mapping.address_priority_map.find(std::string(data_point.get_address()));
     if (addr_it != mapping.address_priority_map.end()) {
         return addr_it->second;
     }
@@ -638,9 +633,8 @@ common::Result<void> SyslogSink::send_to_local_syslog(const std::string& message
         return common::Result<void>();  // Success
     } catch (const std::exception& e) {
         return common::Result<void>(
-            common::ResultErrorCode::IO_ERROR,
-            "Failed to send to local syslog: " + std::string(e.what())
-        );
+            common::ErrorCode::WRITE_ERROR,
+            "Failed to send to local syslog: " + std::string(e.what()));
     }
 }
 
@@ -657,7 +651,7 @@ common::Result<void> SyslogSink::establish_remote_connection() {
     int sock_type = (config_.transport == SyslogTransport::UDP) ? SOCK_DGRAM : SOCK_STREAM;
     remote_socket_ = socket(AF_INET, sock_type, 0);
     if (remote_socket_ == -1) {
-        return common::Result<void>(common::ResultErrorCode::CONNECTION_FAILED, "Failed to create socket");
+        return common::Result<void>(common::ErrorCode::CONNECTION_FAILED, "Failed to create socket");
     }
 
     // Resolve hostname
@@ -665,7 +659,7 @@ common::Result<void> SyslogSink::establish_remote_connection() {
     if (!host) {
         close(remote_socket_);
         remote_socket_ = -1;
-        return common::Result<void>(common::ResultErrorCode::NOT_FOUND, "Failed to resolve hostname: " + config_.remote_host);
+        return common::Result<void>(common::ErrorCode::DNS_RESOLUTION_FAILED, "Failed to resolve hostname: " + config_.remote_host);
     }
 
     // Setup address
@@ -680,7 +674,7 @@ common::Result<void> SyslogSink::establish_remote_connection() {
         if (connect(remote_socket_, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
             close(remote_socket_);
             remote_socket_ = -1;
-            return common::Result<void>(common::ResultErrorCode::CONNECTION_FAILED, "Failed to connect to remote syslog server");
+            return common::Result<void>(common::ErrorCode::CONNECTION_FAILED, "Failed to connect to remote syslog server");
         }
     }
 

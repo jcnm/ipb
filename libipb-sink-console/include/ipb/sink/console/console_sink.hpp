@@ -186,7 +186,10 @@ struct ConsoleSinkStatistics {
      */
     std::chrono::nanoseconds get_average_processing_time() const {
         auto processed = messages_processed.load();
-        return processed > 0 ? total_processing_time / processed : std::chrono::nanoseconds{0};
+        if (processed > 0) {
+            return std::chrono::nanoseconds{total_processing_time.count() / static_cast<int64_t>(processed)};
+        }
+        return std::chrono::nanoseconds{0};
     }
     
     /**
@@ -220,7 +223,7 @@ struct ConsoleSinkStatistics {
 /**
  * @brief High-performance console sink for debugging and monitoring
  */
-class ConsoleSink : public common::IIPBSink {
+class ConsoleSink : public common::ISink {
 public:
     /**
      * @brief Constructor with configuration
@@ -335,7 +338,7 @@ private:
     void process_message_batch(const std::vector<common::DataPoint>& messages);
     
     void compile_address_filters();
-    void print_statistics() const;
+    void print_statistics();
 };
 
 /**
