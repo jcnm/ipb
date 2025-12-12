@@ -180,6 +180,111 @@ private:
  * This is much more efficient than checking each pattern individually
  * (O(n*m)) when there are many static routing rules.
  */
+/**
+ * @brief Fast composite pattern matcher for enterprise-grade performance
+ *
+ * Combines multiple matching strategies for optimal performance:
+ * - TrieMatcher for static/prefix patterns (O(m) lookup)
+ * - CompiledPatternCache for regex patterns (cached compilation)
+ * - Automatic strategy selection based on pattern analysis
+ *
+ * Usage:
+ * @code
+ * FastPatternMatcher matcher;
+ *
+ * // Add patterns with their associated data
+ * matcher.add_pattern("sensors/temp1", 1, PatternType::EXACT);
+ * matcher.add_pattern("sensors/*", 2, PatternType::PREFIX);
+ * matcher.add_pattern("alarms/.*", 3, PatternType::REGEX);
+ *
+ * // Fast lookup
+ * auto matches = matcher.find_all_matches("sensors/temp1");
+ * // matches = [1, 2]  (exact match + prefix match)
+ * @endcode
+ *
+ * Thread-safe for concurrent reads after construction.
+ */
+class FastPatternMatcher {
+public:
+    /// Pattern types for optimization hints
+    enum class PatternType {
+        AUTO,    ///< Auto-detect best strategy
+        EXACT,   ///< Exact string match (uses Trie)
+        PREFIX,  ///< Prefix match (uses Trie)
+        WILDCARD,///< Simple wildcard (* and ?)
+        REGEX    ///< Full regex (uses CompiledPatternCache)
+    };
+
+    FastPatternMatcher();
+    ~FastPatternMatcher();
+
+    // Non-copyable but movable
+    FastPatternMatcher(const FastPatternMatcher&) = delete;
+    FastPatternMatcher& operator=(const FastPatternMatcher&) = delete;
+    FastPatternMatcher(FastPatternMatcher&&) noexcept;
+    FastPatternMatcher& operator=(FastPatternMatcher&&) noexcept;
+
+    /**
+     * @brief Add a pattern with associated rule ID
+     * @param pattern The pattern string
+     * @param rule_id Associated rule identifier
+     * @param type Pattern type hint (AUTO for auto-detection)
+     * @return true if pattern was added successfully
+     */
+    bool add_pattern(std::string_view pattern, uint32_t rule_id,
+                    PatternType type = PatternType::AUTO);
+
+    /**
+     * @brief Remove a pattern
+     * @param pattern The pattern to remove
+     * @return true if pattern was found and removed
+     */
+    bool remove_pattern(std::string_view pattern);
+
+    /**
+     * @brief Find all matching rule IDs for input
+     * @param input The input string to match
+     * @return Vector of matching rule IDs
+     *
+     * Performance: O(m) for exact/prefix, O(r*m) for r regex patterns
+     */
+    std::vector<uint32_t> find_all_matches(std::string_view input) const;
+
+    /**
+     * @brief Check if any pattern matches
+     * @param input The input string to check
+     * @return true if any match found
+     */
+    bool has_match(std::string_view input) const noexcept;
+
+    /**
+     * @brief Clear all patterns
+     */
+    void clear();
+
+    /**
+     * @brief Get statistics
+     */
+    struct Stats {
+        size_t exact_patterns = 0;
+        size_t prefix_patterns = 0;
+        size_t wildcard_patterns = 0;
+        size_t regex_patterns = 0;
+        size_t trie_nodes = 0;
+        size_t memory_bytes = 0;
+    };
+    Stats stats() const noexcept;
+
+    /**
+     * @brief Detect best pattern type
+     */
+    static PatternType detect_type(std::string_view pattern) noexcept;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
 class TrieMatcher {
 public:
     TrieMatcher();

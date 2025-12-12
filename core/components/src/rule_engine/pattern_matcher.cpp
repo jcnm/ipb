@@ -200,6 +200,296 @@ bool RegexMatcher::is_valid_regex(std::string_view pattern) noexcept {
 }
 
 // ============================================================================
+// FastPatternMatcher Implementation - Enterprise-grade composite matcher
+// ============================================================================
+
+class FastPatternMatcher::Impl {
+public:
+    Impl() = default;
+
+    bool add_pattern(std::string_view pattern, uint32_t rule_id,
+                    PatternType type) {
+        if (type == PatternType::AUTO) {
+            type = FastPatternMatcher::detect_type(pattern);
+        }
+
+        std::string pattern_str(pattern);
+
+        switch (type) {
+            case PatternType::EXACT:
+                trie_.add_exact(pattern, rule_id);
+                exact_count_++;
+                pattern_types_[pattern_str] = type;
+                return true;
+
+            case PatternType::PREFIX: {
+                // Remove trailing * or / for prefix matching
+                std::string_view prefix = pattern;
+                if (!prefix.empty() && prefix.back() == '*') {
+                    prefix = prefix.substr(0, prefix.size() - 1);
+                }
+                trie_.add_prefix(prefix, rule_id);
+                prefix_count_++;
+                pattern_types_[pattern_str] = type;
+                return true;
+            }
+
+            case PatternType::WILDCARD: {
+                wildcard_patterns_.emplace_back(
+                    std::make_unique<WildcardMatcher>(pattern_str),
+                    rule_id
+                );
+                wildcard_count_++;
+                pattern_types_[pattern_str] = type;
+                return true;
+            }
+
+            case PatternType::REGEX: {
+                // Validate and pre-compile via cache
+                auto result = CompiledPatternCache::global_instance()
+                    .get_or_compile(pattern);
+                if (!result) {
+                    return false;  // Invalid pattern
+                }
+                regex_patterns_.emplace_back(pattern_str, rule_id);
+                regex_count_++;
+                pattern_types_[pattern_str] = type;
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    bool remove_pattern(std::string_view pattern) {
+        std::string pattern_str(pattern);
+        auto it = pattern_types_.find(pattern_str);
+        if (it == pattern_types_.end()) {
+            return false;
+        }
+
+        PatternType type = it->second;
+        pattern_types_.erase(it);
+
+        switch (type) {
+            case PatternType::EXACT:
+                trie_.remove(pattern);
+                exact_count_--;
+                return true;
+
+            case PatternType::PREFIX: {
+                std::string_view prefix = pattern;
+                if (!prefix.empty() && prefix.back() == '*') {
+                    prefix = prefix.substr(0, prefix.size() - 1);
+                }
+                trie_.remove(prefix);
+                prefix_count_--;
+                return true;
+            }
+
+            case PatternType::WILDCARD: {
+                auto wit = std::find_if(wildcard_patterns_.begin(), wildcard_patterns_.end(),
+                    [&pattern_str](const auto& p) { return p.first->pattern() == pattern_str; });
+                if (wit != wildcard_patterns_.end()) {
+                    wildcard_patterns_.erase(wit);
+                    wildcard_count_--;
+                }
+                return true;
+            }
+
+            case PatternType::REGEX: {
+                auto rit = std::find_if(regex_patterns_.begin(), regex_patterns_.end(),
+                    [&pattern_str](const auto& p) { return p.first == pattern_str; });
+                if (rit != regex_patterns_.end()) {
+                    regex_patterns_.erase(rit);
+                    regex_count_--;
+                }
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    std::vector<uint32_t> find_all_matches(std::string_view input) const {
+        std::vector<uint32_t> results;
+
+        // 1. Fast Trie lookup for exact/prefix (O(m))
+        auto trie_matches = trie_.find_matches(input);
+        results.insert(results.end(), trie_matches.begin(), trie_matches.end());
+
+        // 2. Wildcard patterns (O(w) where w = wildcard pattern count)
+        for (const auto& [matcher, rule_id] : wildcard_patterns_) {
+            if (matcher->matches(input)) {
+                results.push_back(rule_id);
+            }
+        }
+
+        // 3. Regex patterns (O(r) where r = regex pattern count)
+        for (const auto& [pattern, rule_id] : regex_patterns_) {
+            CachedPatternMatcher matcher(pattern);
+            if (matcher.is_valid() && matcher.matches(input)) {
+                results.push_back(rule_id);
+            }
+        }
+
+        return results;
+    }
+
+    bool has_match(std::string_view input) const noexcept {
+        // Fast path: check trie first
+        if (trie_.matches(input)) {
+            return true;
+        }
+
+        // Check wildcards
+        for (const auto& [matcher, rule_id] : wildcard_patterns_) {
+            if (matcher->matches(input)) {
+                return true;
+            }
+        }
+
+        // Check regex
+        for (const auto& [pattern, rule_id] : regex_patterns_) {
+            CachedPatternMatcher matcher(pattern);
+            if (matcher.is_valid() && matcher.matches(input)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void clear() {
+        trie_.clear();
+        wildcard_patterns_.clear();
+        regex_patterns_.clear();
+        pattern_types_.clear();
+        exact_count_ = 0;
+        prefix_count_ = 0;
+        wildcard_count_ = 0;
+        regex_count_ = 0;
+    }
+
+    FastPatternMatcher::Stats stats() const noexcept {
+        FastPatternMatcher::Stats s;
+        s.exact_patterns = exact_count_;
+        s.prefix_patterns = prefix_count_;
+        s.wildcard_patterns = wildcard_count_;
+        s.regex_patterns = regex_count_;
+
+        auto trie_stats = trie_.stats();
+        s.trie_nodes = trie_stats.node_count;
+        s.memory_bytes = trie_stats.memory_bytes;
+
+        // Add wildcard and regex memory
+        s.memory_bytes += wildcard_patterns_.size() * 64;
+        s.memory_bytes += regex_patterns_.size() * 32;
+
+        return s;
+    }
+
+private:
+    TrieMatcher trie_;
+    std::vector<std::pair<std::unique_ptr<WildcardMatcher>, uint32_t>> wildcard_patterns_;
+    std::vector<std::pair<std::string, uint32_t>> regex_patterns_;
+    std::unordered_map<std::string, PatternType> pattern_types_;
+
+    size_t exact_count_ = 0;
+    size_t prefix_count_ = 0;
+    size_t wildcard_count_ = 0;
+    size_t regex_count_ = 0;
+};
+
+FastPatternMatcher::FastPatternMatcher() : impl_(std::make_unique<Impl>()) {}
+FastPatternMatcher::~FastPatternMatcher() = default;
+FastPatternMatcher::FastPatternMatcher(FastPatternMatcher&&) noexcept = default;
+FastPatternMatcher& FastPatternMatcher::operator=(FastPatternMatcher&&) noexcept = default;
+
+bool FastPatternMatcher::add_pattern(std::string_view pattern, uint32_t rule_id,
+                                     PatternType type) {
+    return impl_->add_pattern(pattern, rule_id, type);
+}
+
+bool FastPatternMatcher::remove_pattern(std::string_view pattern) {
+    return impl_->remove_pattern(pattern);
+}
+
+std::vector<uint32_t> FastPatternMatcher::find_all_matches(std::string_view input) const {
+    return impl_->find_all_matches(input);
+}
+
+bool FastPatternMatcher::has_match(std::string_view input) const noexcept {
+    return impl_->has_match(input);
+}
+
+void FastPatternMatcher::clear() {
+    impl_->clear();
+}
+
+FastPatternMatcher::Stats FastPatternMatcher::stats() const noexcept {
+    return impl_->stats();
+}
+
+FastPatternMatcher::PatternType FastPatternMatcher::detect_type(std::string_view pattern) noexcept {
+    if (pattern.empty()) {
+        return PatternType::EXACT;
+    }
+
+    bool has_star = false;
+    bool has_question = false;
+    bool has_regex_chars = false;
+    bool star_at_end_only = false;
+
+    for (size_t i = 0; i < pattern.size(); ++i) {
+        char c = pattern[i];
+        switch (c) {
+            case '*':
+                has_star = true;
+                star_at_end_only = (i == pattern.size() - 1);
+                break;
+            case '?':
+                has_question = true;
+                break;
+            case '.':
+            case '+':
+            case '^':
+            case '$':
+            case '[':
+            case ']':
+            case '(':
+            case ')':
+            case '{':
+            case '}':
+            case '|':
+            case '\\':
+                has_regex_chars = true;
+                break;
+        }
+    }
+
+    // No special characters - exact match
+    if (!has_star && !has_question && !has_regex_chars) {
+        return PatternType::EXACT;
+    }
+
+    // Simple prefix pattern: "prefix*" with no other special chars
+    if (has_star && star_at_end_only && !has_question && !has_regex_chars) {
+        return PatternType::PREFIX;
+    }
+
+    // Has regex characters - full regex
+    if (has_regex_chars) {
+        return PatternType::REGEX;
+    }
+
+    // Wildcards only
+    return PatternType::WILDCARD;
+}
+
+// ============================================================================
 // TrieMatcher Implementation - O(m) lookup for static/prefix patterns
 // ============================================================================
 
