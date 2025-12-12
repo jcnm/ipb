@@ -173,6 +173,10 @@ private:
                             const uint8_t* payload, size_t payload_len,
                             uint8_t qos, bool retained);
     void on_ack_received(uint16_t packet_id, bool success);
+
+#ifdef IPB_HAS_SECURITY
+    bool setup_tls(const ConnectionConfig& config);
+#endif
 };
 
 } // namespace ipb::transport::mqtt

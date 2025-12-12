@@ -149,6 +149,17 @@ else()
     endif()
 endif()
 
+# Link libipb-security if available (for TLS support in coreMQTT backend)
+option(IPB_MQTT_USE_SECURITY "Use libipb-security for TLS in coreMQTT backend" ON)
+if(IPB_MQTT_USE_SECURITY AND TARGET ipb-security)
+    target_link_libraries(ipb-transport-mqtt PRIVATE ipb-security)
+    target_include_directories(ipb-transport-mqtt PRIVATE
+        ${CMAKE_SOURCE_DIR}/libipb-security/include
+    )
+    target_compile_definitions(ipb-transport-mqtt PRIVATE IPB_HAS_SECURITY=1)
+    message(STATUS "MQTT transport: libipb-security integration ENABLED")
+endif()
+
 # Compile definitions
 target_compile_definitions(ipb-transport-mqtt
     PRIVATE

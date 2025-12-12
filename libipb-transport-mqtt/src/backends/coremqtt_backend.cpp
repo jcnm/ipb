@@ -9,6 +9,11 @@ extern "C" {
 #include "core_mqtt_state.h"
 }
 
+// TLS support via libipb-security (optional)
+#ifdef IPB_HAS_SECURITY
+#include <ipb/security/tls_context.hpp>
+#endif
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
@@ -31,13 +36,25 @@ struct NetworkContext {
     std::string hostname;
     uint16_t port = 1883;
 
-    // TLS context would go here for secure connections
-    // void* tls_context = nullptr;
+#ifdef IPB_HAS_SECURITY
+    // TLS support via libipb-security
+    std::unique_ptr<ipb::security::TLSContext> tls_context;
+    std::unique_ptr<ipb::security::TLSSocket> tls_socket;
+    bool use_tls = false;
+#endif
 };
 
 // Transport send function for coreMQTT
 static int32_t transport_send(NetworkContext* ctx, const void* data, size_t len) {
     if (!ctx || ctx->socket_fd < 0) return -1;
+
+#ifdef IPB_HAS_SECURITY
+    // Use TLS socket if available
+    if (ctx->use_tls && ctx->tls_socket) {
+        ssize_t sent = ctx->tls_socket->write(data, len);
+        return static_cast<int32_t>(sent);
+    }
+#endif
 
     ssize_t sent = ::send(ctx->socket_fd, data, len, MSG_NOSIGNAL);
     return static_cast<int32_t>(sent);
@@ -46,6 +63,16 @@ static int32_t transport_send(NetworkContext* ctx, const void* data, size_t len)
 // Transport receive function for coreMQTT
 static int32_t transport_recv(NetworkContext* ctx, void* data, size_t len) {
     if (!ctx || ctx->socket_fd < 0) return -1;
+
+#ifdef IPB_HAS_SECURITY
+    // Use TLS socket if available
+    if (ctx->use_tls && ctx->tls_socket) {
+        ssize_t received = ctx->tls_socket->read(data, len);
+        if (received == 0) return -1;  // Connection closed
+        if (received < 0) return 0;    // Would block or error
+        return static_cast<int32_t>(received);
+    }
+#endif
 
     ssize_t received = ::recv(ctx->socket_fd, data, len, 0);
     if (received == 0) return -1;  // Connection closed
@@ -238,6 +265,10 @@ public:
         return network_buffer_.size() + fixed_buffer_.size();
     }
 
+    NetworkContext& get_network_context() {
+        return network_context_;
+    }
+
 private:
     // Event callback for coreMQTT
     static void event_callback(MQTTContext_t* mqtt_ctx,
@@ -302,12 +333,18 @@ bool CoreMQTTBackend::initialize(const ConnectionConfig& config) {
     uint16_t port = 1883;
 
     // Simple URL parsing (tcp://hostname:port)
+    bool use_tls = false;
     if (url.find("tcp://") == 0) {
         url = url.substr(6);
     } else if (url.find("ssl://") == 0 || url.find("tls://") == 0) {
         url = url.substr(6);
         port = 8883;
-        // TODO: TLS support
+        use_tls = true;
+    }
+
+    // Check if TLS is required by security mode
+    if (config.security != SecurityMode::NONE) {
+        use_tls = true;
     }
 
     auto colon_pos = url.find(':');
@@ -323,6 +360,25 @@ bool CoreMQTTBackend::initialize(const ConnectionConfig& config) {
         state_.store(ConnectionState::FAILED);
         return false;
     }
+
+#ifdef IPB_HAS_SECURITY
+    // Setup TLS if required
+    if (use_tls) {
+        if (!setup_tls(config)) {
+            impl_->close_socket();
+            state_.store(ConnectionState::FAILED);
+            std::cerr << "CoreMQTTBackend: TLS setup failed\n";
+            return false;
+        }
+    }
+#else
+    if (use_tls) {
+        impl_->close_socket();
+        state_.store(ConnectionState::FAILED);
+        std::cerr << "CoreMQTTBackend: TLS requested but IPB_HAS_SECURITY not enabled\n";
+        return false;
+    }
+#endif
 
     // Initialize MQTT layer
     if (!impl_->initialize_mqtt(config.client_id, config.keep_alive_seconds, this)) {
@@ -548,6 +604,73 @@ void CoreMQTTBackend::on_ack_received(uint16_t packet_id, bool success) {
         delivery_cb_(packet_id, success);
     }
 }
+
+#ifdef IPB_HAS_SECURITY
+bool CoreMQTTBackend::setup_tls(const ConnectionConfig& config) {
+    // Create TLS configuration from MQTT config
+    ipb::security::TLSConfig tls_config = ipb::security::TLSConfig::default_client();
+
+    // Set certificate paths from MQTT TLS config
+    if (!config.tls.ca_cert_path.empty()) {
+        tls_config.ca_file = config.tls.ca_cert_path;
+    }
+    if (!config.tls.client_cert_path.empty()) {
+        tls_config.cert_file = config.tls.client_cert_path;
+    }
+    if (!config.tls.client_key_path.empty()) {
+        tls_config.key_file = config.tls.client_key_path;
+    }
+
+    // Set server name for SNI
+    auto url_result = parse_broker_url(config.broker_url);
+    if (url_result) {
+        tls_config.server_name = std::get<1>(*url_result);
+    }
+
+    // Set verification mode
+    if (!config.tls.verify_server && !config.tls.verify_certificate) {
+        tls_config.verify_mode = ipb::security::VerifyMode::NONE;
+    } else {
+        tls_config.verify_mode = ipb::security::VerifyMode::REQUIRED;
+    }
+
+    // Create TLS context
+    auto ctx_result = ipb::security::TLSContext::create(tls_config);
+    if (!ctx_result.is_success()) {
+        std::cerr << "CoreMQTTBackend: Failed to create TLS context: "
+                  << ctx_result.error_message() << "\n";
+        return false;
+    }
+
+    // Get the network context from impl
+    auto& net_ctx = impl_->get_network_context();
+    net_ctx.tls_context = std::move(ctx_result.value());
+
+    // Wrap the socket with TLS
+    auto socket_result = net_ctx.tls_context->wrap_socket(net_ctx.socket_fd);
+    if (!socket_result.is_success()) {
+        std::cerr << "CoreMQTTBackend: Failed to wrap socket with TLS: "
+                  << socket_result.error_message() << "\n";
+        return false;
+    }
+
+    net_ctx.tls_socket = std::move(socket_result.value());
+
+    // Perform TLS handshake
+    auto handshake_status = net_ctx.tls_socket->do_handshake(
+        std::chrono::milliseconds{10000});
+
+    if (handshake_status != ipb::security::HandshakeStatus::SUCCESS) {
+        std::cerr << "CoreMQTTBackend: TLS handshake failed\n";
+        net_ctx.tls_socket.reset();
+        net_ctx.tls_context.reset();
+        return false;
+    }
+
+    net_ctx.use_tls = true;
+    return true;
+}
+#endif
 
 } // namespace ipb::transport::mqtt
 
