@@ -7,9 +7,8 @@ project(ipb-tests
     LANGUAGES CXX
 )
 
-# Find testing frameworks
+# Find testing frameworks (GMock is included with GTest in modern versions)
 find_package(GTest REQUIRED)
-find_package(GMock REQUIRED)
 
 if(ENABLE_BENCHMARKS)
     find_package(benchmark REQUIRED)
@@ -18,72 +17,34 @@ endif()
 # Include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/core/common/include
+    ${CMAKE_SOURCE_DIR}/core/components/include
     ${CMAKE_SOURCE_DIR}/core/router/include
     ${CMAKE_SOURCE_DIR}/apps/ipb-gate/include
-)
-
-# Test utilities library
-add_library(ipb-test-utils STATIC
-    utils/test_helpers.cpp
-    utils/mock_components.cpp
-    utils/performance_utils.cpp
-    utils/data_generators.cpp
-)
-
-target_link_libraries(ipb-test-utils PUBLIC
-    ipb-common
-    GTest::gtest
-    GMock::gmock
-)
-
-target_include_directories(ipb-test-utils PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/utils
 )
 
 # Unit tests
 add_subdirectory(unit)
 
-# Integration tests
-add_subdirectory(integration)
+# Integration tests (if directory exists)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/integration/CMakeLists.txt")
+    add_subdirectory(integration)
+endif()
 
 # Performance tests
-if(ENABLE_BENCHMARKS)
+if(ENABLE_BENCHMARKS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/performance/CMakeLists.txt")
     add_subdirectory(performance)
 endif()
 
-# System tests
-add_subdirectory(system)
-
-# Test runner script
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_tests.sh.in
-    ${CMAKE_CURRENT_BINARY_DIR}/run_tests.sh
-    @ONLY
-)
+# System tests (if directory exists)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/system/CMakeLists.txt")
+    add_subdirectory(system)
+endif()
 
 # Custom test targets
 add_custom_target(test-unit
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L unit
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Running unit tests"
-)
-
-add_custom_target(test-integration
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L integration
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running integration tests"
-)
-
-add_custom_target(test-performance
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L performance
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running performance tests"
-)
-
-add_custom_target(test-system
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L system
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running system tests"
 )
 
 add_custom_target(test-all
@@ -94,29 +55,31 @@ add_custom_target(test-all
 
 # Test coverage
 if(ENABLE_COVERAGE)
-    add_custom_target(test-coverage
-        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-        COMMAND lcov --directory . --capture --output-file coverage.info
-        COMMAND lcov --remove coverage.info '/usr/*' '*/tests/*' --output-file coverage.info
-        COMMAND genhtml coverage.info --output-directory coverage_html
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Running tests with coverage analysis"
-    )
+    find_program(LCOV_PATH lcov)
+    find_program(GENHTML_PATH genhtml)
+
+    if(LCOV_PATH AND GENHTML_PATH)
+        add_custom_target(test-coverage
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            COMMAND ${LCOV_PATH} --directory . --capture --output-file coverage.info
+            COMMAND ${LCOV_PATH} --remove coverage.info '/usr/*' '*/tests/*' --output-file coverage.info
+            COMMAND ${GENHTML_PATH} coverage.info --output-directory coverage_html
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Running tests with coverage analysis"
+        )
+    else()
+        message(STATUS "lcov/genhtml not found, coverage target disabled")
+    endif()
 endif()
 
 # Memory testing with Valgrind
 if(ENABLE_VALGRIND)
-    add_custom_target(test-valgrind
-        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -T memcheck
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Running tests with Valgrind"
-    )
+    find_program(VALGRIND_PATH valgrind)
+    if(VALGRIND_PATH)
+        add_custom_target(test-valgrind
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -T memcheck
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Running tests with Valgrind"
+        )
+    endif()
 endif()
-
-# Continuous testing
-add_custom_target(test-watch
-    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/run_tests.sh --watch
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Running tests in watch mode"
-)
-

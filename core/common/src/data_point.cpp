@@ -66,6 +66,34 @@ void Value::set_impl<bool>(bool&& value) noexcept {
 }
 
 template<>
+void Value::set_impl<int8_t>(int8_t&& value) noexcept {
+    type_ = Type::INT8;
+    size_ = sizeof(int8_t);
+    std::memcpy(inline_data_, &value, size_);
+}
+
+template<>
+void Value::set_impl<int16_t>(int16_t&& value) noexcept {
+    type_ = Type::INT16;
+    size_ = sizeof(int16_t);
+    std::memcpy(inline_data_, &value, size_);
+}
+
+template<>
+void Value::set_impl<uint8_t>(uint8_t&& value) noexcept {
+    type_ = Type::UINT8;
+    size_ = sizeof(uint8_t);
+    std::memcpy(inline_data_, &value, size_);
+}
+
+template<>
+void Value::set_impl<uint16_t>(uint16_t&& value) noexcept {
+    type_ = Type::UINT16;
+    size_ = sizeof(uint16_t);
+    std::memcpy(inline_data_, &value, size_);
+}
+
+template<>
 void Value::set_impl<int32_t>(int32_t&& value) noexcept {
     type_ = Type::INT32;
     size_ = sizeof(int32_t);
@@ -112,6 +140,38 @@ bool Value::get_impl<bool>() const noexcept {
     if (type_ != Type::BOOL || size_ != sizeof(bool)) return false;
     bool result;
     std::memcpy(&result, inline_data_, sizeof(bool));
+    return result;
+}
+
+template<>
+int8_t Value::get_impl<int8_t>() const noexcept {
+    if (type_ != Type::INT8 || size_ != sizeof(int8_t)) return 0;
+    int8_t result;
+    std::memcpy(&result, inline_data_, sizeof(int8_t));
+    return result;
+}
+
+template<>
+int16_t Value::get_impl<int16_t>() const noexcept {
+    if (type_ != Type::INT16 || size_ != sizeof(int16_t)) return 0;
+    int16_t result;
+    std::memcpy(&result, inline_data_, sizeof(int16_t));
+    return result;
+}
+
+template<>
+uint8_t Value::get_impl<uint8_t>() const noexcept {
+    if (type_ != Type::UINT8 || size_ != sizeof(uint8_t)) return 0;
+    uint8_t result;
+    std::memcpy(&result, inline_data_, sizeof(uint8_t));
+    return result;
+}
+
+template<>
+uint16_t Value::get_impl<uint16_t>() const noexcept {
+    if (type_ != Type::UINT16 || size_ != sizeof(uint16_t)) return 0;
+    uint16_t result;
+    std::memcpy(&result, inline_data_, sizeof(uint16_t));
     return result;
 }
 
@@ -234,21 +294,28 @@ void DataPoint::serialize(std::span<uint8_t> buffer) const noexcept {
 
 bool DataPoint::deserialize(std::span<const uint8_t> buffer) noexcept {
     if (buffer.size() < sizeof(uint16_t)) return false;
-    
+
+    // Clean up current external storage if any
+    if (address_size_ > MAX_INLINE_ADDRESS) {
+        external_address_.~unique_ptr();
+    }
+
     size_t offset = 0;
-    
+
     // Read address size
-    std::memcpy(&address_size_, buffer.data() + offset, sizeof(uint16_t));
+    uint16_t new_address_size;
+    std::memcpy(&new_address_size, buffer.data() + offset, sizeof(uint16_t));
     offset += sizeof(uint16_t);
-    
-    if (buffer.size() < offset + address_size_) return false;
-    
+
+    if (buffer.size() < offset + new_address_size) return false;
+
+    address_size_ = new_address_size;
+
     // Read address
     if (address_size_ <= MAX_INLINE_ADDRESS) {
         std::memcpy(inline_address_, buffer.data() + offset, address_size_);
-        external_address_.reset();
     } else {
-        external_address_ = std::make_unique<char[]>(address_size_);
+        new (&external_address_) std::unique_ptr<char[]>(std::make_unique<char[]>(address_size_));
         std::memcpy(external_address_.get(), buffer.data() + offset, address_size_);
     }
     offset += address_size_;
@@ -289,38 +356,47 @@ size_t DataPoint::hash() const noexcept {
 }
 
 void DataPoint::copy_from(const DataPoint& other) noexcept {
+    // Clean up current external storage if any
+    if (address_size_ > MAX_INLINE_ADDRESS) {
+        external_address_.~unique_ptr();
+    }
+
     value_ = other.value_;
     timestamp_ = other.timestamp_;
     address_size_ = other.address_size_;
-    
-    if (address_size_ <= MAX_INLINE_ADDRESS) {
+
+    if (other.address_size_ <= MAX_INLINE_ADDRESS) {
         std::memcpy(inline_address_, other.inline_address_, address_size_);
-        external_address_.reset();
     } else {
-        external_address_ = std::make_unique<char[]>(address_size_);
+        new (&external_address_) std::unique_ptr<char[]>(std::make_unique<char[]>(address_size_));
         std::memcpy(external_address_.get(), other.external_address_.get(), address_size_);
     }
-    
+
     protocol_id_ = other.protocol_id_;
     quality_ = other.quality_;
     sequence_number_ = other.sequence_number_;
 }
 
 void DataPoint::move_from(DataPoint&& other) noexcept {
+    // Clean up current external storage if any
+    if (address_size_ > MAX_INLINE_ADDRESS) {
+        external_address_.~unique_ptr();
+    }
+
     value_ = std::move(other.value_);
     timestamp_ = other.timestamp_;
     address_size_ = other.address_size_;
-    
-    if (address_size_ <= MAX_INLINE_ADDRESS) {
+
+    if (other.address_size_ <= MAX_INLINE_ADDRESS) {
         std::memcpy(inline_address_, other.inline_address_, address_size_);
     } else {
-        external_address_ = std::move(other.external_address_);
+        new (&external_address_) std::unique_ptr<char[]>(std::move(other.external_address_));
     }
-    
+
     protocol_id_ = other.protocol_id_;
     quality_ = other.quality_;
     sequence_number_ = other.sequence_number_;
-    
+
     other.address_size_ = 0;
     other.protocol_id_ = 0;
     other.quality_ = Quality::INITIAL;

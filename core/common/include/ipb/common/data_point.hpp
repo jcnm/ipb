@@ -409,18 +409,24 @@ public:
     
     // Destructor
     ~DataPoint() {
-        // Cleanup is handled in move_from and copy_from
-    };
+        if (address_size_ > MAX_INLINE_ADDRESS) {
+            external_address_.~unique_ptr();
+        }
+    }
     
     // Address management (zero-copy when possible)
     void set_address(std::string_view address) noexcept {
+        // Clean up existing external allocation if any
+        if (address_size_ > MAX_INLINE_ADDRESS) {
+            external_address_.reset();
+        }
+
         address_size_ = std::min(address.size(), static_cast<size_t>(UINT16_MAX));
-        
+
         if (address_size_ <= MAX_INLINE_ADDRESS) {
             std::memcpy(inline_address_, address.data(), address_size_);
-            external_address_.reset();
         } else {
-            external_address_ = std::make_unique<char[]>(address_size_);
+            new (&external_address_) std::unique_ptr<char[]>(std::make_unique<char[]>(address_size_));
             std::memcpy(external_address_.get(), address.data(), address_size_);
         }
     }

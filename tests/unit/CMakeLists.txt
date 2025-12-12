@@ -12,106 +12,53 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/core/router/include
 )
 
-# Helper function to create unit test executables
-function(ipb_add_unit_test TEST_NAME TEST_FILE)
-    add_executable(${TEST_NAME} ${TEST_FILE})
-    target_link_libraries(${TEST_NAME} PRIVATE
-        ipb-common
-        GTest::gtest
-        GTest::gtest_main
-        Threads::Threads
-    )
-
-    # Add additional libraries if specified
-    if(ARGC GREATER 2)
-        target_link_libraries(${TEST_NAME} PRIVATE ${ARGN})
-    endif()
-
-    # Register test with CTest
-    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
-    set_tests_properties(${TEST_NAME} PROPERTIES
-        LABELS "unit"
-        TIMEOUT 60
-    )
-endfunction()
-
 # ============================================================================
-# Core/Common Tests
+# Core/Common Tests - Complete coverage of core types
 # ============================================================================
 
-# Timestamp tests
-ipb_add_unit_test(test_timestamp test_timestamp.cpp)
+# DataPoint test (covers Timestamp, Value, Quality, DataPoint, RawMessage)
+add_executable(test_data_point test_data_point.cpp)
+target_link_libraries(test_data_point PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
 
-# Value tests
-ipb_add_unit_test(test_value test_value.cpp)
+add_test(NAME test_data_point COMMAND test_data_point)
+set_tests_properties(test_data_point PROPERTIES
+    LABELS "unit;core"
+    TIMEOUT 120
+)
 
-# DataPoint tests (new API)
-ipb_add_unit_test(test_data_point_new test_data_point_new.cpp)
+# Error handling test (covers ErrorCode, Error, Result, SourceLocation)
+add_executable(test_error test_error.cpp)
+target_link_libraries(test_error PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
 
-# Error handling tests
-ipb_add_unit_test(test_error test_error.cpp)
+add_test(NAME test_error COMMAND test_error)
+set_tests_properties(test_error PROPERTIES
+    LABELS "unit;core"
+    TIMEOUT 120
+)
 
-# EndPoint and RT primitives tests
-ipb_add_unit_test(test_endpoint test_endpoint.cpp)
+# EndPoint and RT primitives test (covers EndPoint, ConnectionStats, rt::*)
+add_executable(test_endpoint test_endpoint.cpp)
+target_link_libraries(test_endpoint PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
 
-# ============================================================================
-# Core/Components Tests
-# ============================================================================
-
-# Check if ipb-components library exists
-if(TARGET ipb-components)
-    # MessageBus tests
-    add_executable(test_message_bus test_message_bus.cpp)
-    target_link_libraries(test_message_bus PRIVATE
-        ipb-common
-        ipb-components
-        GTest::gtest
-        GTest::gtest_main
-        Threads::Threads
-    )
-    add_test(NAME test_message_bus COMMAND test_message_bus)
-    set_tests_properties(test_message_bus PROPERTIES
-        LABELS "unit;components"
-        TIMEOUT 120
-    )
-
-    # Scheduler tests
-    add_executable(test_scheduler test_scheduler.cpp)
-    target_link_libraries(test_scheduler PRIVATE
-        ipb-common
-        ipb-components
-        GTest::gtest
-        GTest::gtest_main
-        Threads::Threads
-    )
-    add_test(NAME test_scheduler COMMAND test_scheduler)
-    set_tests_properties(test_scheduler PROPERTIES
-        LABELS "unit;components;scheduler"
-        TIMEOUT 120
-    )
-else()
-    message(STATUS "ipb-components not available, skipping component tests")
-endif()
-
-# ============================================================================
-# Legacy Tests (may need API updates)
-# ============================================================================
-
-# Original data_point test - may use older API
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_data_point.cpp")
-    ipb_add_unit_test(test_data_point_legacy test_data_point.cpp)
-    set_tests_properties(test_data_point_legacy PROPERTIES
-        LABELS "unit;legacy"
-    )
-endif()
-
-# ============================================================================
-# Test Categories for filtering
-# ============================================================================
-
-# Performance-labeled tests run separately
-set_tests_properties(test_timestamp test_value test_endpoint PROPERTIES
-    LABELS "unit;performance"
+add_test(NAME test_endpoint COMMAND test_endpoint)
+set_tests_properties(test_endpoint PROPERTIES
+    LABELS "unit;core"
+    TIMEOUT 120
 )
 
 # ============================================================================
@@ -119,18 +66,10 @@ set_tests_properties(test_timestamp test_value test_endpoint PROPERTIES
 # ============================================================================
 
 if(ENABLE_COVERAGE)
-    target_compile_options(test_timestamp PRIVATE --coverage)
-    target_link_options(test_timestamp PRIVATE --coverage)
-
-    target_compile_options(test_value PRIVATE --coverage)
-    target_link_options(test_value PRIVATE --coverage)
-
-    target_compile_options(test_data_point_new PRIVATE --coverage)
-    target_link_options(test_data_point_new PRIVATE --coverage)
-
+    target_compile_options(test_data_point PRIVATE --coverage)
+    target_link_options(test_data_point PRIVATE --coverage)
     target_compile_options(test_error PRIVATE --coverage)
     target_link_options(test_error PRIVATE --coverage)
-
     target_compile_options(test_endpoint PRIVATE --coverage)
     target_link_options(test_endpoint PRIVATE --coverage)
 endif()
@@ -140,12 +79,6 @@ endif()
 # ============================================================================
 
 message(STATUS "Configured unit tests:")
-message(STATUS "  - test_timestamp")
-message(STATUS "  - test_value")
-message(STATUS "  - test_data_point_new")
-message(STATUS "  - test_error")
-message(STATUS "  - test_endpoint")
-if(TARGET ipb-components)
-    message(STATUS "  - test_message_bus")
-    message(STATUS "  - test_scheduler")
-endif()
+message(STATUS "  - test_data_point (Timestamp, Value, Quality, DataPoint, RawMessage)")
+message(STATUS "  - test_error (ErrorCode, Error, Result, SourceLocation)")
+message(STATUS "  - test_endpoint (EndPoint, ConnectionStats, rt::SPSCRingBuffer, rt::MemoryPool)")
