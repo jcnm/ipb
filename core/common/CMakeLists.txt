@@ -143,6 +143,7 @@ add_library(ipb-common STATIC
     src/platform.cpp
     src/error.cpp
     src/debug.cpp
+    src/memory_pool.cpp
 )
 
 # Set target properties
