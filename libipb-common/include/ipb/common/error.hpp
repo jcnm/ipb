@@ -125,6 +125,9 @@ enum class ErrorCode : uint32_t {
     IN_PROGRESS         = 0x010E,
     ALREADY_CONNECTED   = 0x010F,
     NOT_CONNECTED       = 0x0110,
+    IO_FILE_NOT_FOUND   = 0x0111,
+    IO_SOCKET_ERROR     = 0x0112,
+    RESOURCE_MEMORY_ALLOCATION_FAILED = 0x0113,
 
     // ========== Protocol (0x02xx) ==========
     PROTOCOL_ERROR      = 0x0200,
@@ -165,6 +168,7 @@ enum class ErrorCode : uint32_t {
     CONFIG_REQUIRED_MISSING = 0x0405,
     CONFIG_FILE_NOT_FOUND = 0x0406,
     CONFIG_PERMISSION_DENIED = 0x0407,
+    CONFIG_INVALID_VALUE = 0x0408,
 
     // ========== Security (0x05xx) ==========
     PERMISSION_DENIED   = 0x0500,
@@ -179,6 +183,11 @@ enum class ErrorCode : uint32_t {
     KEY_INVALID         = 0x0509,
     TOKEN_EXPIRED       = 0x050A,
     TOKEN_INVALID       = 0x050B,
+    SECURITY_SSL_INIT_FAILED = 0x050C,
+    SECURITY_CERTIFICATE_INVALID = 0x050D,
+    SECURITY_KEY_INVALID = 0x050E,
+    SECURITY_HANDSHAKE_FAILED = 0x050F,
+    SECURITY_CRYPTO_ERROR = 0x0510,
 
     // ========== Routing (0x06xx) ==========
     ROUTE_NOT_FOUND     = 0x0600,
@@ -320,6 +329,9 @@ constexpr std::string_view error_name(ErrorCode code) noexcept {
         case ErrorCode::IN_PROGRESS:          return "IN_PROGRESS";
         case ErrorCode::ALREADY_CONNECTED:    return "ALREADY_CONNECTED";
         case ErrorCode::NOT_CONNECTED:        return "NOT_CONNECTED";
+        case ErrorCode::IO_FILE_NOT_FOUND:    return "IO_FILE_NOT_FOUND";
+        case ErrorCode::IO_SOCKET_ERROR:      return "IO_SOCKET_ERROR";
+        case ErrorCode::RESOURCE_MEMORY_ALLOCATION_FAILED: return "RESOURCE_MEMORY_ALLOCATION_FAILED";
 
         // Protocol
         case ErrorCode::PROTOCOL_ERROR:       return "PROTOCOL_ERROR";
@@ -360,6 +372,7 @@ constexpr std::string_view error_name(ErrorCode code) noexcept {
         case ErrorCode::CONFIG_REQUIRED_MISSING: return "CONFIG_REQUIRED_MISSING";
         case ErrorCode::CONFIG_FILE_NOT_FOUND: return "CONFIG_FILE_NOT_FOUND";
         case ErrorCode::CONFIG_PERMISSION_DENIED: return "CONFIG_PERMISSION_DENIED";
+        case ErrorCode::CONFIG_INVALID_VALUE: return "CONFIG_INVALID_VALUE";
 
         // Security
         case ErrorCode::PERMISSION_DENIED:    return "PERMISSION_DENIED";
@@ -374,6 +387,11 @@ constexpr std::string_view error_name(ErrorCode code) noexcept {
         case ErrorCode::KEY_INVALID:          return "KEY_INVALID";
         case ErrorCode::TOKEN_EXPIRED:        return "TOKEN_EXPIRED";
         case ErrorCode::TOKEN_INVALID:        return "TOKEN_INVALID";
+        case ErrorCode::SECURITY_SSL_INIT_FAILED: return "SECURITY_SSL_INIT_FAILED";
+        case ErrorCode::SECURITY_CERTIFICATE_INVALID: return "SECURITY_CERTIFICATE_INVALID";
+        case ErrorCode::SECURITY_KEY_INVALID: return "SECURITY_KEY_INVALID";
+        case ErrorCode::SECURITY_HANDSHAKE_FAILED: return "SECURITY_HANDSHAKE_FAILED";
+        case ErrorCode::SECURITY_CRYPTO_ERROR: return "SECURITY_CRYPTO_ERROR";
 
         // Routing
         case ErrorCode::ROUTE_NOT_FOUND:      return "ROUTE_NOT_FOUND";

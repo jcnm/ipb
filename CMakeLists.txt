@@ -157,6 +157,12 @@ if(BUILD_ALL_COMPONENTS OR BUILD_COMMON)
     conditional_add_subdirectory(libipb-common TRUE)
 endif()
 
+# Security/TLS Layer (depends on common)
+option(BUILD_SECURITY "Build libipb-security" ON)
+if(BUILD_ALL_COMPONENTS OR BUILD_SECURITY)
+    conditional_add_subdirectory(libipb-security BUILD_SECURITY)
+endif()
+
 if(BUILD_ALL_COMPONENTS OR BUILD_ROUTER)
     conditional_add_subdirectory(libipb-router BUILD_ROUTER)
 endif()
