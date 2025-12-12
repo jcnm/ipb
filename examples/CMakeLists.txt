@@ -3,11 +3,11 @@ cmake_minimum_required(VERSION 3.16)
 
 # Include directories
 include_directories(
-    ${CMAKE_SOURCE_DIR}/libipb-common/include
-    ${CMAKE_SOURCE_DIR}/libipb-router/include
-    ${CMAKE_SOURCE_DIR}/libipb-sink-console/include
-    ${CMAKE_SOURCE_DIR}/libipb-sink-syslog/include
-    ${CMAKE_SOURCE_DIR}/libipb-sink-mqtt/include
+    ${CMAKE_SOURCE_DIR}/core/common/include
+    ${CMAKE_SOURCE_DIR}/core/router/include
+    ${CMAKE_SOURCE_DIR}/sinks/console/include
+    ${CMAKE_SOURCE_DIR}/sinks/syslog/include
+    ${CMAKE_SOURCE_DIR}/sinks/mqtt/include
 )
 
 # Find dependencies

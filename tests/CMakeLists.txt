@@ -17,9 +17,9 @@ endif()
 
 # Include directories
 include_directories(
-    ${CMAKE_SOURCE_DIR}/libipb-common/include
-    ${CMAKE_SOURCE_DIR}/libipb-router/include
-    ${CMAKE_SOURCE_DIR}/ipb-gate/include
+    ${CMAKE_SOURCE_DIR}/core/common/include
+    ${CMAKE_SOURCE_DIR}/core/router/include
+    ${CMAKE_SOURCE_DIR}/apps/ipb-gate/include
 )
 
 # Test utilities library
