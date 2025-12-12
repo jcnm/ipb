@@ -15,6 +15,7 @@
 #include <condition_variable>
 #include <chrono>
 #include <functional>
+#include <queue>
 
 // Forward declarations for dynamic loading
 namespace ipb::scoop::modbus { class ModbusScoop; }
@@ -115,7 +116,37 @@ struct GatewayMetrics {
     mutable std::mutex metrics_mutex;
     
     GatewayMetrics() : start_time(std::chrono::steady_clock::now()) {}
-    
+
+    // Copy constructor - needed for returning metrics
+    GatewayMetrics(const GatewayMetrics& other)
+        : messages_processed(other.messages_processed.load())
+        , messages_routed(other.messages_routed.load())
+        , messages_dropped(other.messages_dropped.load())
+        , routing_errors(other.routing_errors.load())
+        , scoop_errors(other.scoop_errors.load())
+        , sink_errors(other.sink_errors.load())
+        , start_time(other.start_time)
+        , total_processing_time(other.total_processing_time)
+        , min_processing_time(other.min_processing_time)
+        , max_processing_time(other.max_processing_time) {}
+
+    // Copy assignment
+    GatewayMetrics& operator=(const GatewayMetrics& other) {
+        if (this != &other) {
+            messages_processed.store(other.messages_processed.load());
+            messages_routed.store(other.messages_routed.load());
+            messages_dropped.store(other.messages_dropped.load());
+            routing_errors.store(other.routing_errors.load());
+            scoop_errors.store(other.scoop_errors.load());
+            sink_errors.store(other.sink_errors.load());
+            start_time = other.start_time;
+            total_processing_time = other.total_processing_time;
+            min_processing_time = other.min_processing_time;
+            max_processing_time = other.max_processing_time;
+        }
+        return *this;
+    }
+
     double get_messages_per_second() const {
         auto elapsed = std::chrono::steady_clock::now() - start_time;
         auto seconds = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
@@ -124,7 +155,10 @@ struct GatewayMetrics {
     
     std::chrono::nanoseconds get_average_processing_time() const {
         auto processed = messages_processed.load();
-        return processed > 0 ? total_processing_time / processed : std::chrono::nanoseconds{0};
+        if (processed > 0) {
+            return std::chrono::nanoseconds{total_processing_time.count() / static_cast<int64_t>(processed)};
+        }
+        return std::chrono::nanoseconds{0};
     }
     
     void update_processing_time(std::chrono::nanoseconds processing_time) {
@@ -252,11 +286,11 @@ private:
     mutable std::mutex config_mutex_;
     
     // Core components
-    std::unique_ptr<router::IPBRouter> router_;
+    std::unique_ptr<router::Router> router_;
     
     // Dynamic components
     std::map<std::string, std::shared_ptr<common::IProtocolSource>> scoops_;
-    std::map<std::string, std::shared_ptr<common::IIPBSink>> sinks_;
+    std::map<std::string, std::shared_ptr<common::ISink>> sinks_;
     
     // State management
     std::atomic<bool> running_{false};
@@ -273,7 +307,7 @@ private:
     
     // MQTT command interface
     std::shared_ptr<common::IProtocolSource> mqtt_command_scoop_;
-    std::shared_ptr<common::IIPBSink> mqtt_response_sink_;
+    std::shared_ptr<common::ISink> mqtt_response_sink_;
     std::queue<MQTTCommand> command_queue_;
     mutable std::mutex command_queue_mutex_;
     std::condition_variable command_queue_condition_;
@@ -297,7 +331,7 @@ private:
 
     // Dynamic loading
     std::shared_ptr<common::IProtocolSource> create_scoop(const std::string& type, const YAML::Node& config);
-    std::shared_ptr<common::IIPBSink> create_sink(const std::string& type, const YAML::Node& config);
+    std::shared_ptr<common::ISink> create_sink(const std::string& type, const YAML::Node& config);
     
     // MQTT command processing
     void setup_mqtt_commands();

@@ -12,6 +12,7 @@
 #include <sstream>
 #include <fstream>
 #include <regex>
+#include <iostream>
 
 namespace ipb::sink::syslog {
 
@@ -539,6 +540,286 @@ std::string SyslogSink::format_rfc5424(const common::DataPoint& data_point, Sysl
     }
     
     return oss.str();
+}
+
+std::string SyslogSink::format_rfc3164(const common::DataPoint& data_point, SyslogPriority priority) const {
+    std::ostringstream oss;
+
+    // Priority value
+    int pri = static_cast<int>(config_.facility) + static_cast<int>(priority);
+    oss << "<" << pri << ">";
+
+    // Timestamp (Mmm dd HH:MM:SS format)
+    oss << format_timestamp_rfc3164() << " ";
+
+    // Hostname
+    oss << get_hostname() << " ";
+
+    // Tag (app name with optional PID)
+    oss << config_.app_name;
+    if (config_.include_pid) {
+        oss << "[" << get_process_id() << "]";
+    }
+    oss << ": ";
+
+    // Message
+    oss << "Protocol=" << data_point.get_protocol_id()
+        << " Address=" << data_point.get_address()
+        << " Quality=" << static_cast<int>(data_point.get_quality());
+
+    if (data_point.get_value().has_value()) {
+        oss << " Value=";
+        const auto& val = data_point.value();
+        using Type = common::Value::Type;
+        switch (val.type()) {
+            case Type::STRING:
+                oss << "\"" << val.as_string_view() << "\"";
+                break;
+            case Type::BOOL:
+                oss << (val.get<bool>() ? "true" : "false");
+                break;
+            case Type::INT32:
+                oss << val.get<int32_t>();
+                break;
+            case Type::INT64:
+                oss << val.get<int64_t>();
+                break;
+            case Type::FLOAT32:
+                oss << val.get<float>();
+                break;
+            case Type::FLOAT64:
+                oss << val.get<double>();
+                break;
+            default:
+                oss << "<value>";
+                break;
+        }
+    }
+
+    return oss.str();
+}
+
+std::string SyslogSink::format_cef(const common::DataPoint& data_point, SyslogPriority priority) const {
+    std::ostringstream oss;
+
+    // CEF header
+    oss << "CEF:0|IPB|Gateway|1.0|"
+        << data_point.get_protocol_id() << "|DataPoint|"
+        << (10 - static_cast<int>(priority)) << "|";  // CEF severity (0-10, inverted from syslog)
+
+    // Extension fields
+    oss << "src=" << get_hostname()
+        << " dst=" << data_point.get_address()
+        << " proto=" << data_point.get_protocol_id()
+        << " quality=" << static_cast<int>(data_point.get_quality());
+
+    if (data_point.get_value().has_value()) {
+        oss << " value=";
+        const auto& val = data_point.value();
+        using Type = common::Value::Type;
+        switch (val.type()) {
+            case Type::STRING:
+                oss << val.as_string_view();
+                break;
+            case Type::BOOL:
+                oss << (val.get<bool>() ? "true" : "false");
+                break;
+            case Type::INT32:
+                oss << val.get<int32_t>();
+                break;
+            case Type::FLOAT64:
+                oss << val.get<double>();
+                break;
+            default:
+                break;
+        }
+    }
+
+    return oss.str();
+}
+
+std::string SyslogSink::format_leef(const common::DataPoint& data_point, SyslogPriority priority) const {
+    std::ostringstream oss;
+
+    // LEEF header
+    oss << "LEEF:1.0|IPB|Gateway|1.0|DataPoint|";
+
+    // Event attributes (tab-separated)
+    oss << "src=" << get_hostname()
+        << "\tdst=" << data_point.get_address()
+        << "\tproto=" << data_point.get_protocol_id()
+        << "\tsev=" << static_cast<int>(priority)
+        << "\tquality=" << static_cast<int>(data_point.get_quality());
+
+    if (data_point.get_value().has_value()) {
+        oss << "\tvalue=";
+        const auto& val = data_point.value();
+        using Type = common::Value::Type;
+        switch (val.type()) {
+            case Type::STRING:
+                oss << val.as_string_view();
+                break;
+            case Type::BOOL:
+                oss << (val.get<bool>() ? "true" : "false");
+                break;
+            case Type::INT32:
+                oss << val.get<int32_t>();
+                break;
+            case Type::FLOAT64:
+                oss << val.get<double>();
+                break;
+            default:
+                break;
+        }
+    }
+
+    return oss.str();
+}
+
+std::string SyslogSink::format_plain(const common::DataPoint& data_point, SyslogPriority priority) const {
+    std::ostringstream oss;
+
+    oss << "[" << static_cast<int>(priority) << "] "
+        << data_point.get_address() << ": ";
+
+    if (data_point.get_value().has_value()) {
+        const auto& val = data_point.value();
+        using Type = common::Value::Type;
+        switch (val.type()) {
+            case Type::STRING:
+                oss << val.as_string_view();
+                break;
+            case Type::BOOL:
+                oss << (val.get<bool>() ? "true" : "false");
+                break;
+            case Type::INT32:
+                oss << val.get<int32_t>();
+                break;
+            case Type::INT64:
+                oss << val.get<int64_t>();
+                break;
+            case Type::FLOAT32:
+                oss << val.get<float>();
+                break;
+            case Type::FLOAT64:
+                oss << val.get<double>();
+                break;
+            default:
+                oss << "<value>";
+                break;
+        }
+    }
+
+    oss << " (Q:" << static_cast<int>(data_point.get_quality()) << ")";
+
+    return oss.str();
+}
+
+std::string SyslogSink::format_timestamp_rfc3164() const {
+    auto now = std::chrono::system_clock::now();
+    auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_now;
+    localtime_r(&time_t_now, &tm_now);
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm_now, "%b %e %H:%M:%S");
+    return oss.str();
+}
+
+std::string SyslogSink::format_timestamp_rfc5424() const {
+    auto now = std::chrono::system_clock::now();
+    auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+
+    std::tm tm_now;
+    gmtime_r(&time_t_now, &tm_now);
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm_now, "%Y-%m-%dT%H:%M:%S")
+        << "." << std::setfill('0') << std::setw(3) << ms.count() << "Z";
+    return oss.str();
+}
+
+common::Result<void> SyslogSink::send_to_remote_syslog(const std::string& message) {
+    std::lock_guard<std::mutex> lock(connection_mutex_);
+
+    if (remote_socket_ == -1) {
+        return common::Result<void>(common::ErrorCode::CONNECTION_CLOSED, "Remote socket not connected");
+    }
+
+    ssize_t sent = send(remote_socket_, message.c_str(), message.length(), 0);
+    if (sent < 0) {
+        return common::Result<void>(common::ErrorCode::WRITE_ERROR, "Failed to send to remote syslog");
+    }
+
+    statistics_.messages_sent.fetch_add(1);
+    statistics_.bytes_sent.fetch_add(static_cast<uint64_t>(sent));
+    consecutive_failures_.store(0);
+
+    return common::Result<void>();
+}
+
+common::Result<void> SyslogSink::send_to_fallback(const std::string& message) {
+    std::lock_guard<std::mutex> lock(fallback_mutex_);
+
+    // Try file fallback first
+    if (config_.fallback_config.enable_file_fallback && fallback_file_stream_ && fallback_file_stream_->is_open()) {
+        *fallback_file_stream_ << message << std::endl;
+        fallback_file_stream_->flush();
+        statistics_.messages_sent.fetch_add(1);
+        statistics_.bytes_sent.fetch_add(message.size());
+        return common::Result<void>();
+    }
+
+    // Try console fallback
+    if (config_.fallback_config.enable_console_fallback) {
+        std::cerr << "[IPB-FALLBACK] " << message << std::endl;
+        statistics_.messages_sent.fetch_add(1);
+        return common::Result<void>();
+    }
+
+    return common::Result<void>(common::ErrorCode::WRITE_ERROR, "No fallback available");
+}
+
+common::Result<void> SyslogSink::recover_from_fallback() {
+    if (!fallback_active_.load()) {
+        return common::Result<void>();
+    }
+
+    // Try to re-establish remote connection
+    auto result = establish_remote_connection();
+    if (result.is_success()) {
+        fallback_active_.store(false);
+        consecutive_failures_.store(0);
+        return common::Result<void>();
+    }
+
+    return result;
+}
+
+SyslogSinkStatistics SyslogSink::get_statistics() const {
+    // Note: We return a copy. The atomics are read individually which is fine.
+    // For non-atomic fields, we use the mutex.
+    SyslogSinkStatistics stats;
+    stats.messages_processed = statistics_.messages_processed.load();
+    stats.messages_filtered = statistics_.messages_filtered.load();
+    stats.messages_dropped = statistics_.messages_dropped.load();
+    stats.messages_sent = statistics_.messages_sent.load();
+    stats.messages_failed = statistics_.messages_failed.load();
+    stats.bytes_sent = statistics_.bytes_sent.load();
+    stats.connection_failures = statistics_.connection_failures.load();
+    stats.fallback_activations = statistics_.fallback_activations.load();
+    stats.start_time = statistics_.start_time;
+
+    {
+        std::lock_guard<std::mutex> lock(statistics_.stats_mutex);
+        stats.total_processing_time = statistics_.total_processing_time;
+        stats.min_processing_time = statistics_.min_processing_time;
+        stats.max_processing_time = statistics_.max_processing_time;
+    }
+
+    return stats;
 }
 
 std::string SyslogSink::format_json(const common::DataPoint& data_point, SyslogPriority priority) const {

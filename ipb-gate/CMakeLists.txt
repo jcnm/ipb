@@ -25,6 +25,9 @@ target_include_directories(ipb-gate PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/libipb-common/include
     ${CMAKE_SOURCE_DIR}/libipb-router/include
+    ${CMAKE_SOURCE_DIR}/libipb-core-components/include
+    ${CMAKE_SOURCE_DIR}/libipb-sink-console/include
+    ${CMAKE_SOURCE_DIR}/libipb-sink-syslog/include
 )
 
 # Link libraries

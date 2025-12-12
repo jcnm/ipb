@@ -239,7 +239,56 @@ struct SyslogSinkStatistics {
     mutable std::mutex stats_mutex;
     
     SyslogSinkStatistics() : start_time(std::chrono::steady_clock::now()) {}
-    
+
+    // Copy constructor - needed for returning statistics
+    SyslogSinkStatistics(const SyslogSinkStatistics& other)
+        : messages_processed(other.messages_processed.load())
+        , messages_filtered(other.messages_filtered.load())
+        , messages_dropped(other.messages_dropped.load())
+        , messages_sent(other.messages_sent.load())
+        , messages_failed(other.messages_failed.load())
+        , bytes_sent(other.bytes_sent.load())
+        , connection_failures(other.connection_failures.load())
+        , fallback_activations(other.fallback_activations.load())
+        , start_time(other.start_time)
+        , total_processing_time(other.total_processing_time)
+        , min_processing_time(other.min_processing_time)
+        , max_processing_time(other.max_processing_time) {}
+
+    // Move constructor
+    SyslogSinkStatistics(SyslogSinkStatistics&& other) noexcept
+        : messages_processed(other.messages_processed.load())
+        , messages_filtered(other.messages_filtered.load())
+        , messages_dropped(other.messages_dropped.load())
+        , messages_sent(other.messages_sent.load())
+        , messages_failed(other.messages_failed.load())
+        , bytes_sent(other.bytes_sent.load())
+        , connection_failures(other.connection_failures.load())
+        , fallback_activations(other.fallback_activations.load())
+        , start_time(other.start_time)
+        , total_processing_time(other.total_processing_time)
+        , min_processing_time(other.min_processing_time)
+        , max_processing_time(other.max_processing_time) {}
+
+    // Copy assignment
+    SyslogSinkStatistics& operator=(const SyslogSinkStatistics& other) {
+        if (this != &other) {
+            messages_processed.store(other.messages_processed.load());
+            messages_filtered.store(other.messages_filtered.load());
+            messages_dropped.store(other.messages_dropped.load());
+            messages_sent.store(other.messages_sent.load());
+            messages_failed.store(other.messages_failed.load());
+            bytes_sent.store(other.bytes_sent.load());
+            connection_failures.store(other.connection_failures.load());
+            fallback_activations.store(other.fallback_activations.load());
+            start_time = other.start_time;
+            total_processing_time = other.total_processing_time;
+            min_processing_time = other.min_processing_time;
+            max_processing_time = other.max_processing_time;
+        }
+        return *this;
+    }
+
     /**
      * @brief Get messages per second
      */

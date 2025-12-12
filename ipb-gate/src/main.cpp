@@ -10,22 +10,25 @@
 
 namespace {
 
+// Version constant
+constexpr const char* IPB_GATE_VERSION = "1.0.0";
+
 // Global orchestrator instance for signal handling
-std::unique_ptr<ipb::gate::Orchestrator> g_orchestrator;
+std::unique_ptr<ipb::gate::IPBOrchestrator> g_orchestrator;
 
 /**
  * @brief Signal handler for graceful shutdown
  */
 void signal_handler(int signal) {
     std::cout << "\nReceived signal " << signal << ", initiating graceful shutdown..." << std::endl;
-    
-    if (g_orchestrator) {
-        g_orchestrator->handle_signal(signal);
+
+    if (g_orchestrator && g_orchestrator->is_running()) {
+        g_orchestrator->stop();
     }
-    
+
     // Give some time for graceful shutdown
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    
+
     if (signal == SIGTERM || signal == SIGINT) {
         std::exit(0);
     }
@@ -47,7 +50,7 @@ void setup_signal_handlers() {
  */
 void print_usage(const char* program_name) {
     std::cout << "IPB Gate - Industrial Protocol Bridge Gateway\n"
-              << "Version: " << ipb::gate::Orchestrator::COMPONENT_VERSION << "\n\n"
+              << "Version: " << IPB_GATE_VERSION << "\n\n"
               << "Usage: " << program_name << " [OPTIONS]\n\n"
               << "Options:\n"
               << "  -c, --config FILE     Configuration file path (required)\n"
@@ -77,7 +80,7 @@ void print_usage(const char* program_name) {
  * @brief Print version information
  */
 void print_version() {
-    std::cout << "IPB Gate " << ipb::gate::Orchestrator::COMPONENT_VERSION << "\n"
+    std::cout << "IPB Gate " << IPB_GATE_VERSION << "\n"
               << "Industrial Protocol Bridge Gateway\n"
               << "Built with C++20, optimized for real-time performance\n"
               << "\nSupported protocols:\n"
@@ -190,35 +193,38 @@ bool daemonize() {
  */
 int test_configuration(const std::string& config_file_path) {
     std::cout << "Testing configuration file: " << config_file_path << std::endl;
-    
-    auto config_result = ipb::gate::OrchestratorConfig::load_from_file(config_file_path);
-    if (!config_result.is_success()) {
-        std::cerr << "Error: Failed to load configuration: " 
-                  << config_result.error_message() << std::endl;
+
+    try {
+        // Try to create and initialize an orchestrator with the config
+        auto orchestrator = ipb::gate::OrchestratorFactory::create(config_file_path);
+        if (!orchestrator) {
+            std::cerr << "Error: Failed to create orchestrator" << std::endl;
+            return 1;
+        }
+
+        auto init_result = orchestrator->initialize();
+        if (!init_result.is_success()) {
+            std::cerr << "Error: Configuration validation failed: "
+                      << init_result.message() << std::endl;
+            return 1;
+        }
+
+        std::cout << "Configuration is valid!" << std::endl;
+
+        // Print configuration summary
+        const auto& config = orchestrator->get_config();
+        std::cout << "\nConfiguration Summary:" << std::endl;
+        std::cout << "  Instance ID: " << config.instance_id << std::endl;
+        std::cout << "  Log level: " << config.log_level << std::endl;
+        std::cout << "  Real-time scheduling: " << (config.scheduler.enable_realtime_priority ? "enabled" : "disabled") << std::endl;
+        std::cout << "  Hot reload: " << (config.enable_hot_reload ? "enabled" : "disabled") << std::endl;
+
+        return 0;
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
-    
-    auto validation_result = config_result.value().validate();
-    if (!validation_result.is_success()) {
-        std::cerr << "Error: Configuration validation failed: "
-                  << validation_result.error_message() << std::endl;
-        return 1;
-    }
-    
-    std::cout << "Configuration is valid!" << std::endl;
-    
-    // Print configuration summary
-    const auto& config = config_result.value();
-    std::cout << "\nConfiguration Summary:" << std::endl;
-    std::cout << "  Instance name: " << config.instance_name << std::endl;
-    std::cout << "  Log level: " << config.log_level << std::endl;
-    std::cout << "  Real-time scheduling: " << (config.enable_realtime_scheduling ? "enabled" : "disabled") << std::endl;
-    std::cout << "  EDF scheduling: " << (config.enable_edf_scheduling ? "enabled" : "disabled") << std::endl;
-    std::cout << "  Worker threads: " << config.worker_thread_count << std::endl;
-    std::cout << "  Monitoring: " << (config.enable_monitoring ? "enabled" : "disabled") << std::endl;
-    std::cout << "  Hot reload: " << (config.enable_hot_reload ? "enabled" : "disabled") << std::endl;
-    
-    return 0;
 }
 
 /**
@@ -229,23 +235,35 @@ int show_status(const std::string& config_file_path) {
     // For now, just show configuration info
     std::cout << "IPB Gate System Status" << std::endl;
     std::cout << "======================" << std::endl;
-    
-    // Try to load configuration
-    auto config_result = ipb::gate::OrchestratorConfig::load_from_file(config_file_path);
-    if (!config_result.is_success()) {
-        std::cerr << "Error: Cannot load configuration: " 
-                  << config_result.error_message() << std::endl;
+
+    try {
+        auto orchestrator = ipb::gate::OrchestratorFactory::create(config_file_path);
+        if (!orchestrator) {
+            std::cerr << "Error: Cannot create orchestrator" << std::endl;
+            return 1;
+        }
+
+        auto init_result = orchestrator->initialize();
+        if (!init_result.is_success()) {
+            std::cerr << "Error: Cannot load configuration: "
+                      << init_result.message() << std::endl;
+            return 1;
+        }
+
+        const auto& config = orchestrator->get_config();
+        std::cout << "Configuration: " << config_file_path << std::endl;
+        std::cout << "Instance: " << config.instance_id << std::endl;
+        std::cout << "Status: Configuration loaded successfully" << std::endl;
+
+        // TODO: Connect to running instance via IPC/socket to get real status
+        std::cout << "\nNote: To get runtime status, the service must be running." << std::endl;
+
+        return 0;
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
-    
-    std::cout << "Configuration: " << config_file_path << std::endl;
-    std::cout << "Instance: " << config_result.value().instance_name << std::endl;
-    std::cout << "Status: Configuration loaded successfully" << std::endl;
-    
-    // TODO: Connect to running instance via IPC/socket to get real status
-    std::cout << "\nNote: To get runtime status, the service must be running." << std::endl;
-    
-    return 0;
 }
 
 /**
@@ -407,65 +425,65 @@ int main(int argc, char* argv[]) {
         }
         
         // Initialize orchestrator
-        auto init_result = g_orchestrator->initialize(config_file_path);
+        auto init_result = g_orchestrator->initialize();
         if (!init_result.is_success()) {
-            std::cerr << "Error: Failed to initialize orchestrator: " 
-                      << init_result.error_message() << std::endl;
+            std::cerr << "Error: Failed to initialize orchestrator: "
+                      << init_result.message() << std::endl;
             return 1;
         }
-        
+
         // Start orchestrator
         auto start_result = g_orchestrator->start();
         if (!start_result.is_success()) {
-            std::cerr << "Error: Failed to start orchestrator: " 
-                      << start_result.error_message() << std::endl;
+            std::cerr << "Error: Failed to start orchestrator: "
+                      << start_result.message() << std::endl;
             return 1;
         }
-        
+
         if (!quiet) {
             std::cout << "IPB Gate started successfully" << std::endl;
             if (verbose) {
-                auto metrics = g_orchestrator->get_system_metrics();
+                auto metrics = g_orchestrator->get_metrics();
                 std::cout << "System metrics:" << std::endl;
-                std::cout << "  Components: " << metrics.component_metrics.size() << std::endl;
-                std::cout << "  Worker threads: " << g_orchestrator->get_configuration().worker_thread_count << std::endl;
-                std::cout << "  EDF scheduling: " << (g_orchestrator->get_configuration().enable_edf_scheduling ? "enabled" : "disabled") << std::endl;
+                std::cout << "  Messages processed: " << metrics.messages_processed.load() << std::endl;
+                std::cout << "  Router threads: " << g_orchestrator->get_config().router.thread_pool_size << std::endl;
+                std::cout << "  RT scheduling: " << (g_orchestrator->get_config().scheduler.enable_realtime_priority ? "enabled" : "disabled") << std::endl;
             }
         }
-        
+
         // Main loop - wait for shutdown signal
         while (g_orchestrator->is_running()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            
+
             // Periodic health check in verbose mode
             if (verbose && !daemon_mode) {
                 static auto last_health_check = std::chrono::steady_clock::now();
                 auto now = std::chrono::steady_clock::now();
-                
+
                 if (now - last_health_check > std::chrono::seconds(10)) {
-                    auto health = g_orchestrator->get_system_health();
-                    std::cout << "System health: " << static_cast<int>(health) << std::endl;
+                    bool health = g_orchestrator->is_healthy();
+                    std::cout << "System health: " << (health ? "OK" : "DEGRADED") << std::endl;
                     last_health_check = now;
                 }
             }
         }
-        
+
         if (!quiet) {
             std::cout << "IPB Gate shutting down..." << std::endl;
         }
-        
+
         // Stop orchestrator
         auto stop_result = g_orchestrator->stop();
         if (!stop_result.is_success()) {
-            std::cerr << "Warning: Error during shutdown: " 
-                      << stop_result.error_message() << std::endl;
+            std::cerr << "Warning: Error during shutdown: "
+                      << stop_result.message() << std::endl;
         }
-        
+
         // Final shutdown
         auto shutdown_result = g_orchestrator->shutdown();
         if (!shutdown_result.is_success()) {
-            std::cerr << "Warning: Error during final shutdown: " 
-                      << shutdown_result.error_message() << std::endl;
+            std::cerr << "Warning: Error during final shutdown: "
+                      << shutdown_result.message() << std::endl;
         }
         
         if (!quiet) {

@@ -45,7 +45,7 @@ common::Result<void> IPBOrchestrator::initialize() {
         IPB_LOG_DEBUG(LOG_CAT, "Loading configuration from: " << config_file_path_);
         auto load_result = load_config();
         if (IPB_UNLIKELY(!load_result.is_success())) {
-            IPB_LOG_ERROR(LOG_CAT, "Failed to load configuration: " << load_result.get_error());
+            IPB_LOG_ERROR(LOG_CAT, "Failed to load configuration: " << load_result.message());
             return load_result;
         }
 
@@ -53,7 +53,7 @@ common::Result<void> IPBOrchestrator::initialize() {
         IPB_LOG_DEBUG(LOG_CAT, "Validating configuration...");
         auto validate_result = validate_config();
         if (IPB_UNLIKELY(!validate_result.is_success())) {
-            IPB_LOG_ERROR(LOG_CAT, "Configuration validation failed: " << validate_result.get_error());
+            IPB_LOG_ERROR(LOG_CAT, "Configuration validation failed: " << validate_result.message());
             return validate_result;
         }
 
@@ -79,7 +79,7 @@ common::Result<void> IPBOrchestrator::initialize() {
         router_config.routing_table_size = config_.router.routing_table_size;
         router_config.routing_timeout = config_.router.routing_timeout;
         
-        router_ = std::make_unique<router::IPBRouter>(router_config);
+        router_ = std::make_unique<router::Router>(router_config);
         auto router_init_result = router_->initialize();
         if (!router_init_result.is_success()) {
             return router_init_result;
@@ -111,10 +111,10 @@ common::Result<void> IPBOrchestrator::initialize() {
         // Setup signal handlers
         setup_signal_handlers();
         
-        return common::Result<void>::success();
+        return common::Result<void>();
         
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
             "Failed to initialize orchestrator: " + std::string(e.what())
         );
     }
@@ -125,7 +125,7 @@ common::Result<void> IPBOrchestrator::start() {
 
     if (IPB_UNLIKELY(running_.load())) {
         IPB_LOG_WARN(LOG_CAT, "Orchestrator is already running");
-        return common::Result<void>::failure("Orchestrator is already running");
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,"Orchestrator is already running");
     }
 
     IPB_LOG_INFO(LOG_CAT, "Starting IPB Orchestrator...");
@@ -139,7 +139,7 @@ common::Result<void> IPBOrchestrator::start() {
         auto router_start_result = router_->start();
         if (IPB_UNLIKELY(!router_start_result.is_success())) {
             running_.store(false);
-            IPB_LOG_ERROR(LOG_CAT, "Failed to start router: " << router_start_result.get_error());
+            IPB_LOG_ERROR(LOG_CAT, "Failed to start router: " << router_start_result.message());
             return router_start_result;
         }
 
@@ -149,7 +149,7 @@ common::Result<void> IPBOrchestrator::start() {
             auto start_result = start_scoop(scoop_id);
             if (!start_result.is_success()) {
                 IPB_LOG_ERROR(LOG_CAT, "Failed to start scoop " << scoop_id << ": "
-                             << start_result.get_error());
+                             << start_result.message());
                 metrics_.scoop_errors.fetch_add(1);
             } else {
                 IPB_LOG_DEBUG(LOG_CAT, "Started scoop: " << scoop_id);
@@ -162,7 +162,7 @@ common::Result<void> IPBOrchestrator::start() {
             auto start_result = start_sink(sink_id);
             if (!start_result.is_success()) {
                 IPB_LOG_ERROR(LOG_CAT, "Failed to start sink " << sink_id << ": "
-                             << start_result.get_error());
+                             << start_result.message());
                 metrics_.sink_errors.fetch_add(1);
             } else {
                 IPB_LOG_DEBUG(LOG_CAT, "Started sink: " << sink_id);
@@ -190,11 +190,11 @@ common::Result<void> IPBOrchestrator::start() {
         // Reset metrics
         metrics_ = GatewayMetrics{};
         
-        return common::Result<void>::success();
+        return common::Result<void>();
         
     } catch (const std::exception& e) {
         running_.store(false);
-        return common::Result<void>::failure(
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
             "Failed to start orchestrator: " + std::string(e.what())
         );
     }
@@ -205,7 +205,7 @@ common::Result<void> IPBOrchestrator::stop() {
 
     if (IPB_UNLIKELY(!running_.load())) {
         IPB_LOG_DEBUG(LOG_CAT, "Orchestrator stop called but not running");
-        return common::Result<void>::success();
+        return common::Result<void>();
     }
 
     IPB_LOG_INFO(LOG_CAT, "Stopping IPB Orchestrator...");
@@ -241,7 +241,7 @@ common::Result<void> IPBOrchestrator::stop() {
             auto stop_result = stop_scoop(scoop_id);
             if (!stop_result.is_success()) {
                 IPB_LOG_WARN(LOG_CAT, "Failed to stop scoop " << scoop_id << ": "
-                            << stop_result.get_error());
+                            << stop_result.message());
             }
         }
 
@@ -251,7 +251,7 @@ common::Result<void> IPBOrchestrator::stop() {
             auto stop_result = stop_sink(sink_id);
             if (!stop_result.is_success()) {
                 IPB_LOG_WARN(LOG_CAT, "Failed to stop sink " << sink_id << ": "
-                            << stop_result.get_error());
+                            << stop_result.message());
             }
         }
 
@@ -260,16 +260,16 @@ common::Result<void> IPBOrchestrator::stop() {
             IPB_LOG_DEBUG(LOG_CAT, "Stopping router...");
             auto router_stop_result = router_->stop();
             if (!router_stop_result.is_success()) {
-                IPB_LOG_WARN(LOG_CAT, "Failed to stop router: " << router_stop_result.get_error());
+                IPB_LOG_WARN(LOG_CAT, "Failed to stop router: " << router_stop_result.message());
             }
         }
 
         IPB_LOG_INFO(LOG_CAT, "IPB Orchestrator stopped");
-        return common::Result<void>::success();
+        return common::Result<void>();
 
     } catch (const std::exception& e) {
         IPB_LOG_ERROR(LOG_CAT, "Exception during orchestrator stop: " << e.what());
-        return common::Result<void>::failure(
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
             "Failed to stop orchestrator: " + std::string(e.what())
         );
     }
@@ -300,10 +300,10 @@ common::Result<void> IPBOrchestrator::shutdown() {
             router_.reset();
         }
         
-        return common::Result<void>::success();
+        return common::Result<void>();
         
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
             "Failed to shutdown orchestrator: " + std::string(e.what())
         );
     }
@@ -341,7 +341,7 @@ common::Result<void> IPBOrchestrator::load_config() {
         std::lock_guard<std::mutex> lock(config_mutex_);
         
         if (!std::ifstream(config_file_path_).good()) {
-            return common::Result<void>::failure(
+            return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
                 "Configuration file not found: " + config_file_path_
             );
         }
@@ -395,10 +395,10 @@ common::Result<void> IPBOrchestrator::load_config() {
         
         // Load adapters
         if (yaml_config["adapters"]) {
-            config_.adapters.clear();
+            config_.scoops.clear();
             for (const auto& adapter_node : yaml_config["adapters"]) {
                 std::string scoop_id = adapter_node["id"].as<std::string>();
-                config_.adapters[scoop_id] = adapter_node;
+                config_.scoops[scoop_id] = adapter_node;
             }
         }
         
@@ -436,10 +436,10 @@ common::Result<void> IPBOrchestrator::load_config() {
             }
         }
         
-        return common::Result<void>::success();
+        return common::Result<void>();
         
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
             "Failed to load configuration: " + std::string(e.what())
         );
     }
@@ -448,18 +448,18 @@ common::Result<void> IPBOrchestrator::load_config() {
 common::Result<void> IPBOrchestrator::validate_config() const {
     // Basic validation
     if (config_.instance_id.empty()) {
-        return common::Result<void>::failure("Instance ID cannot be empty");
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,"Instance ID cannot be empty");
     }
     
     if (config_.scheduler.realtime_priority < 1 || config_.scheduler.realtime_priority > 99) {
-        return common::Result<void>::failure("Real-time priority must be between 1 and 99");
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,"Real-time priority must be between 1 and 99");
     }
     
     if (config_.router.thread_pool_size == 0) {
-        return common::Result<void>::failure("Router thread pool size must be greater than 0");
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,"Router thread pool size must be greater than 0");
     }
     
-    return common::Result<void>::success();
+    return common::Result<void>();
 }
 
 common::Result<void> IPBOrchestrator::load_sinks() {
@@ -471,7 +471,7 @@ common::Result<void> IPBOrchestrator::load_sinks() {
             
             auto sink = create_sink(sink_type, sink_config);
             if (!sink) {
-                return common::Result<void>::failure(
+                return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
                     "Failed to create sink: " + sink_id + " (type: " + sink_type + ")"
                 );
             }
@@ -484,24 +484,24 @@ common::Result<void> IPBOrchestrator::load_sinks() {
             
             auto init_result = sink->initialize(config_path);
             if (!init_result.is_success()) {
-                return common::Result<void>::failure(
-                    "Failed to initialize sink " + sink_id + ": " + init_result.get_error()
+                return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
+                    "Failed to initialize sink " + sink_id + ": " + init_result.message()
                 );
             }
             
             sinks_[sink_id] = sink;
         }
         
-        return common::Result<void>::success();
+        return common::Result<void>();
         
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
             "Failed to load sinks: " + std::string(e.what())
         );
     }
 }
 
-std::shared_ptr<common::IIPBSink> IPBOrchestrator::create_sink(const std::string& type, const YAML::Node& config) {
+std::shared_ptr<common::ISink> IPBOrchestrator::create_sink(const std::string& type, const YAML::Node& config) {
     try {
         if (type == "console") {
             // Create console sink configuration
@@ -606,7 +606,7 @@ std::shared_ptr<common::IIPBSink> IPBOrchestrator::create_sink(const std::string
 common::Result<void> IPBOrchestrator::start_sink(const std::string& sink_id) {
     auto it = sinks_.find(sink_id);
     if (it == sinks_.end()) {
-        return common::Result<void>::failure("Sink not found: " + sink_id);
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,"Sink not found: " + sink_id);
     }
     
     return it->second->start();
@@ -615,7 +615,7 @@ common::Result<void> IPBOrchestrator::start_sink(const std::string& sink_id) {
 common::Result<void> IPBOrchestrator::stop_sink(const std::string& sink_id) {
     auto it = sinks_.find(sink_id);
     if (it == sinks_.end()) {
-        return common::Result<void>::failure("Sink not found: " + sink_id);
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,"Sink not found: " + sink_id);
     }
     
     return it->second->stop();
@@ -699,7 +699,7 @@ void IPBOrchestrator::monitor_config_file() {
                 std::cout << "Configuration file changed, reloading..." << std::endl;
                 auto reload_result = reload_config();
                 if (!reload_result.is_success()) {
-                    std::cerr << "Failed to reload configuration: " << reload_result.get_error() << std::endl;
+                    std::cerr << "Failed to reload configuration: " << reload_result.message() << std::endl;
                 } else {
                     std::cout << "Configuration reloaded successfully" << std::endl;
                 }
@@ -742,10 +742,10 @@ common::Result<void> IPBOrchestrator::reload_config() {
         // For now, just log that configuration was reloaded
         std::cout << "Configuration reloaded (full restart required for all changes)" << std::endl;
         
-        return common::Result<void>::success();
+        return common::Result<void>();
         
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
+        return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
             "Failed to reload configuration: " + std::string(e.what())
         );
     }
@@ -754,12 +754,12 @@ common::Result<void> IPBOrchestrator::reload_config() {
 // Stub implementations for missing methods
 common::Result<void> IPBOrchestrator::load_scoops() {
     // TODO: Implement adapter loading
-    return common::Result<void>::success();
+    return common::Result<void>();
 }
 
 common::Result<void> IPBOrchestrator::setup_routing() {
     // TODO: Implement routing setup
-    return common::Result<void>::success();
+    return common::Result<void>();
 }
 
 std::shared_ptr<common::IProtocolSource> IPBOrchestrator::create_scoop(const std::string& type, const YAML::Node& config) {
@@ -769,12 +769,12 @@ std::shared_ptr<common::IProtocolSource> IPBOrchestrator::create_scoop(const std
 
 common::Result<void> IPBOrchestrator::start_scoop(const std::string& scoop_id) {
     // TODO: Implement adapter start
-    return common::Result<void>::success();
+    return common::Result<void>();
 }
 
 common::Result<void> IPBOrchestrator::stop_scoop(const std::string& scoop_id) {
     // TODO: Implement adapter stop
-    return common::Result<void>::success();
+    return common::Result<void>();
 }
 
 void IPBOrchestrator::setup_mqtt_commands() {
