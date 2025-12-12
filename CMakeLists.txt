@@ -1,4 +1,5 @@
 # IPB - Industrial Protocol Bridge
+# Restructured for modular distribution
 cmake_minimum_required(VERSION 3.16)
 
 project(IPB VERSION 1.5.0 LANGUAGES CXX)
@@ -13,47 +14,84 @@ include(IPBOptions)
 include(IPBDependencies)
 include(IPBPrintConfig)
 
-# Build options
-option(BUILD_TESTING "Build tests" OFF)
-option(BUILD_EXAMPLES "Build examples" ON)
-option(BUILD_ALL_COMPONENTS "Build all components" ON)
+# ============================================================================
+# BUILD OPTIONS
+# ============================================================================
 
-# Individual component options
-option(BUILD_COMMON "Build libipb-common" ON)
-option(BUILD_ROUTER "Build libipb-router" ON)
-option(BUILD_GATE "Build ipb-gate" ON)
-
-# Sink options
-option(ENABLE_CONSOLE_SINK "Enable Console sink" ON)
-option(ENABLE_SYSLOG_SINK "Enable Syslog sink" ON)
-option(ENABLE_MQTT_SINK "Enable MQTT sink" ON)
-
-# Scoop options (data collectors)
-option(ENABLE_MODBUS_SCOOP "Enable Modbus scoop" OFF)
-option(ENABLE_OPCUA_SCOOP "Enable OPC UA scoop" OFF)
-option(ENABLE_MQTT_SCOOP "Enable MQTT scoop" ON)
-option(ENABLE_SPARKPLUG_SCOOP "Enable Sparkplug B scoop" OFF)
-
-# Sparkplug sink option
-option(ENABLE_SPARKPLUG_SINK "Enable Sparkplug B sink" OFF)
-
-# Transport options (shared libraries)
-option(BUILD_TRANSPORT_MQTT "Build MQTT transport (shared by MQTT/Sparkplug)" ON)
-option(BUILD_TRANSPORT_HTTP "Build HTTP transport" ON)
-option(BUILD_TRANSPORT_WEBSOCKET "Build WebSocket transport" ON)
-
-# Performance options
-option(ENABLE_OPTIMIZATIONS "Enable performance optimizations" ON)
-option(ENABLE_LTO "Enable Link Time Optimization" OFF)
+# Build profiles
+option(IPB_EMBEDDED "Build for embedded systems (minimal footprint)" OFF)
+option(IPB_FULL "Build all components" OFF)
 
 # Development options
+option(BUILD_TESTING "Build tests" OFF)
+option(BUILD_EXAMPLES "Build examples" ON)
+option(ENABLE_OPTIMIZATIONS "Enable performance optimizations" ON)
+option(ENABLE_LTO "Enable Link Time Optimization" OFF)
 option(ENABLE_SANITIZERS "Enable sanitizers (Debug builds)" OFF)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
 
-# Platform detection
+# Core components (always built)
+set(BUILD_CORE ON)
+
+# Sink options
+option(IPB_SINK_CONSOLE "Enable Console sink" ON)
+option(IPB_SINK_SYSLOG "Enable Syslog sink" ON)
+option(IPB_SINK_MQTT "Enable MQTT sink" ON)
+option(IPB_SINK_KAFKA "Enable Kafka sink" OFF)
+option(IPB_SINK_SPARKPLUG "Enable Sparkplug B sink" OFF)
+option(IPB_SINK_ZMQ "Enable ZeroMQ sink" OFF)
+
+# Scoop options (data collectors)
+option(IPB_SCOOP_CONSOLE "Enable Console scoop" OFF)
+option(IPB_SCOOP_MODBUS "Enable Modbus scoop" OFF)
+option(IPB_SCOOP_OPCUA "Enable OPC UA scoop" OFF)
+option(IPB_SCOOP_MQTT "Enable MQTT scoop" ON)
+option(IPB_SCOOP_SPARKPLUG "Enable Sparkplug B scoop" OFF)
+
+# Transport options
+option(IPB_TRANSPORT_MQTT "Build MQTT transport" ON)
+option(IPB_TRANSPORT_HTTP "Build HTTP transport" ON)
+
+# Application options
+option(IPB_BUILD_GATE "Build ipb-gate application" ON)
+
+# ============================================================================
+# BUILD PROFILES
+# ============================================================================
+
+if(IPB_EMBEDDED)
+    message(STATUS "IPB: Embedded profile - minimal build")
+    set(IPB_SINK_CONSOLE ON)
+    set(IPB_SINK_SYSLOG OFF)
+    set(IPB_SINK_MQTT OFF)
+    set(IPB_SINK_KAFKA OFF)
+    set(IPB_BUILD_GATE OFF)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os")
+    add_compile_definitions(IPB_EMBEDDED=1)
+endif()
+
+if(IPB_FULL)
+    message(STATUS "IPB: Full profile - all components")
+    set(IPB_SINK_CONSOLE ON)
+    set(IPB_SINK_SYSLOG ON)
+    set(IPB_SINK_MQTT ON)
+    set(IPB_SINK_KAFKA ON)
+    set(IPB_SINK_SPARKPLUG ON)
+    set(IPB_SCOOP_MODBUS ON)
+    set(IPB_SCOOP_OPCUA ON)
+    set(IPB_SCOOP_MQTT ON)
+    set(IPB_SCOOP_SPARKPLUG ON)
+    set(IPB_TRANSPORT_MQTT ON)
+    set(IPB_TRANSPORT_HTTP ON)
+    set(IPB_BUILD_GATE ON)
+endif()
+
+# ============================================================================
+# PLATFORM DETECTION
+# ============================================================================
+
 if(APPLE)
     set(PLATFORM_MACOS TRUE)
-    # Use Homebrew prefix for dependencies
     if(NOT CMAKE_PREFIX_PATH)
         execute_process(
             COMMAND brew --prefix
@@ -70,24 +108,24 @@ elseif(UNIX)
     set(PLATFORM_LINUX TRUE)
 endif()
 
-# Find common dependencies
+# ============================================================================
+# DEPENDENCIES
+# ============================================================================
+
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
-# Find jsoncpp (handle multiple target names and conflicts)
+# Find jsoncpp
 if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
     find_package(jsoncpp QUIET)
     if(NOT jsoncpp_FOUND)
         pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-        # Create imported target
         add_library(jsoncpp_lib INTERFACE IMPORTED)
         set_target_properties(jsoncpp_lib PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIRS}"
             INTERFACE_LINK_LIBRARIES "${JSONCPP_LIBRARIES}"
         )
     endif()
-else()
-    message(STATUS "jsoncpp target already exists, reusing it")
 endif()
 
 # Find YAML-CPP
@@ -96,24 +134,19 @@ if(NOT yaml-cpp_FOUND)
     pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
 endif()
 
-# Global include directories
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/libipb-common/include
-)
+# ============================================================================
+# COMPILER FLAGS
+# ============================================================================
 
-# Global compiler flags
 if(ENABLE_OPTIMIZATIONS)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-    
     if(NOT APPLE)
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
     endif()
-    
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
 endif()
 
-# Link Time Optimization
 if(ENABLE_LTO)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT LTO_SUPPORTED OUTPUT LTO_ERROR)
@@ -125,7 +158,6 @@ if(ENABLE_LTO)
     endif()
 endif()
 
-# Sanitizers (Debug builds only)
 if(ENABLE_SANITIZERS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(SANITIZER_FLAGS "-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZER_FLAGS}")
@@ -133,146 +165,123 @@ if(ENABLE_SANITIZERS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "Sanitizers enabled for Debug builds")
 endif()
 
-# Code coverage
 if(ENABLE_COVERAGE AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} --coverage")
     set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} --coverage")
     message(STATUS "Code coverage enabled")
 endif()
 
-# Helper function to conditionally add subdirectory
-function(conditional_add_subdirectory dir condition)
+# ============================================================================
+# GLOBAL INCLUDE DIRECTORIES
+# ============================================================================
+
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/common/include
+)
+
+# ============================================================================
+# BUILD COMPONENTS
+# ============================================================================
+
+# Helper function
+function(ipb_add_subdirectory dir condition)
     if(${condition})
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${dir}/CMakeLists.txt")
             add_subdirectory(${dir})
-            message(STATUS "Building component: ${dir}")
+            message(STATUS "Building: ${dir}")
         else()
-            message(WARNING "Component ${dir} requested but CMakeLists.txt not found")
+            message(WARNING "${dir} requested but CMakeLists.txt not found")
         endif()
     else()
-        message(STATUS "Skipping component: ${dir}")
+        message(STATUS "Skipping: ${dir}")
     endif()
 endfunction()
 
-# Build components based on options
-if(BUILD_ALL_COMPONENTS OR BUILD_COMMON)
-    conditional_add_subdirectory(libipb-common TRUE)
+# --- CORE (always built) ---
+add_subdirectory(core)
+
+# --- TRANSPORT LAYERS ---
+# Check MQTT transport dependencies
+set(MQTT_TRANSPORT_AVAILABLE FALSE)
+if(IPB_TRANSPORT_MQTT OR IPB_SINK_MQTT OR IPB_SCOOP_MQTT OR IPB_SINK_SPARKPLUG OR IPB_SCOOP_SPARKPLUG)
+    find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
+    find_library(PAHO_MQTT_C_LIB paho-mqtt3as)
+    if(PAHO_MQTT_CPP_LIB AND PAHO_MQTT_C_LIB)
+        set(MQTT_TRANSPORT_AVAILABLE TRUE)
+        ipb_add_subdirectory(transport/mqtt TRUE)
+    else()
+        message(WARNING "MQTT libraries not found. MQTT components disabled.")
+        set(IPB_SINK_MQTT OFF)
+        set(IPB_SCOOP_MQTT OFF)
+        set(IPB_SINK_SPARKPLUG OFF)
+        set(IPB_SCOOP_SPARKPLUG OFF)
+    endif()
 endif()
 
-# Security/TLS Layer (depends on common)
-option(BUILD_SECURITY "Build libipb-security" ON)
-if(BUILD_ALL_COMPONENTS OR BUILD_SECURITY)
-    conditional_add_subdirectory(libipb-security BUILD_SECURITY)
-endif()
-
-if(BUILD_ALL_COMPONENTS OR BUILD_ROUTER)
-    conditional_add_subdirectory(libipb-router BUILD_ROUTER)
-endif()
-
-# Sinks
-if(BUILD_ALL_COMPONENTS OR ENABLE_CONSOLE_SINK)
-    conditional_add_subdirectory(libipb-sink-console ENABLE_CONSOLE_SINK)
-endif()
-
-if(BUILD_ALL_COMPONENTS OR ENABLE_SYSLOG_SINK)
-    conditional_add_subdirectory(libipb-sink-syslog ENABLE_SYSLOG_SINK)
-endif()
-
-# MQTT Transport Layer (shared by MQTT sink/scoop and Sparkplug sink/scoop)
-# Build if any MQTT-based component is enabled
-set(NEED_MQTT_TRANSPORT FALSE)
-if(ENABLE_MQTT_SINK OR ENABLE_MQTT_SCOOP OR ENABLE_SPARKPLUG_SINK OR ENABLE_SPARKPLUG_SCOOP OR BUILD_TRANSPORT_MQTT)
-    set(NEED_MQTT_TRANSPORT TRUE)
-endif()
-
-# HTTP Transport Layer
-if(BUILD_TRANSPORT_HTTP)
-    # Check for HTTP dependencies
+# Check HTTP transport dependencies
+set(HTTP_TRANSPORT_AVAILABLE FALSE)
+if(IPB_TRANSPORT_HTTP)
     find_package(CURL QUIET)
     if(NOT CURL_FOUND)
         find_library(CURL_LIB curl)
     endif()
-
     if(CURL_FOUND OR CURL_LIB)
-        conditional_add_subdirectory(libipb-transport-http TRUE)
-        message(STATUS "HTTP transport library enabled")
         set(HTTP_TRANSPORT_AVAILABLE TRUE)
+        ipb_add_subdirectory(transport/http TRUE)
     else()
         message(STATUS "libcurl not found. HTTP transport disabled.")
-        message(STATUS "Install with: sudo apt install libcurl4-openssl-dev")
-        set(HTTP_TRANSPORT_AVAILABLE FALSE)
     endif()
 endif()
 
-if(NEED_MQTT_TRANSPORT)
-    # Check for MQTT dependencies
-    find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
-    find_library(PAHO_MQTT_C_LIB paho-mqtt3as)
+# --- SINKS ---
+ipb_add_subdirectory(sinks/console IPB_SINK_CONSOLE)
+ipb_add_subdirectory(sinks/syslog IPB_SINK_SYSLOG)
 
-    if(PAHO_MQTT_CPP_LIB AND PAHO_MQTT_C_LIB)
-        # Build shared transport library first
-        conditional_add_subdirectory(libipb-transport-mqtt TRUE)
-        message(STATUS "MQTT transport library enabled")
-        set(MQTT_TRANSPORT_AVAILABLE TRUE)
-    else()
-        message(WARNING "MQTT libraries not found. MQTT/Sparkplug components disabled.")
-        message(STATUS "Install with: brew install paho-mqtt-c paho-mqtt-cpp (macOS)")
-        message(STATUS "Install with: sudo apt install libpaho-mqtt-dev libpaho-mqttpp-dev (Ubuntu)")
-        set(MQTT_TRANSPORT_AVAILABLE FALSE)
-        set(ENABLE_MQTT_SINK OFF)
-        set(ENABLE_SPARKPLUG_SINK OFF)
-        set(ENABLE_SPARKPLUG_SCOOP OFF)
-    endif()
+if(MQTT_TRANSPORT_AVAILABLE)
+    ipb_add_subdirectory(sinks/mqtt IPB_SINK_MQTT)
+    ipb_add_subdirectory(sinks/sparkplug IPB_SINK_SPARKPLUG)
 endif()
 
-# MQTT Sink
-if((BUILD_ALL_COMPONENTS OR ENABLE_MQTT_SINK) AND MQTT_TRANSPORT_AVAILABLE)
-    conditional_add_subdirectory(libipb-sink-mqtt ENABLE_MQTT_SINK)
-    message(STATUS "MQTT sink enabled")
+ipb_add_subdirectory(sinks/kafka IPB_SINK_KAFKA)
+ipb_add_subdirectory(sinks/zmq IPB_SINK_ZMQ)
+
+# --- SCOOPS ---
+ipb_add_subdirectory(scoops/console IPB_SCOOP_CONSOLE)
+ipb_add_subdirectory(scoops/modbus IPB_SCOOP_MODBUS)
+ipb_add_subdirectory(scoops/opcua IPB_SCOOP_OPCUA)
+
+if(MQTT_TRANSPORT_AVAILABLE)
+    ipb_add_subdirectory(scoops/mqtt IPB_SCOOP_MQTT)
+    ipb_add_subdirectory(scoops/sparkplug IPB_SCOOP_SPARKPLUG)
 endif()
 
-# MQTT Scoop
-if((BUILD_ALL_COMPONENTS OR ENABLE_MQTT_SCOOP) AND MQTT_TRANSPORT_AVAILABLE)
-    conditional_add_subdirectory(libipb-scoop-mqtt ENABLE_MQTT_SCOOP)
-    message(STATUS "MQTT scoop enabled")
-endif()
+# --- APPLICATIONS ---
+ipb_add_subdirectory(apps/ipb-gate IPB_BUILD_GATE)
 
-# Sparkplug B Sink
-if((BUILD_ALL_COMPONENTS OR ENABLE_SPARKPLUG_SINK) AND MQTT_TRANSPORT_AVAILABLE)
-    conditional_add_subdirectory(libipb-sink-sparkplug ENABLE_SPARKPLUG_SINK)
-    message(STATUS "Sparkplug B sink enabled")
-endif()
-
-# Sparkplug B Scoop
-if((BUILD_ALL_COMPONENTS OR ENABLE_SPARKPLUG_SCOOP) AND MQTT_TRANSPORT_AVAILABLE)
-    conditional_add_subdirectory(libipb-scoop-sparkplug ENABLE_SPARKPLUG_SCOOP)
-    message(STATUS "Sparkplug B scoop enabled")
-endif()
-
-# Main application
-if(BUILD_ALL_COMPONENTS OR BUILD_GATE)
-    conditional_add_subdirectory(ipb-gate BUILD_GATE)
-endif()
-
-# Examples
+# --- EXAMPLES & TESTS ---
 if(BUILD_EXAMPLES)
-    conditional_add_subdirectory(examples TRUE)
+    ipb_add_subdirectory(examples TRUE)
 endif()
 
-# Tests
 if(BUILD_TESTING)
     enable_testing()
-    conditional_add_subdirectory(tests TRUE)
+    ipb_add_subdirectory(tests TRUE)
 endif()
 
-# Create build info file (legacy)
+# ============================================================================
+# INSTALL & EXPORT
+# ============================================================================
+
+include(CMakePackageConfigHelpers)
+include(GNUInstallDirs)
+
+# Configure build info headers
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_info.hpp.in"
     "${CMAKE_CURRENT_BINARY_DIR}/include/ipb/build_info.hpp"
     @ONLY
 )
 
-# Create build config file (new multi-target system)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_config.hpp.in"
     "${CMAKE_CURRENT_BINARY_DIR}/include/ipb/common/build_config.hpp"
@@ -292,23 +301,22 @@ install(FILES
 # Add generated include directory
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 
-# Print IPB configuration banner
+# ============================================================================
+# CONFIGURATION SUMMARY
+# ============================================================================
+
 ipb_print_config()
 
-# Print build instructions
 if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
     if(PLATFORM_MACOS)
         set(NPROC_CMD "$(sysctl -n hw.ncpu)")
     else()
         set(NPROC_CMD "$(nproc)")
     endif()
-
     message(STATUS "Build with: make -j${NPROC_CMD}")
-    message(STATUS "Install with: sudo make install")
     if(BUILD_TESTING)
         message(STATUS "Test with: ctest")
     endif()
 endif()
 
 message(STATUS "")
-
