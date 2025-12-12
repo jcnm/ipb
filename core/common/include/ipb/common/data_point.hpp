@@ -208,28 +208,34 @@ public:
     
     // Zero-copy string view setter
     void set_string_view(std::string_view sv) noexcept {
-        cleanup();
+        // Clean up current external storage if any
+        if (size_ > INLINE_SIZE) {
+            external_data_.~unique_ptr();
+        }
         type_ = Type::STRING;
         size_ = sv.size();
-        
+
         if (size_ <= INLINE_SIZE) {
             std::memcpy(inline_data_, sv.data(), size_);
         } else {
-            external_data_ = std::make_unique<uint8_t[]>(size_);
+            new (&external_data_) std::unique_ptr<uint8_t[]>(std::make_unique<uint8_t[]>(size_));
             std::memcpy(external_data_.get(), sv.data(), size_);
         }
     }
-    
+
     // Zero-copy binary data setter
     void set_binary(std::span<const uint8_t> data) noexcept {
-        cleanup();
+        // Clean up current external storage if any
+        if (size_ > INLINE_SIZE) {
+            external_data_.~unique_ptr();
+        }
         type_ = Type::BINARY;
         size_ = data.size();
-        
+
         if (size_ <= INLINE_SIZE) {
             std::memcpy(inline_data_, data.data(), size_);
         } else {
-            external_data_ = std::make_unique<uint8_t[]>(size_);
+            new (&external_data_) std::unique_ptr<uint8_t[]>(std::make_unique<uint8_t[]>(size_));
             std::memcpy(external_data_.get(), data.data(), size_);
         }
     }

@@ -29,32 +29,35 @@ void Value::serialize(std::span<uint8_t> buffer) const noexcept {
 
 bool Value::deserialize(std::span<const uint8_t> buffer) noexcept {
     if (buffer.size() < sizeof(Type) + sizeof(size_t)) return false;
-    
-    cleanup();
-    
+
+    // Clean up current external storage if any
+    if (size_ > INLINE_SIZE) {
+        external_data_.~unique_ptr();
+    }
+
     size_t offset = 0;
-    
+
     // Read type
     std::memcpy(&type_, buffer.data() + offset, sizeof(Type));
     offset += sizeof(Type);
-    
+
     // Read size
     std::memcpy(&size_, buffer.data() + offset, sizeof(size_t));
     offset += sizeof(size_t);
-    
+
     // Validate remaining buffer size
     if (buffer.size() < offset + size_) return false;
-    
+
     // Read data
     if (size_ > 0) {
         if (size_ <= INLINE_SIZE) {
             std::memcpy(inline_data_, buffer.data() + offset, size_);
         } else {
-            external_data_ = std::make_unique<uint8_t[]>(size_);
+            new (&external_data_) std::unique_ptr<uint8_t[]>(std::make_unique<uint8_t[]>(size_));
             std::memcpy(external_data_.get(), buffer.data() + offset, size_);
         }
     }
-    
+
     return true;
 }
 
@@ -224,34 +227,40 @@ double Value::get_impl<double>() const noexcept {
 }
 
 void Value::copy_from(const Value& other) noexcept {
+    // Note: cleanup must be called by the caller if this is an assignment operation
+    // (constructors don't need cleanup since there's nothing to clean)
     type_ = other.type_;
     size_ = other.size_;
-    
+
     if (size_ <= INLINE_SIZE) {
         std::memcpy(inline_data_, other.inline_data_, size_);
     } else {
-        external_data_ = std::make_unique<uint8_t[]>(size_);
+        // Use placement new since external_data_ may not be constructed
+        new (&external_data_) std::unique_ptr<uint8_t[]>(std::make_unique<uint8_t[]>(size_));
         std::memcpy(external_data_.get(), other.external_data_.get(), size_);
     }
 }
 
 void Value::move_from(Value&& other) noexcept {
+    // Note: cleanup must be called by the caller if this is an assignment operation
+    // (constructors don't need cleanup since there's nothing to clean)
     type_ = other.type_;
     size_ = other.size_;
-    
+
     if (size_ <= INLINE_SIZE) {
         std::memcpy(inline_data_, other.inline_data_, size_);
     } else {
-        external_data_ = std::move(other.external_data_);
+        // Use placement new since external_data_ may not be constructed
+        new (&external_data_) std::unique_ptr<uint8_t[]>(std::move(other.external_data_));
     }
-    
+
     other.type_ = Type::EMPTY;
     other.size_ = 0;
 }
 
 void Value::cleanup() noexcept {
     if (size_ > INLINE_SIZE) {
-        external_data_.reset();
+        external_data_.~unique_ptr();
     }
     type_ = Type::EMPTY;
     size_ = 0;

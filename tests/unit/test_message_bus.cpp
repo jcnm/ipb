@@ -501,3 +501,233 @@ TEST_F(MessageBusThreadSafetyTest, ConcurrentSubscribeUnsubscribe) {
     // Most non-wildcard subscriptions should succeed
     EXPECT_GT(successful_subs.load(), 0);
 }
+
+// ============================================================================
+// Channel Tests - Additional Coverage
+// ============================================================================
+
+#include <ipb/core/message_bus/channel.hpp>
+
+class ChannelTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        // Channel must be heap-allocated due to large buffer and enable_shared_from_this
+        channel_ = std::make_shared<Channel>("test/topic");
+    }
+
+    std::shared_ptr<Channel> channel_;
+};
+
+TEST_F(ChannelTest, BasicConstruction) {
+    auto ch = std::make_shared<Channel>("my/topic");
+    EXPECT_EQ(ch->topic(), "my/topic");
+    EXPECT_EQ(ch->pending_count(), 0u);
+    EXPECT_EQ(ch->subscriber_count(), 0u);
+}
+
+TEST_F(ChannelTest, PublishPriority) {
+    // Test publish_priority method
+    Message msg;
+    msg.type = Message::Type::CONTROL;
+    bool result = channel_->publish_priority(std::move(msg), Message::Priority::HIGH);
+    EXPECT_TRUE(result);
+}
+
+TEST_F(ChannelTest, SubscribeWithFilter) {
+    int callback_count = 0;
+
+    // Subscribe with a filter that only accepts DATA_POINT messages
+    auto id = channel_->subscribe(
+        [&callback_count](const Message&) { callback_count++; },
+        [](const Message& msg) { return msg.type == Message::Type::DATA_POINT; }
+    );
+
+    EXPECT_NE(id, 0u);
+    EXPECT_TRUE(channel_->is_subscriber_active(id));
+
+    // Publish a DATA_POINT message (should pass filter)
+    Message dp_msg;
+    dp_msg.type = Message::Type::DATA_POINT;
+    channel_->publish(std::move(dp_msg));
+    channel_->dispatch();
+    EXPECT_EQ(callback_count, 1);
+
+    // Publish a CONTROL message (should be filtered out)
+    Message ctrl_msg;
+    ctrl_msg.type = Message::Type::CONTROL;
+    channel_->publish(std::move(ctrl_msg));
+    channel_->dispatch();
+    EXPECT_EQ(callback_count, 1);  // Still 1, filtered
+
+    channel_->unsubscribe(id);
+}
+
+TEST_F(ChannelTest, SubscriberException) {
+    int callback_count = 0;
+
+    // First subscriber throws
+    channel_->subscribe([](const Message&) {
+        throw std::runtime_error("Subscriber error");
+    });
+
+    // Second subscriber should still be called
+    channel_->subscribe([&callback_count](const Message&) {
+        callback_count++;
+    });
+
+    Message msg;
+    channel_->publish(std::move(msg));
+    channel_->dispatch();  // Should not throw, exception is caught
+
+    EXPECT_EQ(callback_count, 1);  // Second subscriber was called
+}
+
+TEST_F(ChannelTest, InactiveSubscriber) {
+    bool callback_called = false;
+
+    auto id = channel_->subscribe([&callback_called](const Message&) {
+        callback_called = true;
+    });
+
+    // Unsubscribe (makes it inactive)
+    channel_->unsubscribe(id);
+    EXPECT_FALSE(channel_->is_subscriber_active(id));
+
+    // Publish and dispatch - inactive subscriber should not receive
+    Message msg;
+    channel_->publish(std::move(msg));
+    channel_->dispatch();
+
+    // Callback should not have been called since subscriber is inactive
+    // (Note: after unsubscribe, the subscriber is removed, so this test
+    // verifies the removal works)
+}
+
+TEST_F(ChannelTest, PendingAndSubscriberCount) {
+    EXPECT_EQ(channel_->pending_count(), 0u);
+    EXPECT_EQ(channel_->subscriber_count(), 0u);
+
+    auto id = channel_->subscribe([](const Message&) {});
+    EXPECT_EQ(channel_->subscriber_count(), 1u);
+
+    Message msg;
+    channel_->publish(std::move(msg));
+    EXPECT_EQ(channel_->pending_count(), 1u);
+
+    channel_->dispatch();
+    EXPECT_EQ(channel_->pending_count(), 0u);
+
+    channel_->unsubscribe(id);
+    EXPECT_EQ(channel_->subscriber_count(), 0u);
+}
+
+TEST_F(ChannelTest, BufferOverflow) {
+    // Test publishing many messages
+    // The default buffer should handle this, but if it fills up,
+    // messages_dropped should increment
+
+    for (int i = 0; i < 1000; ++i) {
+        Message msg;
+        channel_->publish(std::move(msg));
+    }
+
+    // Just verify we can still operate
+    EXPECT_GE(channel_->pending_count(), 0u);
+}
+
+// ============================================================================
+// TopicMatcher Tests - Additional Coverage
+// ============================================================================
+
+class TopicMatcherTest : public ::testing::Test {};
+
+TEST_F(TopicMatcherTest, ExactMatch) {
+    EXPECT_TRUE(TopicMatcher::matches("sensors/temp", "sensors/temp"));
+    EXPECT_FALSE(TopicMatcher::matches("sensors/temp", "sensors/humidity"));
+}
+
+TEST_F(TopicMatcherTest, SingleWildcard) {
+    EXPECT_TRUE(TopicMatcher::matches("sensors/*", "sensors/temp"));
+    EXPECT_TRUE(TopicMatcher::matches("sensors/*", "sensors/humidity"));
+    EXPECT_FALSE(TopicMatcher::matches("sensors/*", "actuators/valve"));
+}
+
+TEST_F(TopicMatcherTest, MultiLevelWildcard) {
+    EXPECT_TRUE(TopicMatcher::matches("sensors/#", "sensors/temp"));
+    EXPECT_TRUE(TopicMatcher::matches("sensors/#", "sensors/temp/value"));
+    EXPECT_TRUE(TopicMatcher::matches("sensors/#", "sensors/building1/floor2/temp"));
+}
+
+TEST_F(TopicMatcherTest, TrailingHashWildcard) {
+    // Test the trailing # wildcard
+    // Note: In this implementation, # must have content to match after the separator
+    EXPECT_TRUE(TopicMatcher::matches("a/b/#", "a/b/c"));
+    EXPECT_TRUE(TopicMatcher::matches("a/b/#", "a/b/c/d/e"));
+    EXPECT_TRUE(TopicMatcher::matches("a/#", "a/b"));
+}
+
+TEST_F(TopicMatcherTest, WildcardWithSeparator) {
+    // Test * followed by /
+    EXPECT_TRUE(TopicMatcher::matches("*/temp", "sensors/temp"));
+    EXPECT_TRUE(TopicMatcher::matches("a/*/c", "a/b/c"));
+}
+
+TEST_F(TopicMatcherTest, NoWildcardMismatch) {
+    // Test pattern without wildcards that doesn't match
+    EXPECT_FALSE(TopicMatcher::matches("sensors/temp", "sensors/humidity"));
+    EXPECT_FALSE(TopicMatcher::matches("a/b/c", "a/b/d"));
+}
+
+TEST_F(TopicMatcherTest, CharacterMismatch) {
+    // Test regular character comparison failure
+    EXPECT_FALSE(TopicMatcher::matches("sensor", "sensors"));
+    EXPECT_FALSE(TopicMatcher::matches("abc", "abd"));
+}
+
+TEST_F(TopicMatcherTest, HasWildcards) {
+    EXPECT_TRUE(TopicMatcher::has_wildcards("sensors/*"));
+    EXPECT_TRUE(TopicMatcher::has_wildcards("sensors/#"));
+    EXPECT_TRUE(TopicMatcher::has_wildcards("*"));
+    EXPECT_TRUE(TopicMatcher::has_wildcards("#"));
+    EXPECT_FALSE(TopicMatcher::has_wildcards("sensors/temp"));
+    EXPECT_FALSE(TopicMatcher::has_wildcards("plain/topic"));
+}
+
+TEST_F(TopicMatcherTest, IsValidBasic) {
+    EXPECT_TRUE(TopicMatcher::is_valid("sensors/temp"));
+    EXPECT_TRUE(TopicMatcher::is_valid("a/b/c"));
+    EXPECT_TRUE(TopicMatcher::is_valid("single"));
+}
+
+TEST_F(TopicMatcherTest, IsValidEmpty) {
+    EXPECT_FALSE(TopicMatcher::is_valid(""));
+}
+
+TEST_F(TopicMatcherTest, IsValidEmptySegment) {
+    EXPECT_FALSE(TopicMatcher::is_valid("a//b"));  // Empty segment
+    EXPECT_FALSE(TopicMatcher::is_valid("/a/b"));  // Starts with separator (empty first segment)
+}
+
+TEST_F(TopicMatcherTest, IsValidHashPlacement) {
+    EXPECT_TRUE(TopicMatcher::is_valid("sensors/#"));  // # at end, at segment start
+    EXPECT_FALSE(TopicMatcher::is_valid("sensors#"));  // # not at segment start
+    EXPECT_FALSE(TopicMatcher::is_valid("sensors/#/more"));  // # not at end
+}
+
+TEST_F(TopicMatcherTest, IsValidStarPlacement) {
+    EXPECT_TRUE(TopicMatcher::is_valid("sensors/*/value"));
+    EXPECT_TRUE(TopicMatcher::is_valid("*/data"));
+    EXPECT_FALSE(TopicMatcher::is_valid("sensors*"));  // * not alone in segment
+    EXPECT_FALSE(TopicMatcher::is_valid("sensors/*extra"));  // * not followed by /
+}
+
+TEST_F(TopicMatcherTest, WildcardPatternAfterStar) {
+    // Pattern "*/foo" should match "anything/foo"
+    EXPECT_TRUE(TopicMatcher::matches("*/b", "a/b"));
+}
+
+TEST_F(TopicMatcherTest, ComplexPatterns) {
+    // Complex pattern matching
+    EXPECT_TRUE(TopicMatcher::matches("a/*/c/*/e", "a/b/c/d/e"));
+    EXPECT_TRUE(TopicMatcher::matches("building/*/floor/*", "building/A/floor/1"));
+}

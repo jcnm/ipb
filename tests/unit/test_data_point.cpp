@@ -724,6 +724,308 @@ TEST_F(RawMessageTest, Metadata) {
 }
 
 // ============================================================================
+// Value Serialization Tests
+// ============================================================================
+
+class ValueSerializationTest : public ::testing::Test {};
+
+TEST_F(ValueSerializationTest, SerializeDeserializeEmpty) {
+    Value original;
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_TRUE(restored.empty());
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeBool) {
+    Value original;
+    original.set(true);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::BOOL);
+    EXPECT_EQ(restored.get<bool>(), true);
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeInt32) {
+    Value original;
+    original.set(static_cast<int32_t>(12345678));
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::INT32);
+    EXPECT_EQ(restored.get<int32_t>(), 12345678);
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeDouble) {
+    Value original;
+    original.set(3.14159265358979);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::FLOAT64);
+    EXPECT_DOUBLE_EQ(restored.get<double>(), 3.14159265358979);
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeString) {
+    Value original;
+    original.set_string_view("Hello, World!");
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::STRING);
+    EXPECT_EQ(restored.as_string_view(), "Hello, World!");
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeLargeBinary) {
+    // Test with large data that exceeds INLINE_SIZE
+    std::vector<uint8_t> large_data(1000, 0xAB);
+
+    Value original;
+    original.set_binary(std::span<const uint8_t>(large_data));
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::BINARY);
+    EXPECT_EQ(restored.size(), 1000);
+
+    auto restored_span = restored.as_binary();
+    for (size_t i = 0; i < 1000; ++i) {
+        EXPECT_EQ(restored_span[i], 0xAB);
+    }
+}
+
+TEST_F(ValueSerializationTest, DeserializeBufferTooSmall) {
+    std::vector<uint8_t> small_buffer(2);  // Too small
+
+    Value v;
+    EXPECT_FALSE(v.deserialize(std::span<const uint8_t>(small_buffer)));
+}
+
+TEST_F(ValueSerializationTest, SerializeBufferTooSmall) {
+    Value original;
+    original.set(static_cast<int32_t>(42));
+
+    std::vector<uint8_t> small_buffer(1);  // Too small
+    original.serialize(std::span<uint8_t>(small_buffer));  // Should not crash
+}
+
+TEST_F(ValueSerializationTest, AllNumericTypes) {
+    // Test all numeric types
+    struct TestCase {
+        std::function<void(Value&)> setter;
+        Value::Type expected_type;
+    };
+
+    Value v;
+
+    v.set(static_cast<int8_t>(42));
+    EXPECT_EQ(v.type(), Value::Type::INT8);
+    EXPECT_EQ(v.get<int8_t>(), 42);
+
+    v.set(static_cast<int16_t>(1234));
+    EXPECT_EQ(v.type(), Value::Type::INT16);
+    EXPECT_EQ(v.get<int16_t>(), 1234);
+
+    v.set(static_cast<uint8_t>(255));
+    EXPECT_EQ(v.type(), Value::Type::UINT8);
+    EXPECT_EQ(v.get<uint8_t>(), 255);
+
+    v.set(static_cast<uint16_t>(65535));
+    EXPECT_EQ(v.type(), Value::Type::UINT16);
+    EXPECT_EQ(v.get<uint16_t>(), 65535);
+
+    v.set(static_cast<uint32_t>(4294967295));
+    EXPECT_EQ(v.type(), Value::Type::UINT32);
+    EXPECT_EQ(v.get<uint32_t>(), 4294967295);
+
+    v.set(static_cast<int64_t>(9223372036854775807LL));
+    EXPECT_EQ(v.type(), Value::Type::INT64);
+    EXPECT_EQ(v.get<int64_t>(), 9223372036854775807LL);
+
+    v.set(static_cast<uint64_t>(18446744073709551615ULL));
+    EXPECT_EQ(v.type(), Value::Type::UINT64);
+    EXPECT_EQ(v.get<uint64_t>(), 18446744073709551615ULL);
+
+    v.set(static_cast<float>(3.14f));
+    EXPECT_EQ(v.type(), Value::Type::FLOAT32);
+    EXPECT_FLOAT_EQ(v.get<float>(), 3.14f);
+}
+
+TEST_F(ValueSerializationTest, RoundTripAllTypes) {
+    std::vector<std::pair<Value, std::string>> test_cases;
+
+    // Bool
+    Value v1; v1.set(false);
+    test_cases.push_back({v1, "bool"});
+
+    // Int types
+    Value v2; v2.set(static_cast<int8_t>(-128));
+    test_cases.push_back({v2, "int8"});
+
+    Value v3; v3.set(static_cast<int64_t>(-9223372036854775807LL));
+    test_cases.push_back({v3, "int64"});
+
+    // Uint types
+    Value v4; v4.set(static_cast<uint64_t>(18446744073709551615ULL));
+    test_cases.push_back({v4, "uint64"});
+
+    // Float types
+    Value v5; v5.set(static_cast<float>(-1.0f / 0.0f));  // -inf
+    test_cases.push_back({v5, "float-inf"});
+
+    Value v6; v6.set(static_cast<double>(1e308));
+    test_cases.push_back({v6, "double-large"});
+
+    for (const auto& [original, name] : test_cases) {
+        std::vector<uint8_t> buffer(original.serialized_size());
+        original.serialize(std::span<uint8_t>(buffer));
+
+        Value restored;
+        EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)))
+            << "Failed for type: " << name;
+        EXPECT_EQ(restored.type(), original.type())
+            << "Type mismatch for: " << name;
+    }
+}
+
+// ============================================================================
+// DataPoint Serialization Tests
+// ============================================================================
+
+class DataPointSerializationTest : public ::testing::Test {
+protected:
+    const std::string test_address = "sensors/temp/1";
+    const uint16_t test_protocol_id = 42;
+};
+
+TEST_F(DataPointSerializationTest, SerializeDeserializeBasic) {
+    Value v;
+    v.set(42.5);
+    DataPoint original(test_address, v, test_protocol_id);
+    original.set_quality(Quality::GOOD);
+    original.set_sequence_number(12345);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    DataPoint restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+
+    EXPECT_EQ(restored.address(), test_address);
+    EXPECT_EQ(restored.protocol_id(), test_protocol_id);
+    EXPECT_EQ(restored.quality(), Quality::GOOD);
+    EXPECT_EQ(restored.sequence_number(), 12345);
+    EXPECT_DOUBLE_EQ(restored.value().get<double>(), 42.5);
+}
+
+TEST_F(DataPointSerializationTest, SerializeDeserializeLongAddress) {
+    // Test with address longer than MAX_INLINE_ADDRESS
+    std::string long_address(100, 'x');
+
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint original(long_address, v, test_protocol_id);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    DataPoint restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+
+    EXPECT_EQ(restored.address(), long_address);
+}
+
+TEST_F(DataPointSerializationTest, SerializeDeserializeWithTimestamp) {
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint original(test_address, v, test_protocol_id);
+
+    auto ts = Timestamp::now();
+    original.set_timestamp(ts);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    DataPoint restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+
+    EXPECT_EQ(restored.timestamp().nanoseconds(), ts.nanoseconds());
+}
+
+TEST_F(DataPointSerializationTest, DeserializeBufferTooSmall) {
+    std::vector<uint8_t> small_buffer(1);  // Too small
+
+    DataPoint dp;
+    EXPECT_FALSE(dp.deserialize(std::span<const uint8_t>(small_buffer)));
+}
+
+TEST_F(DataPointSerializationTest, SerializeBufferTooSmall) {
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint original(test_address, v, test_protocol_id);
+
+    std::vector<uint8_t> small_buffer(1);  // Too small
+    original.serialize(std::span<uint8_t>(small_buffer));  // Should not crash
+}
+
+TEST_F(DataPointSerializationTest, SerializedSize) {
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint dp(test_address, v, test_protocol_id);
+
+    size_t expected_size =
+        sizeof(uint16_t) +          // address size
+        test_address.size() +       // address data
+        v.serialized_size() +       // value
+        sizeof(int64_t) +           // timestamp
+        sizeof(uint16_t) +          // protocol_id
+        sizeof(Quality) +           // quality
+        sizeof(uint32_t);           // sequence_number
+
+    EXPECT_EQ(dp.serialized_size(), expected_size);
+}
+
+TEST_F(DataPointSerializationTest, MultipleRoundTrips) {
+    // Ensure multiple serialize/deserialize cycles don't corrupt data
+    Value v;
+    v.set_string_view("test data");
+    DataPoint dp(test_address, v, test_protocol_id);
+    dp.set_quality(Quality::GOOD);
+
+    for (int i = 0; i < 5; ++i) {
+        std::vector<uint8_t> buffer(dp.serialized_size());
+        dp.serialize(std::span<uint8_t>(buffer));
+
+        DataPoint temp;
+        EXPECT_TRUE(temp.deserialize(std::span<const uint8_t>(buffer)));
+
+        dp = temp;  // Use deserialized version for next iteration
+    }
+
+    EXPECT_EQ(dp.address(), test_address);
+    EXPECT_EQ(dp.value().as_string_view(), "test data");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
