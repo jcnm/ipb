@@ -1,17 +1,65 @@
 # IPB - Industrial Protocol Bridge
 
-**Version 1.4.0** - High-Performance Modular Industrial Communication Platform
+[![CI](https://github.com/jcnm/ipb/actions/workflows/ci.yml/badge.svg)](https://github.com/jcnm/ipb/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/jcnm/ipb/branch/main/graph/badge.svg)](https://codecov.io/gh/jcnm/ipb)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/std/the-standard)
+
+**Version 1.5.0** - High-Performance Modular Industrial Communication Platform
 
 IPB is a revolutionary mono-repository architecture for industrial protocol communications, designed for real-time systems with microsecond latency requirements.
 
-## 🏗️ Architecture Overview
+## Architecture Overview
+
+### Project Structure
+
+```
+ipb/
+├── apps/                    # Applications
+│   ├── ipb-gate/            # Main orchestrator with YAML config & MQTT control
+│   └── ipb-bridge/          # Lightweight bridge application
+├── core/                    # Core libraries
+│   ├── common/              # Core data structures and interfaces (libipb-common)
+│   ├── components/          # Modular core components
+│   │   ├── config/          # Configuration loader
+│   │   ├── message_bus/     # Pub/Sub message bus
+│   │   ├── rule_engine/     # Routing rules evaluation
+│   │   ├── scheduler/       # EDF scheduling
+│   │   ├── scoop_registry/  # Data collector registry
+│   │   └── sink_registry/   # Output sink registry
+│   ├── router/              # High-performance message routing (libipb-router)
+│   └── security/            # Security components
+├── sinks/                   # Output adapters
+│   ├── console/             # Console output sink
+│   ├── syslog/              # Syslog sink (RFC compliant)
+│   ├── mqtt/                # MQTT sink (high-performance)
+│   ├── kafka/               # Apache Kafka sink
+│   ├── sparkplug/           # Sparkplug B sink
+│   └── zmq/                 # ZeroMQ sink
+├── scoops/                  # Data collectors
+│   ├── console/             # Console input scoop
+│   ├── modbus/              # Modbus protocol scoop
+│   ├── mqtt/                # MQTT subscriber scoop
+│   ├── opcua/               # OPC UA scoop
+│   └── sparkplug/           # Sparkplug B scoop
+├── transport/               # Transport layers
+│   ├── mqtt/                # MQTT transport (Paho/CoreMQTT backends)
+│   └── http/                # HTTP transport (libcurl backend)
+├── cmake/                   # CMake build system modules
+├── examples/                # Example applications
+├── scripts/                 # Build and installation scripts
+├── tests/                   # Test suite
+└── docs/                    # Additional documentation
+```
 
 ### Modular Design
 - **libipb-common**: Core data structures and interfaces
-- **libipb-router**: High-performance message routing with EDF scheduling  
-- **libipb-sink-x**: Modular output sinks (Console, Syslog, MQTT, ZeroMQ, Kafka)
-- **libipb-scoop-x**: Protocol scoops/data collectors (Modbus, OPC UA, MQTT, etc.)
+- **libipb-components**: Modular components (message bus, rule engine, scheduler, registries)
+- **libipb-router**: High-performance message routing with EDF scheduling
+- **Sinks**: Modular output sinks (Console, Syslog, MQTT, ZeroMQ, Kafka, Sparkplug)
+- **Scoops**: Protocol data collectors (Console, Modbus, OPC UA, MQTT, Sparkplug)
 - **ipb-gate**: Main orchestrator with YAML configuration and MQTT control
+- **ipb-bridge**: Lightweight bridge for simpler deployments
 
 ### Key Features
 - **Zero-copy operations** where possible
@@ -72,10 +120,9 @@ IPB is a revolutionary mono-repository architecture for industrial protocol comm
 
 #### Manual Component Build
 ```bash
-# Example: Build libipb-common individually
-cd libipb-common
+# Example: Build from root with specific components
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DIPB_SINK_MQTT=ON -DIPB_BUILD_GATE=ON
 make -j$(nproc)
 ```
 
@@ -127,17 +174,27 @@ routing:
           priority: "normal"
 ```
 
-### Running IPB Gate
+### Running Applications
 
+#### IPB Gate (Main Orchestrator)
 ```bash
 # Start with configuration file
-./build/ipb-gate/ipb-gate --config examples/gateway-config.yaml
+./build/apps/ipb-gate/ipb-gate --config examples/gateway-config.yaml
 
 # Start as daemon
-./build/ipb-gate/ipb-gate --config examples/gateway-config.yaml --daemon
+./build/apps/ipb-gate/ipb-gate --config examples/gateway-config.yaml --daemon
 
 # Start with custom log level
-./build/ipb-gate/ipb-gate --config examples/gateway-config.yaml --log-level debug
+./build/apps/ipb-gate/ipb-gate --config examples/gateway-config.yaml --log-level debug
+```
+
+#### IPB Bridge (Lightweight Bridge)
+```bash
+# Start ipb-bridge with configuration
+./build/apps/ipb-bridge/ipb-bridge --config examples/bridge-config.yaml
+
+# Start with custom settings
+./build/apps/ipb-bridge/ipb-bridge --config examples/bridge-config.yaml --log-level info
 ```
 
 ### MQTT Control Commands
@@ -188,20 +245,39 @@ mosquitto_pub -t "ipb/gateway/commands" \
 - **Memory sanitizers** for development builds
 
 ### CMake Options
-```bash
-# Core components
--DBUILD_COMMON=ON/OFF
--DBUILD_ROUTER=ON/OFF  
--DBUILD_GATE=ON/OFF
 
-# Sinks
--DENABLE_CONSOLE_SINK=ON/OFF
--DENABLE_SYSLOG_SINK=ON/OFF
--DENABLE_MQTT_SINK=ON/OFF
+```bash
+# Build profiles
+-DIPB_EMBEDDED=ON/OFF     # Minimal footprint build for embedded systems
+-DIPB_FULL=ON/OFF         # Build all components
+
+# Sinks (enabled by default: console, syslog, mqtt)
+-DIPB_SINK_CONSOLE=ON/OFF
+-DIPB_SINK_SYSLOG=ON/OFF
+-DIPB_SINK_MQTT=ON/OFF
+-DIPB_SINK_KAFKA=ON/OFF
+-DIPB_SINK_SPARKPLUG=ON/OFF
+-DIPB_SINK_ZMQ=ON/OFF
+
+# Scoops (data collectors)
+-DIPB_SCOOP_CONSOLE=ON/OFF
+-DIPB_SCOOP_MODBUS=ON/OFF
+-DIPB_SCOOP_OPCUA=ON/OFF
+-DIPB_SCOOP_MQTT=ON/OFF       # Enabled by default
+-DIPB_SCOOP_SPARKPLUG=ON/OFF
+
+# Transport layers
+-DIPB_TRANSPORT_MQTT=ON/OFF   # Enabled by default
+-DIPB_TRANSPORT_HTTP=ON/OFF   # Enabled by default
+
+# Applications
+-DIPB_BUILD_GATE=ON/OFF       # Build ipb-gate (enabled by default)
+-DIPB_BUILD_BRIDGE=ON/OFF     # Build ipb-bridge (enabled by default)
 
 # Development options
 -DBUILD_TESTING=ON/OFF
 -DBUILD_EXAMPLES=ON/OFF
+-DENABLE_OPTIMIZATIONS=ON/OFF
 -DENABLE_SANITIZERS=ON/OFF
 -DENABLE_COVERAGE=ON/OFF
 -DENABLE_LTO=ON/OFF
@@ -332,5 +408,5 @@ Full Pipeline          45K msg/s          25%
 
 ---
 
-**IPB v1.4.0** - The future of industrial communications is here! 🚀
+**IPB v1.5.0** - The future of industrial communications is here.
 

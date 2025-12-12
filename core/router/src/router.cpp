@@ -715,7 +715,7 @@ void Router::set_default_deadline_offset(std::chrono::nanoseconds offset) {
 }
 
 std::chrono::nanoseconds Router::get_default_deadline_offset() const {
-    return scheduler_->config().default_deadline_offset;
+    return scheduler_->get_default_deadline_offset();
 }
 
 size_t Router::get_pending_task_count() const {

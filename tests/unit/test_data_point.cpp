@@ -1,80 +1,394 @@
+/**
+ * @file test_data_point.cpp
+ * @brief Comprehensive unit tests for ipb::common data types (v1.5.0 API)
+ *
+ * Tests cover: Timestamp, Value, Quality, DataPoint, RawMessage
+ */
+
 #include <gtest/gtest.h>
-#include <gmock/gmock.h>
-#include "ipb/common/data_point.hpp"
+#include <ipb/common/data_point.hpp>
 #include <chrono>
 #include <thread>
+#include <vector>
+#include <atomic>
+#include <cstring>
 
 using namespace ipb::common;
 using namespace std::chrono_literals;
 
+// ============================================================================
+// Timestamp Tests
+// ============================================================================
+
+class TimestampTest : public ::testing::Test {};
+
+TEST_F(TimestampTest, DefaultConstruction) {
+    Timestamp ts;
+    EXPECT_EQ(ts.nanoseconds(), 0);
+    EXPECT_EQ(ts.microseconds(), 0);
+    EXPECT_EQ(ts.milliseconds(), 0);
+    EXPECT_EQ(ts.seconds(), 0);
+}
+
+TEST_F(TimestampTest, ConstructFromDuration) {
+    Timestamp ts(1000000ns);
+    EXPECT_EQ(ts.nanoseconds(), 1000000);
+    EXPECT_EQ(ts.microseconds(), 1000);
+    EXPECT_EQ(ts.milliseconds(), 1);
+}
+
+TEST_F(TimestampTest, Now) {
+    auto before = std::chrono::steady_clock::now();
+    Timestamp ts = Timestamp::now();
+    auto after = std::chrono::steady_clock::now();
+
+    auto before_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(before.time_since_epoch()).count();
+    auto after_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(after.time_since_epoch()).count();
+
+    EXPECT_GE(ts.nanoseconds(), before_ns);
+    EXPECT_LE(ts.nanoseconds(), after_ns);
+}
+
+TEST_F(TimestampTest, FromSystemTime) {
+    Timestamp ts = Timestamp::from_system_time();
+    EXPECT_GT(ts.nanoseconds(), 0);
+}
+
+TEST_F(TimestampTest, Comparison) {
+    Timestamp ts1(1000ns);
+    Timestamp ts2(2000ns);
+    Timestamp ts3(1000ns);
+
+    EXPECT_TRUE(ts1 == ts3);
+    EXPECT_FALSE(ts1 == ts2);
+    EXPECT_TRUE(ts1 < ts2);
+    EXPECT_TRUE(ts1 <= ts2);
+    EXPECT_TRUE(ts1 <= ts3);
+    EXPECT_TRUE(ts2 > ts1);
+    EXPECT_TRUE(ts2 >= ts1);
+    EXPECT_TRUE(ts1 >= ts3);
+}
+
+TEST_F(TimestampTest, Arithmetic) {
+    Timestamp ts1(1000ns);
+    Timestamp ts2 = ts1 + 500ns;
+
+    EXPECT_EQ(ts2.nanoseconds(), 1500);
+
+    auto diff = ts2 - ts1;
+    EXPECT_EQ(diff.count(), 500);
+}
+
+// ============================================================================
+// Value Tests
+// ============================================================================
+
+class ValueTest : public ::testing::Test {};
+
+TEST_F(ValueTest, DefaultConstruction) {
+    Value v;
+    EXPECT_TRUE(v.empty());
+    EXPECT_EQ(v.type(), Value::Type::EMPTY);
+    EXPECT_EQ(v.size(), 0);
+}
+
+TEST_F(ValueTest, BoolValue) {
+    Value v;
+    v.set(true);
+    EXPECT_EQ(v.type(), Value::Type::BOOL);
+    EXPECT_EQ(v.get<bool>(), true);
+
+    Value v2;
+    v2.set(false);
+    EXPECT_EQ(v2.get<bool>(), false);
+}
+
+TEST_F(ValueTest, IntegerValues) {
+    {
+        Value v;
+        v.set(static_cast<int8_t>(-42));
+        EXPECT_EQ(v.type(), Value::Type::INT8);
+        EXPECT_EQ(v.get<int8_t>(), -42);
+    }
+    {
+        Value v;
+        v.set(static_cast<int16_t>(-1000));
+        EXPECT_EQ(v.type(), Value::Type::INT16);
+        EXPECT_EQ(v.get<int16_t>(), -1000);
+    }
+    {
+        Value v;
+        v.set(static_cast<int32_t>(-100000));
+        EXPECT_EQ(v.type(), Value::Type::INT32);
+        EXPECT_EQ(v.get<int32_t>(), -100000);
+    }
+    {
+        Value v;
+        v.set(static_cast<int64_t>(-10000000000LL));
+        EXPECT_EQ(v.type(), Value::Type::INT64);
+        EXPECT_EQ(v.get<int64_t>(), -10000000000LL);
+    }
+}
+
+TEST_F(ValueTest, UnsignedIntegerValues) {
+    {
+        Value v;
+        v.set(static_cast<uint8_t>(200));
+        EXPECT_EQ(v.type(), Value::Type::UINT8);
+        EXPECT_EQ(v.get<uint8_t>(), 200);
+    }
+    {
+        Value v;
+        v.set(static_cast<uint16_t>(50000));
+        EXPECT_EQ(v.type(), Value::Type::UINT16);
+        EXPECT_EQ(v.get<uint16_t>(), 50000);
+    }
+    {
+        Value v;
+        v.set(static_cast<uint32_t>(3000000000U));
+        EXPECT_EQ(v.type(), Value::Type::UINT32);
+        EXPECT_EQ(v.get<uint32_t>(), 3000000000U);
+    }
+    {
+        Value v;
+        v.set(static_cast<uint64_t>(10000000000000ULL));
+        EXPECT_EQ(v.type(), Value::Type::UINT64);
+        EXPECT_EQ(v.get<uint64_t>(), 10000000000000ULL);
+    }
+}
+
+TEST_F(ValueTest, FloatValues) {
+    {
+        Value v;
+        v.set(3.14f);
+        EXPECT_EQ(v.type(), Value::Type::FLOAT32);
+        EXPECT_FLOAT_EQ(v.get<float>(), 3.14f);
+    }
+    {
+        Value v;
+        v.set(3.14159265359);
+        EXPECT_EQ(v.type(), Value::Type::FLOAT64);
+        EXPECT_DOUBLE_EQ(v.get<double>(), 3.14159265359);
+    }
+}
+
+TEST_F(ValueTest, StringValue) {
+    Value v;
+    v.set_string_view("Hello, World!");
+
+    EXPECT_EQ(v.type(), Value::Type::STRING);
+    EXPECT_EQ(v.as_string_view(), "Hello, World!");
+}
+
+TEST_F(ValueTest, LongStringValue) {
+    // Test string longer than inline storage
+    std::string long_str(100, 'x');
+    Value v;
+    v.set_string_view(long_str);
+
+    EXPECT_EQ(v.type(), Value::Type::STRING);
+    EXPECT_EQ(v.as_string_view(), long_str);
+}
+
+TEST_F(ValueTest, BinaryValue) {
+    std::vector<uint8_t> data = {0x01, 0x02, 0x03, 0x04, 0x05};
+    Value v;
+    v.set_binary(data);
+
+    EXPECT_EQ(v.type(), Value::Type::BINARY);
+    auto binary = v.as_binary();
+    EXPECT_EQ(binary.size(), 5);
+    EXPECT_EQ(binary[0], 0x01);
+    EXPECT_EQ(binary[4], 0x05);
+}
+
+TEST_F(ValueTest, LargeBinaryValue) {
+    std::vector<uint8_t> data(100, 0xAB);
+    Value v;
+    v.set_binary(data);
+
+    EXPECT_EQ(v.type(), Value::Type::BINARY);
+    auto binary = v.as_binary();
+    EXPECT_EQ(binary.size(), 100);
+}
+
+TEST_F(ValueTest, CopyConstruction) {
+    Value v1;
+    v1.set(42.5);
+
+    Value v2(v1);
+
+    EXPECT_EQ(v2.type(), Value::Type::FLOAT64);
+    EXPECT_DOUBLE_EQ(v2.get<double>(), 42.5);
+}
+
+TEST_F(ValueTest, MoveConstruction) {
+    Value v1;
+    v1.set(42.5);
+
+    Value v2(std::move(v1));
+
+    EXPECT_EQ(v2.type(), Value::Type::FLOAT64);
+    EXPECT_DOUBLE_EQ(v2.get<double>(), 42.5);
+}
+
+TEST_F(ValueTest, CopyAssignment) {
+    Value v1, v2;
+    v1.set(42.5);
+    v2.set(static_cast<int32_t>(100));
+
+    v2 = v1;
+
+    EXPECT_EQ(v2.type(), Value::Type::FLOAT64);
+    EXPECT_DOUBLE_EQ(v2.get<double>(), 42.5);
+}
+
+TEST_F(ValueTest, MoveAssignment) {
+    Value v1, v2;
+    v1.set(42.5);
+    v2.set(static_cast<int32_t>(100));
+
+    v2 = std::move(v1);
+
+    EXPECT_EQ(v2.type(), Value::Type::FLOAT64);
+    EXPECT_DOUBLE_EQ(v2.get<double>(), 42.5);
+}
+
+TEST_F(ValueTest, Equality) {
+    Value v1, v2, v3;
+    v1.set(42.5);
+    v2.set(42.5);
+    v3.set(100.0);
+
+    EXPECT_TRUE(v1 == v2);
+    EXPECT_FALSE(v1 == v3);
+    EXPECT_TRUE(v1 != v3);
+}
+
+TEST_F(ValueTest, EmptyEquality) {
+    Value v1, v2;
+    EXPECT_TRUE(v1 == v2);
+}
+
+TEST_F(ValueTest, TypeMismatchEquality) {
+    Value v1, v2;
+    v1.set(static_cast<int32_t>(42));
+    v2.set(42.0);
+
+    EXPECT_FALSE(v1 == v2);  // Different types
+}
+
+// ============================================================================
+// Quality Tests
+// ============================================================================
+
+class QualityTest : public ::testing::Test {};
+
+TEST_F(QualityTest, QualityValues) {
+    EXPECT_EQ(static_cast<uint8_t>(Quality::GOOD), 0);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::UNCERTAIN), 1);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::BAD), 2);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::STALE), 3);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::COMM_FAILURE), 4);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::CONFIG_ERROR), 5);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::NOT_CONNECTED), 6);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::DEVICE_FAILURE), 7);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::SENSOR_FAILURE), 8);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::LAST_KNOWN), 9);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::INITIAL), 10);
+    EXPECT_EQ(static_cast<uint8_t>(Quality::FORCED), 11);
+}
+
+// ============================================================================
+// DataPoint Tests
+// ============================================================================
+
 class DataPointTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Setup common test data
-        test_timestamp = std::chrono::system_clock::now();
         test_address = "test.device.register.001";
         test_protocol_id = 1;
     }
 
-    Timestamp test_timestamp;
     std::string test_address;
     uint16_t test_protocol_id;
 };
 
 TEST_F(DataPointTest, DefaultConstruction) {
     DataPoint dp;
-    
-    EXPECT_EQ(dp.get_address(), "");
-    EXPECT_EQ(dp.get_protocol_id(), 0);
-    EXPECT_EQ(dp.get_quality(), Quality::UNKNOWN);
-    EXPECT_FALSE(dp.get_value().has_value());
+
+    EXPECT_EQ(dp.address(), "N/A");
+    EXPECT_EQ(dp.protocol_id(), 0);
+    EXPECT_EQ(dp.quality(), Quality::INITIAL);
+    EXPECT_TRUE(dp.value().empty());
+    EXPECT_EQ(dp.sequence_number(), 0);
 }
 
-TEST_F(DataPointTest, ParameterizedConstruction) {
-    Value test_value = 42.5;
-    
-    DataPoint dp(test_address, test_protocol_id, test_value, test_timestamp, Quality::GOOD);
-    
-    EXPECT_EQ(dp.get_address(), test_address);
-    EXPECT_EQ(dp.get_protocol_id(), test_protocol_id);
-    EXPECT_EQ(dp.get_quality(), Quality::GOOD);
-    EXPECT_TRUE(dp.get_value().has_value());
-    EXPECT_DOUBLE_EQ(std::get<double>(dp.get_value().value()), 42.5);
-    EXPECT_EQ(dp.get_timestamp(), test_timestamp);
+TEST_F(DataPointTest, ConstructWithAddress) {
+    DataPoint dp(test_address);
+
+    EXPECT_EQ(dp.address(), test_address);
+    EXPECT_EQ(dp.protocol_id(), 0);
+    EXPECT_EQ(dp.quality(), Quality::INITIAL);
+}
+
+TEST_F(DataPointTest, ConstructWithAddressAndValue) {
+    Value v;
+    v.set(42.5);
+
+    DataPoint dp(test_address, v, test_protocol_id);
+
+    EXPECT_EQ(dp.address(), test_address);
+    EXPECT_EQ(dp.protocol_id(), test_protocol_id);
+    EXPECT_EQ(dp.quality(), Quality::GOOD);
+    EXPECT_DOUBLE_EQ(dp.value().get<double>(), 42.5);
 }
 
 TEST_F(DataPointTest, ValueTypes) {
-    // Test different value types
+    // Bool
     {
-        DataPoint dp_bool(test_address, test_protocol_id, Value{true}, test_timestamp);
-        EXPECT_TRUE(std::holds_alternative<bool>(dp_bool.get_value().value()));
-        EXPECT_TRUE(std::get<bool>(dp_bool.get_value().value()));
+        Value v;
+        v.set(true);
+        DataPoint dp(test_address, v, test_protocol_id);
+        EXPECT_EQ(dp.value().type(), Value::Type::BOOL);
+        EXPECT_TRUE(dp.value().get<bool>());
     }
-    
+
+    // Integer
     {
-        DataPoint dp_int(test_address, test_protocol_id, Value{123}, test_timestamp);
-        EXPECT_TRUE(std::holds_alternative<int64_t>(dp_int.get_value().value()));
-        EXPECT_EQ(std::get<int64_t>(dp_int.get_value().value()), 123);
+        Value v;
+        v.set(static_cast<int64_t>(123));
+        DataPoint dp(test_address, v, test_protocol_id);
+        EXPECT_EQ(dp.value().type(), Value::Type::INT64);
+        EXPECT_EQ(dp.value().get<int64_t>(), 123);
     }
-    
+
+    // Double
     {
-        DataPoint dp_double(test_address, test_protocol_id, Value{3.14159}, test_timestamp);
-        EXPECT_TRUE(std::holds_alternative<double>(dp_double.get_value().value()));
-        EXPECT_DOUBLE_EQ(std::get<double>(dp_double.get_value().value()), 3.14159);
+        Value v;
+        v.set(3.14159);
+        DataPoint dp(test_address, v, test_protocol_id);
+        EXPECT_EQ(dp.value().type(), Value::Type::FLOAT64);
+        EXPECT_DOUBLE_EQ(dp.value().get<double>(), 3.14159);
     }
-    
+
+    // String
     {
-        std::string test_str = "test_string";
-        DataPoint dp_string(test_address, test_protocol_id, Value{test_str}, test_timestamp);
-        EXPECT_TRUE(std::holds_alternative<std::string>(dp_string.get_value().value()));
-        EXPECT_EQ(std::get<std::string>(dp_string.get_value().value()), test_str);
+        Value v;
+        v.set_string_view("test_string");
+        DataPoint dp(test_address, v, test_protocol_id);
+        EXPECT_EQ(dp.value().type(), Value::Type::STRING);
+        EXPECT_EQ(dp.value().as_string_view(), "test_string");
     }
-    
+
+    // Binary
     {
-        std::vector<uint8_t> test_blob = {0x01, 0x02, 0x03, 0x04};
-        DataPoint dp_blob(test_address, test_protocol_id, Value{test_blob}, test_timestamp);
-        EXPECT_TRUE(std::holds_alternative<std::vector<uint8_t>>(dp_blob.get_value().value()));
-        EXPECT_EQ(std::get<std::vector<uint8_t>>(dp_blob.get_value().value()), test_blob);
+        std::vector<uint8_t> blob = {0x01, 0x02, 0x03, 0x04};
+        Value v;
+        v.set_binary(blob);
+        DataPoint dp(test_address, v, test_protocol_id);
+        EXPECT_EQ(dp.value().type(), Value::Type::BINARY);
+        EXPECT_EQ(dp.value().as_binary().size(), 4);
     }
 }
 
@@ -83,222 +397,639 @@ TEST_F(DataPointTest, QualityLevels) {
         Quality::GOOD,
         Quality::UNCERTAIN,
         Quality::BAD,
-        Quality::UNKNOWN
+        Quality::STALE,
+        Quality::COMM_FAILURE,
+        Quality::INITIAL
     };
-    
+
     for (auto quality : qualities) {
-        DataPoint dp(test_address, test_protocol_id, Value{100}, test_timestamp, quality);
-        EXPECT_EQ(dp.get_quality(), quality);
+        Value v;
+        v.set(static_cast<int32_t>(100));
+        DataPoint dp(test_address, v, test_protocol_id);
+        dp.set_quality(quality);
+        EXPECT_EQ(dp.quality(), quality);
     }
 }
 
 TEST_F(DataPointTest, CopyConstructor) {
-    Value test_value = 42.5;
-    DataPoint original(test_address, test_protocol_id, test_value, test_timestamp, Quality::GOOD);
-    
+    Value v;
+    v.set(42.5);
+    DataPoint original(test_address, v, test_protocol_id);
+    original.set_quality(Quality::GOOD);
+
     DataPoint copy(original);
-    
-    EXPECT_EQ(copy.get_address(), original.get_address());
-    EXPECT_EQ(copy.get_protocol_id(), original.get_protocol_id());
-    EXPECT_EQ(copy.get_quality(), original.get_quality());
-    EXPECT_EQ(copy.get_timestamp(), original.get_timestamp());
-    EXPECT_EQ(copy.get_value().has_value(), original.get_value().has_value());
-    
-    if (copy.get_value().has_value() && original.get_value().has_value()) {
-        EXPECT_DOUBLE_EQ(
-            std::get<double>(copy.get_value().value()),
-            std::get<double>(original.get_value().value())
-        );
-    }
+
+    EXPECT_EQ(copy.address(), original.address());
+    EXPECT_EQ(copy.protocol_id(), original.protocol_id());
+    EXPECT_EQ(copy.quality(), original.quality());
+    EXPECT_DOUBLE_EQ(copy.value().get<double>(), original.value().get<double>());
 }
 
 TEST_F(DataPointTest, MoveConstructor) {
-    Value test_value = 42.5;
-    DataPoint original(test_address, test_protocol_id, test_value, test_timestamp, Quality::GOOD);
-    
-    std::string original_address = original.get_address();
-    uint16_t original_protocol_id = original.get_protocol_id();
-    Quality original_quality = original.get_quality();
-    Timestamp original_timestamp = original.get_timestamp();
-    
+    Value v;
+    v.set(42.5);
+    DataPoint original(test_address, v, test_protocol_id);
+    original.set_quality(Quality::GOOD);
+
+    std::string original_address(original.address());
+    uint16_t original_protocol_id = original.protocol_id();
+    Quality original_quality = original.quality();
+
     DataPoint moved(std::move(original));
-    
-    EXPECT_EQ(moved.get_address(), original_address);
-    EXPECT_EQ(moved.get_protocol_id(), original_protocol_id);
-    EXPECT_EQ(moved.get_quality(), original_quality);
-    EXPECT_EQ(moved.get_timestamp(), original_timestamp);
-    EXPECT_TRUE(moved.get_value().has_value());
-    EXPECT_DOUBLE_EQ(std::get<double>(moved.get_value().value()), 42.5);
+
+    EXPECT_EQ(moved.address(), original_address);
+    EXPECT_EQ(moved.protocol_id(), original_protocol_id);
+    EXPECT_EQ(moved.quality(), original_quality);
+    EXPECT_DOUBLE_EQ(moved.value().get<double>(), 42.5);
 }
 
 TEST_F(DataPointTest, AssignmentOperator) {
-    Value test_value1 = 42.5;
-    Value test_value2 = 100;
-    
-    DataPoint dp1(test_address, test_protocol_id, test_value1, test_timestamp, Quality::GOOD);
-    DataPoint dp2("other.address", 2, test_value2, test_timestamp + 1s, Quality::BAD);
-    
+    Value v1, v2;
+    v1.set(42.5);
+    v2.set(static_cast<int32_t>(100));
+
+    DataPoint dp1(test_address, v1, test_protocol_id);
+    dp1.set_quality(Quality::GOOD);
+
+    DataPoint dp2("other.address", v2, 2);
+    dp2.set_quality(Quality::BAD);
+
     dp2 = dp1;
-    
-    EXPECT_EQ(dp2.get_address(), dp1.get_address());
-    EXPECT_EQ(dp2.get_protocol_id(), dp1.get_protocol_id());
-    EXPECT_EQ(dp2.get_quality(), dp1.get_quality());
-    EXPECT_EQ(dp2.get_timestamp(), dp1.get_timestamp());
-    EXPECT_EQ(dp2.get_value().has_value(), dp1.get_value().has_value());
+
+    EXPECT_EQ(dp2.address(), dp1.address());
+    EXPECT_EQ(dp2.protocol_id(), dp1.protocol_id());
+    EXPECT_EQ(dp2.quality(), dp1.quality());
 }
 
 TEST_F(DataPointTest, Setters) {
     DataPoint dp;
-    
+
     dp.set_address(test_address);
-    EXPECT_EQ(dp.get_address(), test_address);
-    
+    EXPECT_EQ(dp.address(), test_address);
+
     dp.set_protocol_id(test_protocol_id);
-    EXPECT_EQ(dp.get_protocol_id(), test_protocol_id);
-    
-    Value test_value = 123.456;
-    dp.set_value(test_value);
-    EXPECT_TRUE(dp.get_value().has_value());
-    EXPECT_DOUBLE_EQ(std::get<double>(dp.get_value().value()), 123.456);
-    
-    dp.set_timestamp(test_timestamp);
-    EXPECT_EQ(dp.get_timestamp(), test_timestamp);
-    
+    EXPECT_EQ(dp.protocol_id(), test_protocol_id);
+
+    dp.set_value(123.456);
+    EXPECT_DOUBLE_EQ(dp.value().get<double>(), 123.456);
+
+    auto ts = Timestamp::now();
+    dp.set_timestamp(ts);
+    EXPECT_EQ(dp.timestamp(), ts);
+
     dp.set_quality(Quality::UNCERTAIN);
-    EXPECT_EQ(dp.get_quality(), Quality::UNCERTAIN);
+    EXPECT_EQ(dp.quality(), Quality::UNCERTAIN);
+
+    dp.set_sequence_number(42);
+    EXPECT_EQ(dp.sequence_number(), 42);
 }
 
 TEST_F(DataPointTest, Validation) {
-    // Valid data point
+    // Valid with GOOD quality
     {
-        DataPoint dp(test_address, test_protocol_id, Value{42}, test_timestamp, Quality::GOOD);
+        Value v;
+        v.set(static_cast<int32_t>(42));
+        DataPoint dp(test_address, v, test_protocol_id);
+        dp.set_quality(Quality::GOOD);
         EXPECT_TRUE(dp.is_valid());
     }
-    
-    // Invalid: empty address
+
+    // Valid with UNCERTAIN quality
     {
-        DataPoint dp("", test_protocol_id, Value{42}, test_timestamp, Quality::GOOD);
+        Value v;
+        v.set(static_cast<int32_t>(42));
+        DataPoint dp(test_address, v, test_protocol_id);
+        dp.set_quality(Quality::UNCERTAIN);
+        EXPECT_TRUE(dp.is_valid());
+    }
+
+    // Invalid with BAD quality
+    {
+        Value v;
+        v.set(static_cast<int32_t>(42));
+        DataPoint dp(test_address, v, test_protocol_id);
+        dp.set_quality(Quality::BAD);
         EXPECT_FALSE(dp.is_valid());
     }
-    
-    // Invalid: no value
+
+    // Invalid with COMM_FAILURE quality
     {
-        DataPoint dp(test_address, test_protocol_id, std::nullopt, test_timestamp, Quality::GOOD);
-        EXPECT_FALSE(dp.is_valid());
-    }
-    
-    // Invalid: future timestamp (more than 1 second in the future)
-    {
-        auto future_time = std::chrono::system_clock::now() + 2s;
-        DataPoint dp(test_address, test_protocol_id, Value{42}, future_time, Quality::GOOD);
+        Value v;
+        v.set(static_cast<int32_t>(42));
+        DataPoint dp(test_address, v, test_protocol_id);
+        dp.set_quality(Quality::COMM_FAILURE);
         EXPECT_FALSE(dp.is_valid());
     }
 }
 
-TEST_F(DataPointTest, Serialization) {
-    Value test_value = 42.5;
-    DataPoint original(test_address, test_protocol_id, test_value, test_timestamp, Quality::GOOD);
-    
-    // Test JSON serialization
-    std::string json = original.to_json();
-    EXPECT_FALSE(json.empty());
-    EXPECT_NE(json.find(test_address), std::string::npos);
-    EXPECT_NE(json.find("42.5"), std::string::npos);
-    
-    // Test binary serialization
-    auto binary = original.to_binary();
-    EXPECT_FALSE(binary.empty());
-    
-    // Test deserialization
-    auto deserialized = DataPoint::from_binary(binary);
-    EXPECT_TRUE(deserialized.is_success());
-    
-    auto& dp = deserialized.value();
-    EXPECT_EQ(dp.get_address(), original.get_address());
-    EXPECT_EQ(dp.get_protocol_id(), original.get_protocol_id());
-    EXPECT_EQ(dp.get_quality(), original.get_quality());
-    EXPECT_EQ(dp.get_timestamp(), original.get_timestamp());
+TEST_F(DataPointTest, StaleCheck) {
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint dp(test_address, v, test_protocol_id);
+
+    auto now = Timestamp::now();
+
+    // Not stale - just created
+    EXPECT_FALSE(dp.is_stale(now, 1s));
+
+    // Wait a bit
+    std::this_thread::sleep_for(10ms);
+    auto later = Timestamp::now();
+
+    // Should be stale with 1ms max age
+    EXPECT_TRUE(dp.is_stale(later, 1ms));
+
+    // Should not be stale with 1s max age
+    EXPECT_FALSE(dp.is_stale(later, 1s));
+}
+
+TEST_F(DataPointTest, LongAddress) {
+    // Test address longer than MAX_INLINE_ADDRESS (32 bytes)
+    std::string long_address(100, 'x');
+
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint dp(long_address, v, test_protocol_id);
+
+    EXPECT_EQ(dp.address(), long_address);
+}
+
+TEST_F(DataPointTest, Equality) {
+    Value v;
+    v.set(static_cast<int32_t>(42));
+
+    DataPoint dp1(test_address, v, test_protocol_id);
+    DataPoint dp2(test_address, v, test_protocol_id);
+    DataPoint dp3("different.address", v, test_protocol_id);
+    DataPoint dp4(test_address, v, 99);
+
+    EXPECT_TRUE(dp1 == dp2);
+    EXPECT_FALSE(dp1 == dp3);  // Different address
+    EXPECT_FALSE(dp1 == dp4);  // Different protocol_id
+}
+
+TEST_F(DataPointTest, BackwardCompatibleAccessors) {
+    Value v;
+    v.set(42.5);
+    DataPoint dp(test_address, v, test_protocol_id);
+    dp.set_quality(Quality::GOOD);
+
+    // Test backward-compatible accessors
+    EXPECT_EQ(dp.get_address(), test_address);
+    EXPECT_EQ(dp.get_protocol_id(), test_protocol_id);
+    EXPECT_EQ(dp.get_quality(), Quality::GOOD);
+
+    // get_value() returns OptionalValueWrapper
+    auto val_wrapper = dp.get_value();
+    EXPECT_TRUE(val_wrapper.has_value());
+    EXPECT_DOUBLE_EQ(val_wrapper.value().get<double>(), 42.5);
 }
 
 TEST_F(DataPointTest, Performance) {
     const size_t num_iterations = 100000;
-    
-    // Test construction performance
+
     auto start = std::chrono::high_resolution_clock::now();
-    
+
     for (size_t i = 0; i < num_iterations; ++i) {
-        DataPoint dp(test_address, test_protocol_id, Value{static_cast<double>(i)}, 
-                    test_timestamp, Quality::GOOD);
+        Value v;
+        v.set(static_cast<double>(i));
+        DataPoint dp(test_address, v, test_protocol_id);
         // Prevent optimization
-        volatile auto addr = dp.get_address().c_str();
+        volatile auto addr = dp.address().data();
         (void)addr;
     }
-    
+
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-    
+
     // Should be able to create at least 100k DataPoints per second
-    EXPECT_LT(duration.count() / num_iterations, 10000); // Less than 10μs per construction
-    
-    std::cout << "DataPoint construction: " 
+    EXPECT_LT(duration.count() / num_iterations, 10000);  // Less than 10μs per construction
+
+    std::cout << "DataPoint construction: "
               << (duration.count() / num_iterations) << " ns/op" << std::endl;
 }
 
 TEST_F(DataPointTest, ThreadSafety) {
     const size_t num_threads = 4;
     const size_t operations_per_thread = 10000;
-    
+
     std::vector<std::thread> threads;
     std::atomic<size_t> success_count{0};
-    
+
     for (size_t t = 0; t < num_threads; ++t) {
         threads.emplace_back([&, t]() {
             for (size_t i = 0; i < operations_per_thread; ++i) {
                 try {
                     std::string addr = test_address + "." + std::to_string(t) + "." + std::to_string(i);
-                    DataPoint dp(addr, test_protocol_id, Value{static_cast<double>(i)}, 
-                                test_timestamp, Quality::GOOD);
-                    
+                    Value v;
+                    v.set(static_cast<double>(i));
+                    DataPoint dp(addr, v, test_protocol_id);
+                    dp.set_quality(Quality::GOOD);
+
                     if (dp.is_valid()) {
                         success_count.fetch_add(1, std::memory_order_relaxed);
                     }
                 } catch (...) {
-                    // Should not throw
                     FAIL() << "DataPoint construction threw exception";
                 }
             }
         });
     }
-    
+
     for (auto& thread : threads) {
         thread.join();
     }
-    
+
     EXPECT_EQ(success_count.load(), num_threads * operations_per_thread);
 }
 
 TEST_F(DataPointTest, MemoryUsage) {
-    // Test that DataPoint doesn't use excessive memory
     const size_t num_datapoints = 1000;
     std::vector<DataPoint> datapoints;
     datapoints.reserve(num_datapoints);
-    
+
     for (size_t i = 0; i < num_datapoints; ++i) {
+        Value v;
+        v.set(static_cast<double>(i));
         datapoints.emplace_back(
             test_address + std::to_string(i),
-            test_protocol_id,
-            Value{static_cast<double>(i)},
-            test_timestamp,
-            Quality::GOOD
+            v,
+            test_protocol_id
         );
+        datapoints.back().set_quality(Quality::GOOD);
     }
-    
+
     // Basic check that we can create many DataPoints without issues
     EXPECT_EQ(datapoints.size(), num_datapoints);
-    
+
     // Verify all are valid
     for (const auto& dp : datapoints) {
         EXPECT_TRUE(dp.is_valid());
     }
 }
 
+// ============================================================================
+// RawMessage Tests
+// ============================================================================
+
+class RawMessageTest : public ::testing::Test {};
+
+TEST_F(RawMessageTest, DefaultConstruction) {
+    RawMessage msg;
+    EXPECT_TRUE(msg.empty());
+    EXPECT_EQ(msg.size(), 0);
+    EXPECT_EQ(msg.protocol_id(), 0);
+}
+
+TEST_F(RawMessageTest, ConstructWithSpan) {
+    std::vector<uint8_t> data = {0x01, 0x02, 0x03, 0x04};
+    RawMessage msg{std::span<const uint8_t>(data)};
+
+    EXPECT_FALSE(msg.empty());
+    EXPECT_EQ(msg.size(), 4);
+    EXPECT_FALSE(msg.owns_data());
+}
+
+TEST_F(RawMessageTest, ConstructWithOwnedData) {
+    std::vector<uint8_t> data = {0x01, 0x02, 0x03, 0x04};
+    RawMessage msg(std::move(data));
+
+    EXPECT_FALSE(msg.empty());
+    EXPECT_EQ(msg.size(), 4);
+    EXPECT_TRUE(msg.owns_data());
+}
+
+TEST_F(RawMessageTest, MoveConstruction) {
+    std::vector<uint8_t> data = {0x01, 0x02, 0x03, 0x04};
+    RawMessage msg1(std::move(data));
+    msg1.set_protocol_id(42);
+
+    RawMessage msg2(std::move(msg1));
+
+    EXPECT_EQ(msg2.size(), 4);
+    EXPECT_EQ(msg2.protocol_id(), 42);
+    EXPECT_TRUE(msg2.owns_data());
+}
+
+TEST_F(RawMessageTest, Metadata) {
+    std::vector<uint8_t> data = {0x01};
+    RawMessage msg(std::move(data));
+
+    msg.set_protocol_id(123);
+    EXPECT_EQ(msg.protocol_id(), 123);
+
+    auto ts = Timestamp::now();
+    msg.set_timestamp(ts);
+    EXPECT_EQ(msg.timestamp(), ts);
+}
+
+// ============================================================================
+// Value Serialization Tests
+// ============================================================================
+
+class ValueSerializationTest : public ::testing::Test {};
+
+TEST_F(ValueSerializationTest, SerializeDeserializeEmpty) {
+    Value original;
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_TRUE(restored.empty());
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeBool) {
+    Value original;
+    original.set(true);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::BOOL);
+    EXPECT_EQ(restored.get<bool>(), true);
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeInt32) {
+    Value original;
+    original.set(static_cast<int32_t>(12345678));
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::INT32);
+    EXPECT_EQ(restored.get<int32_t>(), 12345678);
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeDouble) {
+    Value original;
+    original.set(3.14159265358979);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::FLOAT64);
+    EXPECT_DOUBLE_EQ(restored.get<double>(), 3.14159265358979);
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeString) {
+    Value original;
+    original.set_string_view("Hello, World!");
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::STRING);
+    EXPECT_EQ(restored.as_string_view(), "Hello, World!");
+}
+
+TEST_F(ValueSerializationTest, SerializeDeserializeLargeBinary) {
+    // Test with large data that exceeds INLINE_SIZE
+    std::vector<uint8_t> large_data(1000, 0xAB);
+
+    Value original;
+    original.set_binary(std::span<const uint8_t>(large_data));
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    Value restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+    EXPECT_EQ(restored.type(), Value::Type::BINARY);
+    EXPECT_EQ(restored.size(), 1000);
+
+    auto restored_span = restored.as_binary();
+    for (size_t i = 0; i < 1000; ++i) {
+        EXPECT_EQ(restored_span[i], 0xAB);
+    }
+}
+
+TEST_F(ValueSerializationTest, DeserializeBufferTooSmall) {
+    std::vector<uint8_t> small_buffer(2);  // Too small
+
+    Value v;
+    EXPECT_FALSE(v.deserialize(std::span<const uint8_t>(small_buffer)));
+}
+
+TEST_F(ValueSerializationTest, SerializeBufferTooSmall) {
+    Value original;
+    original.set(static_cast<int32_t>(42));
+
+    std::vector<uint8_t> small_buffer(1);  // Too small
+    original.serialize(std::span<uint8_t>(small_buffer));  // Should not crash
+}
+
+TEST_F(ValueSerializationTest, AllNumericTypes) {
+    // Test all numeric types
+    struct TestCase {
+        std::function<void(Value&)> setter;
+        Value::Type expected_type;
+    };
+
+    Value v;
+
+    v.set(static_cast<int8_t>(42));
+    EXPECT_EQ(v.type(), Value::Type::INT8);
+    EXPECT_EQ(v.get<int8_t>(), 42);
+
+    v.set(static_cast<int16_t>(1234));
+    EXPECT_EQ(v.type(), Value::Type::INT16);
+    EXPECT_EQ(v.get<int16_t>(), 1234);
+
+    v.set(static_cast<uint8_t>(255));
+    EXPECT_EQ(v.type(), Value::Type::UINT8);
+    EXPECT_EQ(v.get<uint8_t>(), 255);
+
+    v.set(static_cast<uint16_t>(65535));
+    EXPECT_EQ(v.type(), Value::Type::UINT16);
+    EXPECT_EQ(v.get<uint16_t>(), 65535);
+
+    v.set(static_cast<uint32_t>(4294967295));
+    EXPECT_EQ(v.type(), Value::Type::UINT32);
+    EXPECT_EQ(v.get<uint32_t>(), 4294967295);
+
+    v.set(static_cast<int64_t>(9223372036854775807LL));
+    EXPECT_EQ(v.type(), Value::Type::INT64);
+    EXPECT_EQ(v.get<int64_t>(), 9223372036854775807LL);
+
+    v.set(static_cast<uint64_t>(18446744073709551615ULL));
+    EXPECT_EQ(v.type(), Value::Type::UINT64);
+    EXPECT_EQ(v.get<uint64_t>(), 18446744073709551615ULL);
+
+    v.set(static_cast<float>(3.14f));
+    EXPECT_EQ(v.type(), Value::Type::FLOAT32);
+    EXPECT_FLOAT_EQ(v.get<float>(), 3.14f);
+}
+
+TEST_F(ValueSerializationTest, RoundTripAllTypes) {
+    std::vector<std::pair<Value, std::string>> test_cases;
+
+    // Bool
+    Value v1; v1.set(false);
+    test_cases.push_back({v1, "bool"});
+
+    // Int types
+    Value v2; v2.set(static_cast<int8_t>(-128));
+    test_cases.push_back({v2, "int8"});
+
+    Value v3; v3.set(static_cast<int64_t>(-9223372036854775807LL));
+    test_cases.push_back({v3, "int64"});
+
+    // Uint types
+    Value v4; v4.set(static_cast<uint64_t>(18446744073709551615ULL));
+    test_cases.push_back({v4, "uint64"});
+
+    // Float types
+    Value v5; v5.set(static_cast<float>(-1.0f / 0.0f));  // -inf
+    test_cases.push_back({v5, "float-inf"});
+
+    Value v6; v6.set(static_cast<double>(1e308));
+    test_cases.push_back({v6, "double-large"});
+
+    for (const auto& [original, name] : test_cases) {
+        std::vector<uint8_t> buffer(original.serialized_size());
+        original.serialize(std::span<uint8_t>(buffer));
+
+        Value restored;
+        EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)))
+            << "Failed for type: " << name;
+        EXPECT_EQ(restored.type(), original.type())
+            << "Type mismatch for: " << name;
+    }
+}
+
+// ============================================================================
+// DataPoint Serialization Tests
+// ============================================================================
+
+class DataPointSerializationTest : public ::testing::Test {
+protected:
+    const std::string test_address = "sensors/temp/1";
+    const uint16_t test_protocol_id = 42;
+};
+
+TEST_F(DataPointSerializationTest, SerializeDeserializeBasic) {
+    Value v;
+    v.set(42.5);
+    DataPoint original(test_address, v, test_protocol_id);
+    original.set_quality(Quality::GOOD);
+    original.set_sequence_number(12345);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    DataPoint restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+
+    EXPECT_EQ(restored.address(), test_address);
+    EXPECT_EQ(restored.protocol_id(), test_protocol_id);
+    EXPECT_EQ(restored.quality(), Quality::GOOD);
+    EXPECT_EQ(restored.sequence_number(), 12345);
+    EXPECT_DOUBLE_EQ(restored.value().get<double>(), 42.5);
+}
+
+TEST_F(DataPointSerializationTest, SerializeDeserializeLongAddress) {
+    // Test with address longer than MAX_INLINE_ADDRESS
+    std::string long_address(100, 'x');
+
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint original(long_address, v, test_protocol_id);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    DataPoint restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+
+    EXPECT_EQ(restored.address(), long_address);
+}
+
+TEST_F(DataPointSerializationTest, SerializeDeserializeWithTimestamp) {
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint original(test_address, v, test_protocol_id);
+
+    auto ts = Timestamp::now();
+    original.set_timestamp(ts);
+
+    std::vector<uint8_t> buffer(original.serialized_size());
+    original.serialize(std::span<uint8_t>(buffer));
+
+    DataPoint restored;
+    EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)));
+
+    EXPECT_EQ(restored.timestamp().nanoseconds(), ts.nanoseconds());
+}
+
+TEST_F(DataPointSerializationTest, DeserializeBufferTooSmall) {
+    std::vector<uint8_t> small_buffer(1);  // Too small
+
+    DataPoint dp;
+    EXPECT_FALSE(dp.deserialize(std::span<const uint8_t>(small_buffer)));
+}
+
+TEST_F(DataPointSerializationTest, SerializeBufferTooSmall) {
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint original(test_address, v, test_protocol_id);
+
+    std::vector<uint8_t> small_buffer(1);  // Too small
+    original.serialize(std::span<uint8_t>(small_buffer));  // Should not crash
+}
+
+TEST_F(DataPointSerializationTest, SerializedSize) {
+    Value v;
+    v.set(static_cast<int32_t>(42));
+    DataPoint dp(test_address, v, test_protocol_id);
+
+    size_t expected_size =
+        sizeof(uint16_t) +          // address size
+        test_address.size() +       // address data
+        v.serialized_size() +       // value
+        sizeof(int64_t) +           // timestamp
+        sizeof(uint16_t) +          // protocol_id
+        sizeof(Quality) +           // quality
+        sizeof(uint32_t);           // sequence_number
+
+    EXPECT_EQ(dp.serialized_size(), expected_size);
+}
+
+TEST_F(DataPointSerializationTest, MultipleRoundTrips) {
+    // Ensure multiple serialize/deserialize cycles don't corrupt data
+    Value v;
+    v.set_string_view("test data");
+    DataPoint dp(test_address, v, test_protocol_id);
+    dp.set_quality(Quality::GOOD);
+
+    for (int i = 0; i < 5; ++i) {
+        std::vector<uint8_t> buffer(dp.serialized_size());
+        dp.serialize(std::span<uint8_t>(buffer));
+
+        DataPoint temp;
+        EXPECT_TRUE(temp.deserialize(std::span<const uint8_t>(buffer)));
+
+        dp = temp;  // Use deserialized version for next iteration
+    }
+
+    EXPECT_EQ(dp.address(), test_address);
+    EXPECT_EQ(dp.value().as_string_view(), "test data");
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

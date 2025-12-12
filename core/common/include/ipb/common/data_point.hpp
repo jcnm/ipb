@@ -208,28 +208,34 @@ public:
     
     // Zero-copy string view setter
     void set_string_view(std::string_view sv) noexcept {
-        cleanup();
+        // Clean up current external storage if any
+        if (size_ > INLINE_SIZE) {
+            external_data_.~unique_ptr();
+        }
         type_ = Type::STRING;
         size_ = sv.size();
-        
+
         if (size_ <= INLINE_SIZE) {
             std::memcpy(inline_data_, sv.data(), size_);
         } else {
-            external_data_ = std::make_unique<uint8_t[]>(size_);
+            new (&external_data_) std::unique_ptr<uint8_t[]>(std::make_unique<uint8_t[]>(size_));
             std::memcpy(external_data_.get(), sv.data(), size_);
         }
     }
-    
+
     // Zero-copy binary data setter
     void set_binary(std::span<const uint8_t> data) noexcept {
-        cleanup();
+        // Clean up current external storage if any
+        if (size_ > INLINE_SIZE) {
+            external_data_.~unique_ptr();
+        }
         type_ = Type::BINARY;
         size_ = data.size();
-        
+
         if (size_ <= INLINE_SIZE) {
             std::memcpy(inline_data_, data.data(), size_);
         } else {
-            external_data_ = std::make_unique<uint8_t[]>(size_);
+            new (&external_data_) std::unique_ptr<uint8_t[]>(std::make_unique<uint8_t[]>(size_));
             std::memcpy(external_data_.get(), data.data(), size_);
         }
     }
@@ -409,18 +415,24 @@ public:
     
     // Destructor
     ~DataPoint() {
-        // Cleanup is handled in move_from and copy_from
-    };
+        if (address_size_ > MAX_INLINE_ADDRESS) {
+            external_address_.~unique_ptr();
+        }
+    }
     
     // Address management (zero-copy when possible)
     void set_address(std::string_view address) noexcept {
+        // Clean up existing external allocation if any
+        if (address_size_ > MAX_INLINE_ADDRESS) {
+            external_address_.reset();
+        }
+
         address_size_ = std::min(address.size(), static_cast<size_t>(UINT16_MAX));
-        
+
         if (address_size_ <= MAX_INLINE_ADDRESS) {
             std::memcpy(inline_address_, address.data(), address_size_);
-            external_address_.reset();
         } else {
-            external_address_ = std::make_unique<char[]>(address_size_);
+            new (&external_address_) std::unique_ptr<char[]>(std::make_unique<char[]>(address_size_));
             std::memcpy(external_address_.get(), address.data(), address_size_);
         }
     }

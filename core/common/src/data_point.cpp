@@ -29,32 +29,35 @@ void Value::serialize(std::span<uint8_t> buffer) const noexcept {
 
 bool Value::deserialize(std::span<const uint8_t> buffer) noexcept {
     if (buffer.size() < sizeof(Type) + sizeof(size_t)) return false;
-    
-    cleanup();
-    
+
+    // Clean up current external storage if any
+    if (size_ > INLINE_SIZE) {
+        external_data_.~unique_ptr();
+    }
+
     size_t offset = 0;
-    
+
     // Read type
     std::memcpy(&type_, buffer.data() + offset, sizeof(Type));
     offset += sizeof(Type);
-    
+
     // Read size
     std::memcpy(&size_, buffer.data() + offset, sizeof(size_t));
     offset += sizeof(size_t);
-    
+
     // Validate remaining buffer size
     if (buffer.size() < offset + size_) return false;
-    
+
     // Read data
     if (size_ > 0) {
         if (size_ <= INLINE_SIZE) {
             std::memcpy(inline_data_, buffer.data() + offset, size_);
         } else {
-            external_data_ = std::make_unique<uint8_t[]>(size_);
+            new (&external_data_) std::unique_ptr<uint8_t[]>(std::make_unique<uint8_t[]>(size_));
             std::memcpy(external_data_.get(), buffer.data() + offset, size_);
         }
     }
-    
+
     return true;
 }
 
@@ -62,6 +65,34 @@ template<>
 void Value::set_impl<bool>(bool&& value) noexcept {
     type_ = Type::BOOL;
     size_ = sizeof(bool);
+    std::memcpy(inline_data_, &value, size_);
+}
+
+template<>
+void Value::set_impl<int8_t>(int8_t&& value) noexcept {
+    type_ = Type::INT8;
+    size_ = sizeof(int8_t);
+    std::memcpy(inline_data_, &value, size_);
+}
+
+template<>
+void Value::set_impl<int16_t>(int16_t&& value) noexcept {
+    type_ = Type::INT16;
+    size_ = sizeof(int16_t);
+    std::memcpy(inline_data_, &value, size_);
+}
+
+template<>
+void Value::set_impl<uint8_t>(uint8_t&& value) noexcept {
+    type_ = Type::UINT8;
+    size_ = sizeof(uint8_t);
+    std::memcpy(inline_data_, &value, size_);
+}
+
+template<>
+void Value::set_impl<uint16_t>(uint16_t&& value) noexcept {
+    type_ = Type::UINT16;
+    size_ = sizeof(uint16_t);
     std::memcpy(inline_data_, &value, size_);
 }
 
@@ -116,6 +147,38 @@ bool Value::get_impl<bool>() const noexcept {
 }
 
 template<>
+int8_t Value::get_impl<int8_t>() const noexcept {
+    if (type_ != Type::INT8 || size_ != sizeof(int8_t)) return 0;
+    int8_t result;
+    std::memcpy(&result, inline_data_, sizeof(int8_t));
+    return result;
+}
+
+template<>
+int16_t Value::get_impl<int16_t>() const noexcept {
+    if (type_ != Type::INT16 || size_ != sizeof(int16_t)) return 0;
+    int16_t result;
+    std::memcpy(&result, inline_data_, sizeof(int16_t));
+    return result;
+}
+
+template<>
+uint8_t Value::get_impl<uint8_t>() const noexcept {
+    if (type_ != Type::UINT8 || size_ != sizeof(uint8_t)) return 0;
+    uint8_t result;
+    std::memcpy(&result, inline_data_, sizeof(uint8_t));
+    return result;
+}
+
+template<>
+uint16_t Value::get_impl<uint16_t>() const noexcept {
+    if (type_ != Type::UINT16 || size_ != sizeof(uint16_t)) return 0;
+    uint16_t result;
+    std::memcpy(&result, inline_data_, sizeof(uint16_t));
+    return result;
+}
+
+template<>
 int32_t Value::get_impl<int32_t>() const noexcept {
     if (type_ != Type::INT32 || size_ != sizeof(int32_t)) return 0;
     int32_t result;
@@ -164,34 +227,40 @@ double Value::get_impl<double>() const noexcept {
 }
 
 void Value::copy_from(const Value& other) noexcept {
+    // Note: cleanup must be called by the caller if this is an assignment operation
+    // (constructors don't need cleanup since there's nothing to clean)
     type_ = other.type_;
     size_ = other.size_;
-    
+
     if (size_ <= INLINE_SIZE) {
         std::memcpy(inline_data_, other.inline_data_, size_);
     } else {
-        external_data_ = std::make_unique<uint8_t[]>(size_);
+        // Use placement new since external_data_ may not be constructed
+        new (&external_data_) std::unique_ptr<uint8_t[]>(std::make_unique<uint8_t[]>(size_));
         std::memcpy(external_data_.get(), other.external_data_.get(), size_);
     }
 }
 
 void Value::move_from(Value&& other) noexcept {
+    // Note: cleanup must be called by the caller if this is an assignment operation
+    // (constructors don't need cleanup since there's nothing to clean)
     type_ = other.type_;
     size_ = other.size_;
-    
+
     if (size_ <= INLINE_SIZE) {
         std::memcpy(inline_data_, other.inline_data_, size_);
     } else {
-        external_data_ = std::move(other.external_data_);
+        // Use placement new since external_data_ may not be constructed
+        new (&external_data_) std::unique_ptr<uint8_t[]>(std::move(other.external_data_));
     }
-    
+
     other.type_ = Type::EMPTY;
     other.size_ = 0;
 }
 
 void Value::cleanup() noexcept {
     if (size_ > INLINE_SIZE) {
-        external_data_.reset();
+        external_data_.~unique_ptr();
     }
     type_ = Type::EMPTY;
     size_ = 0;
@@ -234,21 +303,28 @@ void DataPoint::serialize(std::span<uint8_t> buffer) const noexcept {
 
 bool DataPoint::deserialize(std::span<const uint8_t> buffer) noexcept {
     if (buffer.size() < sizeof(uint16_t)) return false;
-    
+
+    // Clean up current external storage if any
+    if (address_size_ > MAX_INLINE_ADDRESS) {
+        external_address_.~unique_ptr();
+    }
+
     size_t offset = 0;
-    
+
     // Read address size
-    std::memcpy(&address_size_, buffer.data() + offset, sizeof(uint16_t));
+    uint16_t new_address_size;
+    std::memcpy(&new_address_size, buffer.data() + offset, sizeof(uint16_t));
     offset += sizeof(uint16_t);
-    
-    if (buffer.size() < offset + address_size_) return false;
-    
+
+    if (buffer.size() < offset + new_address_size) return false;
+
+    address_size_ = new_address_size;
+
     // Read address
     if (address_size_ <= MAX_INLINE_ADDRESS) {
         std::memcpy(inline_address_, buffer.data() + offset, address_size_);
-        external_address_.reset();
     } else {
-        external_address_ = std::make_unique<char[]>(address_size_);
+        new (&external_address_) std::unique_ptr<char[]>(std::make_unique<char[]>(address_size_));
         std::memcpy(external_address_.get(), buffer.data() + offset, address_size_);
     }
     offset += address_size_;
@@ -289,38 +365,47 @@ size_t DataPoint::hash() const noexcept {
 }
 
 void DataPoint::copy_from(const DataPoint& other) noexcept {
+    // Clean up current external storage if any
+    if (address_size_ > MAX_INLINE_ADDRESS) {
+        external_address_.~unique_ptr();
+    }
+
     value_ = other.value_;
     timestamp_ = other.timestamp_;
     address_size_ = other.address_size_;
-    
-    if (address_size_ <= MAX_INLINE_ADDRESS) {
+
+    if (other.address_size_ <= MAX_INLINE_ADDRESS) {
         std::memcpy(inline_address_, other.inline_address_, address_size_);
-        external_address_.reset();
     } else {
-        external_address_ = std::make_unique<char[]>(address_size_);
+        new (&external_address_) std::unique_ptr<char[]>(std::make_unique<char[]>(address_size_));
         std::memcpy(external_address_.get(), other.external_address_.get(), address_size_);
     }
-    
+
     protocol_id_ = other.protocol_id_;
     quality_ = other.quality_;
     sequence_number_ = other.sequence_number_;
 }
 
 void DataPoint::move_from(DataPoint&& other) noexcept {
+    // Clean up current external storage if any
+    if (address_size_ > MAX_INLINE_ADDRESS) {
+        external_address_.~unique_ptr();
+    }
+
     value_ = std::move(other.value_);
     timestamp_ = other.timestamp_;
     address_size_ = other.address_size_;
-    
-    if (address_size_ <= MAX_INLINE_ADDRESS) {
+
+    if (other.address_size_ <= MAX_INLINE_ADDRESS) {
         std::memcpy(inline_address_, other.inline_address_, address_size_);
     } else {
-        external_address_ = std::move(other.external_address_);
+        new (&external_address_) std::unique_ptr<char[]>(std::move(other.external_address_));
     }
-    
+
     protocol_id_ = other.protocol_id_;
     quality_ = other.quality_;
     sequence_number_ = other.sequence_number_;
-    
+
     other.address_size_ = 0;
     other.protocol_id_ = 0;
     other.quality_ = Quality::INITIAL;

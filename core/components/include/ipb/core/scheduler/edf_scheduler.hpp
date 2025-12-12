@@ -338,6 +338,9 @@ public:
     /// Update default deadline offset (thread-safe)
     void set_default_deadline_offset(std::chrono::nanoseconds offset);
 
+    /// Get current default deadline offset (thread-safe)
+    std::chrono::nanoseconds get_default_deadline_offset() const noexcept;
+
 private:
     std::unique_ptr<EDFSchedulerImpl> impl_;
 };
