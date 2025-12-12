@@ -1,4 +1,5 @@
 #include "ipb/core/rule_engine/pattern_matcher.hpp"
+#include "ipb/core/rule_engine/compiled_pattern_cache.hpp"
 #include <regex>
 #include <algorithm>
 
@@ -101,17 +102,36 @@ PatternMatchResult WildcardMatcher::match_with_groups(std::string_view input) co
 }
 
 // ============================================================================
-// RegexMatcher Implementation
+// RegexMatcher Implementation - Uses CompiledPatternCache for ReDoS protection
 // ============================================================================
 
 class RegexMatcher::Impl {
 public:
     explicit Impl(const std::string& pattern)
-        : regex_(pattern, std::regex::ECMAScript | std::regex::optimize) {}
+        : pattern_(pattern)
+        , cached_regex_(nullptr)
+        , valid_(false) {
+
+        // Use global pattern cache for ReDoS protection and efficiency
+        auto result = CompiledPatternCache::global_instance().get_or_compile(pattern);
+        if (result) {
+            cached_regex_ = result.value();
+            valid_ = true;
+        } else {
+            error_ = result.message();
+            valid_ = false;
+        }
+    }
+
+    bool is_valid() const noexcept { return valid_; }
+    const std::string& error() const noexcept { return error_; }
 
     bool matches(std::string_view input) const noexcept {
+        if (!valid_ || !cached_regex_) {
+            return false;
+        }
         try {
-            return std::regex_match(input.begin(), input.end(), regex_);
+            return std::regex_match(input.begin(), input.end(), *cached_regex_);
         } catch (...) {
             return false;
         }
@@ -119,9 +139,13 @@ public:
 
     PatternMatchResult match_with_groups(std::string_view input) const {
         PatternMatchResult result;
+        if (!valid_ || !cached_regex_) {
+            result.matched = false;
+            return result;
+        }
         try {
             std::match_results<std::string_view::const_iterator> match;
-            result.matched = std::regex_match(input.begin(), input.end(), match, regex_);
+            result.matched = std::regex_match(input.begin(), input.end(), match, *cached_regex_);
 
             if (result.matched) {
                 // Skip first group (entire match)
@@ -136,7 +160,10 @@ public:
     }
 
 private:
-    std::regex regex_;
+    std::string pattern_;
+    const std::regex* cached_regex_;  // Owned by CompiledPatternCache
+    bool valid_;
+    std::string error_;
 };
 
 RegexMatcher::RegexMatcher(std::string pattern)
@@ -155,6 +182,13 @@ PatternMatchResult RegexMatcher::match_with_groups(std::string_view input) const
 }
 
 bool RegexMatcher::is_valid_regex(std::string_view pattern) noexcept {
+    // Use pattern validator for ReDoS protection
+    auto validation = PatternValidator::validate(pattern);
+    if (!validation.is_safe) {
+        return false;
+    }
+
+    // Also verify syntax
     try {
         std::regex test(pattern.begin(), pattern.end());
         return true;
