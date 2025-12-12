@@ -553,38 +553,59 @@ std::string ConsoleSink::format_colored(const common::DataPoint& data_point) con
 }
 
 std::string ConsoleSink::format_timestamp(const common::Timestamp& timestamp) const {
-    auto time_t = std::chrono::system_clock::to_time_t(timestamp);
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        timestamp.time_since_epoch()
-    ) % 1000;
-    
+    // Convert nanoseconds to seconds for time_t
+    auto time_t_val = static_cast<std::time_t>(timestamp.seconds());
+    auto ms = static_cast<int>(timestamp.milliseconds() % 1000);
+
     std::ostringstream oss;
-    oss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
-    oss << "." << std::setfill('0') << std::setw(3) << ms.count();
-    
+    oss << std::put_time(std::localtime(&time_t_val), "%Y-%m-%d %H:%M:%S");
+    oss << "." << std::setfill('0') << std::setw(3) << ms;
+
     return oss.str();
 }
 
 std::string ConsoleSink::format_value(const common::Value& value) const {
-    return std::visit([](const auto& v) -> std::string {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, bool>) {
-            return v ? "true" : "false";
-        } else if constexpr (std::is_same_v<T, std::string>) {
-            return v;
-        } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+    using Type = common::Value::Type;
+    switch (value.type()) {
+        case Type::BOOL:
+            return value.get<bool>() ? "true" : "false";
+        case Type::INT8:
+            return std::to_string(value.get<int8_t>());
+        case Type::INT16:
+            return std::to_string(value.get<int16_t>());
+        case Type::INT32:
+            return std::to_string(value.get<int32_t>());
+        case Type::INT64:
+            return std::to_string(value.get<int64_t>());
+        case Type::UINT8:
+            return std::to_string(value.get<uint8_t>());
+        case Type::UINT16:
+            return std::to_string(value.get<uint16_t>());
+        case Type::UINT32:
+            return std::to_string(value.get<uint32_t>());
+        case Type::UINT64:
+            return std::to_string(value.get<uint64_t>());
+        case Type::FLOAT32:
+            return std::to_string(value.get<float>());
+        case Type::FLOAT64:
+            return std::to_string(value.get<double>());
+        case Type::STRING:
+            return std::string(value.as_string_view());
+        case Type::BINARY: {
+            auto data = value.as_binary();
             std::ostringstream oss;
             oss << "[";
-            for (size_t i = 0; i < v.size(); ++i) {
+            for (size_t i = 0; i < data.size(); ++i) {
                 if (i > 0) oss << ",";
-                oss << static_cast<int>(v[i]);
+                oss << static_cast<int>(data[i]);
             }
             oss << "]";
             return oss.str();
-        } else {
-            return std::to_string(v);
         }
-    }, value);
+        case Type::EMPTY:
+        default:
+            return "";
+    }
 }
 
 std::string ConsoleSink::format_quality(common::Quality quality) const {

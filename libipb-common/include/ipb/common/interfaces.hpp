@@ -27,6 +27,10 @@ enum class ResultErrorCode : uint32_t {
     PERMISSION_DENIED,
     DEVICE_NOT_FOUND,
     OPERATION_CANCELLED,
+    NOT_FOUND,
+    NOT_SUPPORTED,
+    CONFIG_ERROR,
+    IO_ERROR,
     INTERNAL_ERROR
 };
 

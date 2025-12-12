@@ -181,6 +181,139 @@ struct RoutingRule {
     mutable std::atomic<uint64_t> failure_count{0};
     mutable std::atomic<int64_t> total_processing_time_ns{0};
 
+    // Default constructor
+    RoutingRule() = default;
+
+    // Copy constructor (atomics need explicit handling)
+    RoutingRule(const RoutingRule& other)
+        : rule_id(other.rule_id)
+        , name(other.name)
+        , type(other.type)
+        , priority(other.priority)
+        , enabled(other.enabled)
+        , source_addresses(other.source_addresses)
+        , protocol_ids(other.protocol_ids)
+        , address_pattern(other.address_pattern)
+        , quality_levels(other.quality_levels)
+        , start_time(other.start_time)
+        , end_time(other.end_time)
+        , value_conditions(other.value_conditions)
+        , target_sink_ids(other.target_sink_ids)
+        , load_balance_strategy(other.load_balance_strategy)
+        , sink_weights(other.sink_weights)
+        , enable_failover(other.enable_failover)
+        , backup_sink_ids(other.backup_sink_ids)
+        , failover_timeout(other.failover_timeout)
+        , custom_condition(other.custom_condition)
+        , custom_target_selector(other.custom_target_selector)
+        , enable_batching(other.enable_batching)
+        , batch_size(other.batch_size)
+        , batch_timeout(other.batch_timeout)
+        , match_count(other.match_count.load())
+        , success_count(other.success_count.load())
+        , failure_count(other.failure_count.load())
+        , total_processing_time_ns(other.total_processing_time_ns.load())
+    {}
+
+    // Move constructor
+    RoutingRule(RoutingRule&& other) noexcept
+        : rule_id(other.rule_id)
+        , name(std::move(other.name))
+        , type(other.type)
+        , priority(other.priority)
+        , enabled(other.enabled)
+        , source_addresses(std::move(other.source_addresses))
+        , protocol_ids(std::move(other.protocol_ids))
+        , address_pattern(std::move(other.address_pattern))
+        , quality_levels(std::move(other.quality_levels))
+        , start_time(other.start_time)
+        , end_time(other.end_time)
+        , value_conditions(std::move(other.value_conditions))
+        , target_sink_ids(std::move(other.target_sink_ids))
+        , load_balance_strategy(other.load_balance_strategy)
+        , sink_weights(std::move(other.sink_weights))
+        , enable_failover(other.enable_failover)
+        , backup_sink_ids(std::move(other.backup_sink_ids))
+        , failover_timeout(other.failover_timeout)
+        , custom_condition(std::move(other.custom_condition))
+        , custom_target_selector(std::move(other.custom_target_selector))
+        , enable_batching(other.enable_batching)
+        , batch_size(other.batch_size)
+        , batch_timeout(other.batch_timeout)
+        , match_count(other.match_count.load())
+        , success_count(other.success_count.load())
+        , failure_count(other.failure_count.load())
+        , total_processing_time_ns(other.total_processing_time_ns.load())
+    {}
+
+    // Copy assignment
+    RoutingRule& operator=(const RoutingRule& other) {
+        if (this != &other) {
+            rule_id = other.rule_id;
+            name = other.name;
+            type = other.type;
+            priority = other.priority;
+            enabled = other.enabled;
+            source_addresses = other.source_addresses;
+            protocol_ids = other.protocol_ids;
+            address_pattern = other.address_pattern;
+            quality_levels = other.quality_levels;
+            start_time = other.start_time;
+            end_time = other.end_time;
+            value_conditions = other.value_conditions;
+            target_sink_ids = other.target_sink_ids;
+            load_balance_strategy = other.load_balance_strategy;
+            sink_weights = other.sink_weights;
+            enable_failover = other.enable_failover;
+            backup_sink_ids = other.backup_sink_ids;
+            failover_timeout = other.failover_timeout;
+            custom_condition = other.custom_condition;
+            custom_target_selector = other.custom_target_selector;
+            enable_batching = other.enable_batching;
+            batch_size = other.batch_size;
+            batch_timeout = other.batch_timeout;
+            match_count.store(other.match_count.load());
+            success_count.store(other.success_count.load());
+            failure_count.store(other.failure_count.load());
+            total_processing_time_ns.store(other.total_processing_time_ns.load());
+        }
+        return *this;
+    }
+
+    // Move assignment
+    RoutingRule& operator=(RoutingRule&& other) noexcept {
+        if (this != &other) {
+            rule_id = other.rule_id;
+            name = std::move(other.name);
+            type = other.type;
+            priority = other.priority;
+            enabled = other.enabled;
+            source_addresses = std::move(other.source_addresses);
+            protocol_ids = std::move(other.protocol_ids);
+            address_pattern = std::move(other.address_pattern);
+            quality_levels = std::move(other.quality_levels);
+            start_time = other.start_time;
+            end_time = other.end_time;
+            value_conditions = std::move(other.value_conditions);
+            target_sink_ids = std::move(other.target_sink_ids);
+            load_balance_strategy = other.load_balance_strategy;
+            sink_weights = std::move(other.sink_weights);
+            enable_failover = other.enable_failover;
+            backup_sink_ids = std::move(other.backup_sink_ids);
+            failover_timeout = other.failover_timeout;
+            custom_condition = std::move(other.custom_condition);
+            custom_target_selector = std::move(other.custom_target_selector);
+            enable_batching = other.enable_batching;
+            batch_size = other.batch_size;
+            batch_timeout = other.batch_timeout;
+            match_count.store(other.match_count.load());
+            success_count.store(other.success_count.load());
+            failure_count.store(other.failure_count.load());
+            total_processing_time_ns.store(other.total_processing_time_ns.load());
+        }
+        return *this;
+    }
+
     // Validation
     IPB_NODISCARD bool is_valid() const noexcept;
 

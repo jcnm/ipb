@@ -28,8 +28,6 @@ endif()
 # Library sources
 set(ROUTER_SOURCES
     src/router.cpp
-    src/edf_scheduler.cpp
-    src/routing_rule.cpp
 )
 
 set(ROUTER_HEADERS

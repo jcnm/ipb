@@ -154,6 +154,99 @@ struct RoutingRule {
     mutable std::atomic<uint64_t> eval_count{0};
     mutable std::atomic<int64_t> total_eval_time_ns{0};
 
+    // Default constructor
+    RoutingRule() = default;
+
+    // Copy constructor (atomics need explicit handling)
+    RoutingRule(const RoutingRule& other)
+        : id(other.id)
+        , name(other.name)
+        , type(other.type)
+        , priority(other.priority)
+        , enabled(other.enabled)
+        , source_addresses(other.source_addresses)
+        , address_pattern(other.address_pattern)
+        , protocol_ids(other.protocol_ids)
+        , quality_levels(other.quality_levels)
+        , value_condition(other.value_condition)
+        , start_time(other.start_time)
+        , end_time(other.end_time)
+        , target_sink_ids(other.target_sink_ids)
+        , custom_predicate(other.custom_predicate)
+        , match_count(other.match_count.load())
+        , eval_count(other.eval_count.load())
+        , total_eval_time_ns(other.total_eval_time_ns.load())
+    {}
+
+    // Move constructor
+    RoutingRule(RoutingRule&& other) noexcept
+        : id(other.id)
+        , name(std::move(other.name))
+        , type(other.type)
+        , priority(other.priority)
+        , enabled(other.enabled)
+        , source_addresses(std::move(other.source_addresses))
+        , address_pattern(std::move(other.address_pattern))
+        , protocol_ids(std::move(other.protocol_ids))
+        , quality_levels(std::move(other.quality_levels))
+        , value_condition(std::move(other.value_condition))
+        , start_time(other.start_time)
+        , end_time(other.end_time)
+        , target_sink_ids(std::move(other.target_sink_ids))
+        , custom_predicate(std::move(other.custom_predicate))
+        , match_count(other.match_count.load())
+        , eval_count(other.eval_count.load())
+        , total_eval_time_ns(other.total_eval_time_ns.load())
+    {}
+
+    // Copy assignment
+    RoutingRule& operator=(const RoutingRule& other) {
+        if (this != &other) {
+            id = other.id;
+            name = other.name;
+            type = other.type;
+            priority = other.priority;
+            enabled = other.enabled;
+            source_addresses = other.source_addresses;
+            address_pattern = other.address_pattern;
+            protocol_ids = other.protocol_ids;
+            quality_levels = other.quality_levels;
+            value_condition = other.value_condition;
+            start_time = other.start_time;
+            end_time = other.end_time;
+            target_sink_ids = other.target_sink_ids;
+            custom_predicate = other.custom_predicate;
+            match_count.store(other.match_count.load());
+            eval_count.store(other.eval_count.load());
+            total_eval_time_ns.store(other.total_eval_time_ns.load());
+        }
+        return *this;
+    }
+
+    // Move assignment
+    RoutingRule& operator=(RoutingRule&& other) noexcept {
+        if (this != &other) {
+            id = other.id;
+            name = std::move(other.name);
+            type = other.type;
+            priority = other.priority;
+            enabled = other.enabled;
+            source_addresses = std::move(other.source_addresses);
+            address_pattern = std::move(other.address_pattern);
+            protocol_ids = std::move(other.protocol_ids);
+            quality_levels = std::move(other.quality_levels);
+            value_condition = std::move(other.value_condition);
+            start_time = other.start_time;
+            end_time = other.end_time;
+            target_sink_ids = std::move(other.target_sink_ids);
+            custom_predicate = std::move(other.custom_predicate);
+            match_count.store(other.match_count.load());
+            eval_count.store(other.eval_count.load());
+            total_eval_time_ns.store(other.total_eval_time_ns.load());
+        }
+        return *this;
+    }
+
     /// Check if this rule matches a data point
     RuleMatchResult evaluate(const common::DataPoint& dp) const;
 

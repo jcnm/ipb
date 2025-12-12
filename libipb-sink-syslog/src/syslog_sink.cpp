@@ -6,6 +6,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <syslog.h>  // For ::syslog() function
 #include <ctime>
 #include <iomanip>
 #include <sstream>
@@ -498,16 +499,48 @@ std::string SyslogSink::format_rfc5424(const common::DataPoint& data_point, Sysl
     if (data_point.get_value().has_value()) {
         oss << " Value=";
         // Format value based on type
-        std::visit([&oss](const auto& v) {
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (std::is_same_v<T, std::string>) {
-                oss << "\"" << v << "\"";
-            } else if constexpr (std::is_same_v<T, bool>) {
-                oss << (v ? "true" : "false");
-            } else {
-                oss << v;
-            }
-        }, data_point.get_value().value());
+        const auto& val = data_point.value();  // Direct access to avoid dangling
+        using Type = common::Value::Type;
+        switch (val.type()) {
+            case Type::STRING:
+                oss << "\"" << val.as_string_view() << "\"";
+                break;
+            case Type::BOOL:
+                oss << (val.get<bool>() ? "true" : "false");
+                break;
+            case Type::INT8:
+                oss << static_cast<int>(val.get<int8_t>());
+                break;
+            case Type::INT16:
+                oss << val.get<int16_t>();
+                break;
+            case Type::INT32:
+                oss << val.get<int32_t>();
+                break;
+            case Type::INT64:
+                oss << val.get<int64_t>();
+                break;
+            case Type::UINT8:
+                oss << static_cast<unsigned>(val.get<uint8_t>());
+                break;
+            case Type::UINT16:
+                oss << val.get<uint16_t>();
+                break;
+            case Type::UINT32:
+                oss << val.get<uint32_t>();
+                break;
+            case Type::UINT64:
+                oss << val.get<uint64_t>();
+                break;
+            case Type::FLOAT32:
+                oss << val.get<float>();
+                break;
+            case Type::FLOAT64:
+                oss << val.get<double>();
+                break;
+            default:
+                break;
+        }
     }
     
     return oss.str();
@@ -523,22 +556,54 @@ std::string SyslogSink::format_json(const common::DataPoint& data_point, SyslogP
     json["facility"] = static_cast<int>(config_.facility);
     json["priority"] = static_cast<int>(priority);
     json["protocol_id"] = data_point.get_protocol_id();
-    json["address"] = data_point.get_address();
+    json["address"] = std::string(data_point.get_address());
     json["quality"] = static_cast<int>(data_point.get_quality());
-    
+
     if (data_point.get_value().has_value()) {
-        std::visit([&json](const auto& v) {
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (std::is_same_v<T, std::string>) {
-                json["value"] = v;
-            } else if constexpr (std::is_same_v<T, bool>) {
-                json["value"] = v;
-            } else if constexpr (std::is_arithmetic_v<T>) {
-                json["value"] = v;
-            }
-        }, data_point.get_value().value());
+        const auto& val = data_point.value();  // Direct access to avoid dangling
+        using Type = common::Value::Type;
+        switch (val.type()) {
+            case Type::STRING:
+                json["value"] = std::string(val.as_string_view());
+                break;
+            case Type::BOOL:
+                json["value"] = val.get<bool>();
+                break;
+            case Type::INT8:
+                json["value"] = val.get<int8_t>();
+                break;
+            case Type::INT16:
+                json["value"] = val.get<int16_t>();
+                break;
+            case Type::INT32:
+                json["value"] = val.get<int32_t>();
+                break;
+            case Type::INT64:
+                json["value"] = static_cast<Json::Int64>(val.get<int64_t>());
+                break;
+            case Type::UINT8:
+                json["value"] = val.get<uint8_t>();
+                break;
+            case Type::UINT16:
+                json["value"] = val.get<uint16_t>();
+                break;
+            case Type::UINT32:
+                json["value"] = val.get<uint32_t>();
+                break;
+            case Type::UINT64:
+                json["value"] = static_cast<Json::UInt64>(val.get<uint64_t>());
+                break;
+            case Type::FLOAT32:
+                json["value"] = val.get<float>();
+                break;
+            case Type::FLOAT64:
+                json["value"] = val.get<double>();
+                break;
+            default:
+                break;
+        }
     }
-    
+
     Json::StreamWriterBuilder builder;
     builder["indentation"] = "";
     return Json::writeString(builder, json);
@@ -567,12 +632,13 @@ std::string SyslogSink::get_process_id() const {
 
 common::Result<void> SyslogSink::send_to_local_syslog(const std::string& message, SyslogPriority priority) {
     try {
-        syslog(static_cast<int>(priority), "%s", message.c_str());
+        ::syslog(static_cast<int>(priority), "%s", message.c_str());
         statistics_.messages_sent.fetch_add(1);
         statistics_.bytes_sent.fetch_add(message.size());
-        return common::Result<void>::success();
+        return common::Result<void>();  // Success
     } catch (const std::exception& e) {
-        return common::Result<void>::failure(
+        return common::Result<void>(
+            common::ResultErrorCode::IO_ERROR,
             "Failed to send to local syslog: " + std::string(e.what())
         );
     }
@@ -591,34 +657,34 @@ common::Result<void> SyslogSink::establish_remote_connection() {
     int sock_type = (config_.transport == SyslogTransport::UDP) ? SOCK_DGRAM : SOCK_STREAM;
     remote_socket_ = socket(AF_INET, sock_type, 0);
     if (remote_socket_ == -1) {
-        return common::Result<void>::failure("Failed to create socket");
+        return common::Result<void>(common::ResultErrorCode::CONNECTION_FAILED, "Failed to create socket");
     }
-    
+
     // Resolve hostname
     struct hostent* host = gethostbyname(config_.remote_host.c_str());
     if (!host) {
         close(remote_socket_);
         remote_socket_ = -1;
-        return common::Result<void>::failure("Failed to resolve hostname: " + config_.remote_host);
+        return common::Result<void>(common::ResultErrorCode::NOT_FOUND, "Failed to resolve hostname: " + config_.remote_host);
     }
-    
+
     // Setup address
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(config_.remote_port);
     memcpy(&addr.sin_addr, host->h_addr, host->h_length);
-    
+
     // Connect (for TCP/TLS)
     if (config_.transport != SyslogTransport::UDP) {
         if (connect(remote_socket_, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
             close(remote_socket_);
             remote_socket_ = -1;
-            return common::Result<void>::failure("Failed to connect to remote syslog server");
+            return common::Result<void>(common::ResultErrorCode::CONNECTION_FAILED, "Failed to connect to remote syslog server");
         }
     }
-    
-    return common::Result<void>::success();
+
+    return common::Result<void>();  // Success
 }
 
 void SyslogSink::close_remote_connection() {
@@ -669,7 +735,7 @@ void SyslogSink::handle_send_failure() {
 void SyslogSink::activate_fallback() {
     if (!fallback_active_.exchange(true)) {
         statistics_.fallback_activations.fetch_add(1);
-        syslog(LOG_WARNING, "Activating fallback mode due to remote syslog failures");
+        ::syslog(LOG_WARNING, "Activating fallback mode due to remote syslog failures");
     }
 }
 
@@ -680,7 +746,7 @@ void SyslogSink::print_statistics() const {
     
     auto stats = get_statistics();
     
-    syslog(LOG_INFO, "Syslog Sink Statistics: processed=%lu, sent=%lu, failed=%lu, filtered=%lu, dropped=%lu, fallback_active=%s",
+    ::syslog(LOG_INFO, "Syslog Sink Statistics: processed=%lu, sent=%lu, failed=%lu, filtered=%lu, dropped=%lu, fallback_active=%s",
            stats.messages_processed.load(),
            stats.messages_sent.load(),
            stats.messages_failed.load(),

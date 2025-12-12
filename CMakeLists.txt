@@ -39,6 +39,8 @@ option(ENABLE_SPARKPLUG_SINK "Enable Sparkplug B sink" OFF)
 
 # Transport options (shared libraries)
 option(BUILD_TRANSPORT_MQTT "Build MQTT transport (shared by MQTT/Sparkplug)" ON)
+option(BUILD_TRANSPORT_HTTP "Build HTTP transport" ON)
+option(BUILD_TRANSPORT_WEBSOCKET "Build WebSocket transport" ON)
 
 # Performance options
 option(ENABLE_OPTIMIZATIONS "Enable performance optimizations" ON)
@@ -181,6 +183,25 @@ endif()
 set(NEED_MQTT_TRANSPORT FALSE)
 if(ENABLE_MQTT_SINK OR ENABLE_MQTT_SCOOP OR ENABLE_SPARKPLUG_SINK OR ENABLE_SPARKPLUG_SCOOP OR BUILD_TRANSPORT_MQTT)
     set(NEED_MQTT_TRANSPORT TRUE)
+endif()
+
+# HTTP Transport Layer
+if(BUILD_TRANSPORT_HTTP)
+    # Check for HTTP dependencies
+    find_package(CURL QUIET)
+    if(NOT CURL_FOUND)
+        find_library(CURL_LIB curl)
+    endif()
+
+    if(CURL_FOUND OR CURL_LIB)
+        conditional_add_subdirectory(libipb-transport-http TRUE)
+        message(STATUS "HTTP transport library enabled")
+        set(HTTP_TRANSPORT_AVAILABLE TRUE)
+    else()
+        message(STATUS "libcurl not found. HTTP transport disabled.")
+        message(STATUS "Install with: sudo apt install libcurl4-openssl-dev")
+        set(HTTP_TRANSPORT_AVAILABLE FALSE)
+    endif()
 endif()
 
 if(NEED_MQTT_TRANSPORT)

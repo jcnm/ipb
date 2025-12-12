@@ -428,7 +428,21 @@ public:
     
     uint32_t sequence_number() const noexcept { return sequence_number_; }
     void set_sequence_number(uint32_t seq) noexcept { sequence_number_ = seq; }
-    
+
+    // Backward-compatible accessors (deprecated, use the short names above)
+    std::string_view get_address() const noexcept { return address(); }
+    Timestamp get_timestamp() const noexcept { return timestamp(); }
+    uint16_t get_protocol_id() const noexcept { return protocol_id(); }
+    Quality get_quality() const noexcept { return quality(); }
+
+    // Backward-compatible value accessor returning optional-like interface
+    struct OptionalValueWrapper {
+        const Value* value_;
+        bool has_value() const noexcept { return value_ && !value_->empty(); }
+        const Value& value() const noexcept { return *value_; }
+    };
+    OptionalValueWrapper get_value() const noexcept { return OptionalValueWrapper{&value_}; }
+
     // Utility methods
     bool is_valid() const noexcept {
         return quality_ == Quality::GOOD || quality_ == Quality::UNCERTAIN;

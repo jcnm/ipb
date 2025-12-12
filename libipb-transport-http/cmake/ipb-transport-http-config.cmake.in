@@ -1,0 +1,14 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(Threads)
+
+# Find curl if used during build
+if("curl" IN_LIST "@BACKENDS_AVAILABLE@")
+    find_dependency(CURL)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/ipb-transport-http-targets.cmake")
+
+check_required_components(ipb-transport-http)
