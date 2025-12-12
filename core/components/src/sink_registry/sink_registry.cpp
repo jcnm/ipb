@@ -100,10 +100,12 @@ public:
         info->type = std::string(info->sink->sink_type());
         info->health = SinkHealth::UNKNOWN;
 
+        // Capture type before moving info
+        std::string sink_type = info->type;
         sinks_[id_str] = std::move(info);
         stats_.active_sinks.fetch_add(1, std::memory_order_relaxed);
 
-        IPB_LOG_INFO(LOG_CAT, "Registered sink: " << id << " (type=" << info->type << ", weight=" << weight << ")");
+        IPB_LOG_INFO(LOG_CAT, "Registered sink: " << id << " (type=" << sink_type << ", weight=" << weight << ")");
         return true;
     }
 

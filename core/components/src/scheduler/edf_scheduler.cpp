@@ -326,6 +326,10 @@ public:
         default_deadline_offset_.store(offset, std::memory_order_relaxed);
     }
 
+    std::chrono::nanoseconds get_default_deadline_offset() const noexcept {
+        return default_deadline_offset_.load(std::memory_order_relaxed);
+    }
+
 private:
     void worker_loop(size_t worker_id) {
         IPB_LOG_DEBUG(LOG_CAT, "Worker " << worker_id << " started");
@@ -659,6 +663,10 @@ const EDFSchedulerConfig& EDFScheduler::config() const noexcept {
 
 void EDFScheduler::set_default_deadline_offset(std::chrono::nanoseconds offset) {
     impl_->set_default_deadline_offset(offset);
+}
+
+std::chrono::nanoseconds EDFScheduler::get_default_deadline_offset() const noexcept {
+    return impl_->get_default_deadline_offset();
 }
 
 } // namespace ipb::core
