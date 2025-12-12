@@ -61,6 +61,36 @@ set_tests_properties(test_endpoint PROPERTIES
     TIMEOUT 120
 )
 
+# Platform utilities test (covers CPU detection, memory info, env vars, etc.)
+add_executable(test_platform test_platform.cpp)
+target_link_libraries(test_platform PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_platform COMMAND test_platform)
+set_tests_properties(test_platform PROPERTIES
+    LABELS "unit;core;common"
+    TIMEOUT 120
+)
+
+# Debug and logging utilities test (covers Logger, TraceId, SpanId, etc.)
+add_executable(test_debug test_debug.cpp)
+target_link_libraries(test_debug PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_debug COMMAND test_debug)
+set_tests_properties(test_debug PROPERTIES
+    LABELS "unit;core;common"
+    TIMEOUT 120
+)
+
 # ============================================================================
 # Core/Components Tests - Coverage of scheduler, message_bus, rule_engine, etc.
 # ============================================================================
@@ -109,6 +139,22 @@ target_link_libraries(test_rule_engine PRIVATE
 
 add_test(NAME test_rule_engine COMMAND test_rule_engine)
 set_tests_properties(test_rule_engine PROPERTIES
+    LABELS "unit;core;components"
+    TIMEOUT 180
+)
+
+# Pattern Matcher test (covers ExactMatcher, PrefixMatcher, WildcardMatcher, RegexMatcher)
+add_executable(test_pattern_matcher test_pattern_matcher.cpp)
+target_link_libraries(test_pattern_matcher PRIVATE
+    ipb-core-components
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_pattern_matcher COMMAND test_pattern_matcher)
+set_tests_properties(test_pattern_matcher PROPERTIES
     LABELS "unit;core;components"
     TIMEOUT 180
 )
@@ -178,6 +224,10 @@ if(ENABLE_COVERAGE)
     target_link_options(test_error PRIVATE --coverage)
     target_compile_options(test_endpoint PRIVATE --coverage)
     target_link_options(test_endpoint PRIVATE --coverage)
+    target_compile_options(test_platform PRIVATE --coverage)
+    target_link_options(test_platform PRIVATE --coverage)
+    target_compile_options(test_debug PRIVATE --coverage)
+    target_link_options(test_debug PRIVATE --coverage)
 
     # Core/Components tests
     target_compile_options(test_scheduler PRIVATE --coverage)
@@ -186,6 +236,8 @@ if(ENABLE_COVERAGE)
     target_link_options(test_message_bus PRIVATE --coverage)
     target_compile_options(test_rule_engine PRIVATE --coverage)
     target_link_options(test_rule_engine PRIVATE --coverage)
+    target_compile_options(test_pattern_matcher PRIVATE --coverage)
+    target_link_options(test_pattern_matcher PRIVATE --coverage)
     target_compile_options(test_sink_registry PRIVATE --coverage)
     target_link_options(test_sink_registry PRIVATE --coverage)
     target_compile_options(test_scoop_registry PRIVATE --coverage)
@@ -205,10 +257,13 @@ message(STATUS "  Core/Common:")
 message(STATUS "    - test_data_point (Timestamp, Value, Quality, DataPoint, RawMessage)")
 message(STATUS "    - test_error (ErrorCode, Error, Result, SourceLocation)")
 message(STATUS "    - test_endpoint (EndPoint, ConnectionStats, rt::SPSCRingBuffer, rt::MemoryPool)")
+message(STATUS "    - test_platform (CPU detection, memory info, env vars, CPU features)")
+message(STATUS "    - test_debug (Logger, TraceId, SpanId, LogFilter, Span)")
 message(STATUS "  Core/Components:")
 message(STATUS "    - test_scheduler (EDFScheduler, ScheduledTask, TaskQueue)")
 message(STATUS "    - test_message_bus (MessageBus, Message, Subscription, Channel)")
 message(STATUS "    - test_rule_engine (RuleEngine, RoutingRule, PatternMatcher)")
+message(STATUS "    - test_pattern_matcher (ExactMatcher, PrefixMatcher, WildcardMatcher, RegexMatcher)")
 message(STATUS "    - test_sink_registry (SinkRegistry, LoadBalancer, SinkInfo)")
 message(STATUS "    - test_scoop_registry (ScoopRegistry, ReadStrategy, AggregatedSubscription)")
 message(STATUS "  Core/Router:")
