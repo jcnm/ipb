@@ -1,0 +1,586 @@
+{
+  "metadata": {
+    "version": "dev",
+    "timestamp": "20251212_224726",
+    "platform": "Linux",
+    "compiler": "GCC 13.3"
+  },
+  "results": [
+    {
+      "name": "high_pressure",
+      "category": "core",
+      "component": "backpressure",
+      "iterations": 99982,
+      "duration_ms": 8.00,
+      "timing_ns": {
+        "mean": 47.53,
+        "median": 42.00,
+        "stddev": 11.06,
+        "min": 40.00,
+        "max": 274.00
+      },
+      "percentiles_ns": {
+        "p50": 42.00,
+        "p75": 55.00,
+        "p90": 59.00,
+        "p95": 61.00,
+        "p99": 66.19,
+        "p999": 180.00
+      },
+      "throughput": 21040709.32,
+      "slo_passed": true
+    },
+    {
+      "name": "no_pressure",
+      "category": "core",
+      "component": "backpressure",
+      "iterations": 99982,
+      "duration_ms": 8.00,
+      "timing_ns": {
+        "mean": 48.21,
+        "median": 43.00,
+        "stddev": 11.13,
+        "min": 40.00,
+        "max": 333.00
+      },
+      "percentiles_ns": {
+        "p50": 43.00,
+        "p75": 54.00,
+        "p90": 62.00,
+        "p95": 64.00,
+        "p99": 74.00,
+        "p999": 172.00
+      },
+      "throughput": 20743123.40,
+      "slo_passed": true
+    },
+    {
+      "name": "sensor_update",
+      "category": "core",
+      "component": "backpressure",
+      "iterations": 99991,
+      "duration_ms": 6.00,
+      "timing_ns": {
+        "mean": 31.49,
+        "median": 29.00,
+        "stddev": 5.89,
+        "min": 26.00,
+        "max": 188.00
+      },
+      "percentiles_ns": {
+        "p50": 29.00,
+        "p75": 33.00,
+        "p90": 41.00,
+        "p95": 44.00,
+        "p99": 47.00,
+        "p999": 70.00
+      },
+      "throughput": 31756572.85,
+      "slo_passed": true
+    },
+    {
+      "name": "aligned_increment",
+      "category": "core",
+      "component": "cache",
+      "iterations": 99990,
+      "duration_ms": 6.00,
+      "timing_ns": {
+        "mean": 29.09,
+        "median": 27.00,
+        "stddev": 4.88,
+        "min": 24.00,
+        "max": 182.00
+      },
+      "percentiles_ns": {
+        "p50": 27.00,
+        "p75": 31.00,
+        "p90": 37.00,
+        "p95": 38.00,
+        "p99": 40.00,
+        "p999": 57.00
+      },
+      "throughput": 34380756.13,
+      "slo_passed": true
+    },
+    {
+      "name": "prefetch_pop",
+      "category": "core",
+      "component": "cache",
+      "iterations": 99981,
+      "duration_ms": 234.00,
+      "timing_ns": {
+        "mean": 27.45,
+        "median": 27.00,
+        "stddev": 3.73,
+        "min": 24.00,
+        "max": 129.00
+      },
+      "percentiles_ns": {
+        "p50": 27.00,
+        "p75": 27.00,
+        "p90": 27.00,
+        "p95": 31.00,
+        "p99": 48.00,
+        "p999": 58.00
+      },
+      "throughput": 36430834.21,
+      "slo_passed": true
+    },
+    {
+      "name": "prefetch_push",
+      "category": "core",
+      "component": "cache",
+      "iterations": 99992,
+      "duration_ms": 5.00,
+      "timing_ns": {
+        "mean": 26.74,
+        "median": 27.00,
+        "stddev": 0.60,
+        "min": 25.00,
+        "max": 81.00
+      },
+      "percentiles_ns": {
+        "p50": 27.00,
+        "p75": 27.00,
+        "p90": 27.00,
+        "p95": 28.00,
+        "p99": 28.00,
+        "p999": 28.00
+      },
+      "throughput": 37391327.43,
+      "slo_passed": true
+    },
+    {
+      "name": "regular_increment",
+      "category": "core",
+      "component": "cache",
+      "iterations": 99995,
+      "duration_ms": 5.00,
+      "timing_ns": {
+        "mean": 26.47,
+        "median": 26.00,
+        "stddev": 0.60,
+        "min": 25.00,
+        "max": 91.00
+      },
+      "percentiles_ns": {
+        "p50": 26.00,
+        "p75": 27.00,
+        "p90": 27.00,
+        "p95": 27.00,
+        "p99": 27.00,
+        "p999": 27.00
+      },
+      "throughput": 37779697.08,
+      "slo_passed": true
+    },
+    {
+      "name": "copy",
+      "category": "core",
+      "component": "datapoint",
+      "iterations": 99992,
+      "duration_ms": 6.00,
+      "timing_ns": {
+        "mean": 32.12,
+        "median": 32.00,
+        "stddev": 2.96,
+        "min": 30.00,
+        "max": 167.00
+      },
+      "percentiles_ns": {
+        "p50": 32.00,
+        "p75": 32.00,
+        "p90": 33.00,
+        "p95": 33.00,
+        "p99": 52.00,
+        "p999": 58.00
+      },
+      "throughput": 31131806.42,
+      "slo_passed": true
+    },
+    {
+      "name": "create",
+      "category": "core",
+      "component": "datapoint",
+      "iterations": 99978,
+      "duration_ms": 11.00,
+      "timing_ns": {
+        "mean": 87.32,
+        "median": 87.00,
+        "stddev": 3.33,
+        "min": 85.00,
+        "max": 189.00
+      },
+      "percentiles_ns": {
+        "p50": 87.00,
+        "p75": 87.00,
+        "p90": 87.00,
+        "p95": 88.00,
+        "p99": 106.00,
+        "p999": 121.00
+      },
+      "throughput": 11452383.23,
+      "slo_passed": true
+    },
+    {
+      "name": "value_create",
+      "category": "core",
+      "component": "datapoint",
+      "iterations": 99989,
+      "duration_ms": 5.00,
+      "timing_ns": {
+        "mean": 29.13,
+        "median": 29.00,
+        "stddev": 0.79,
+        "min": 27.00,
+        "max": 87.00
+      },
+      "percentiles_ns": {
+        "p50": 29.00,
+        "p75": 30.00,
+        "p90": 30.00,
+        "p95": 30.00,
+        "p99": 30.00,
+        "p999": 30.00
+      },
+      "throughput": 34332625.66,
+      "slo_passed": false
+    },
+    {
+      "name": "value_get",
+      "category": "core",
+      "component": "datapoint",
+      "iterations": 99997,
+      "duration_ms": 5.00,
+      "timing_ns": {
+        "mean": 27.48,
+        "median": 28.00,
+        "stddev": 0.62,
+        "min": 25.00,
+        "max": 97.00
+      },
+      "percentiles_ns": {
+        "p50": 28.00,
+        "p75": 28.00,
+        "p90": 28.00,
+        "p95": 28.00,
+        "p99": 28.00,
+        "p999": 28.00
+      },
+      "throughput": 36388612.93,
+      "slo_passed": false
+    },
+    {
+      "name": "alloc_dealloc_cycle",
+      "category": "core",
+      "component": "memory_pool",
+      "iterations": 99976,
+      "duration_ms": 10.00,
+      "timing_ns": {
+        "mean": 74.94,
+        "median": 74.00,
+        "stddev": 4.12,
+        "min": 72.00,
+        "max": 261.00
+      },
+      "percentiles_ns": {
+        "p50": 74.00,
+        "p75": 74.00,
+        "p90": 78.00,
+        "p95": 83.00,
+        "p99": 88.00,
+        "p999": 109.00
+      },
+      "throughput": 13344764.53,
+      "slo_passed": true
+    },
+    {
+      "name": "allocate",
+      "category": "core",
+      "component": "memory_pool",
+      "iterations": 99990,
+      "duration_ms": 10.00,
+      "timing_ns": {
+        "mean": 51.54,
+        "median": 51.00,
+        "stddev": 2.24,
+        "min": 50.00,
+        "max": 203.00
+      },
+      "percentiles_ns": {
+        "p50": 51.00,
+        "p75": 52.00,
+        "p90": 52.00,
+        "p95": 52.00,
+        "p99": 53.00,
+        "p999": 55.00
+      },
+      "throughput": 19402626.52,
+      "slo_passed": true
+    },
+    {
+      "name": "deallocate",
+      "category": "core",
+      "component": "memory_pool",
+      "iterations": 99913,
+      "duration_ms": 11.00,
+      "timing_ns": {
+        "mean": 56.30,
+        "median": 50.00,
+        "stddev": 13.47,
+        "min": 48.00,
+        "max": 240.00
+      },
+      "percentiles_ns": {
+        "p50": 50.00,
+        "p75": 61.00,
+        "p90": 73.00,
+        "p95": 76.00,
+        "p99": 91.88,
+        "p999": 204.00
+      },
+      "throughput": 17761588.02,
+      "slo_passed": true
+    },
+    {
+      "name": "heap_new_delete",
+      "category": "core",
+      "component": "memory_pool",
+      "iterations": 99983,
+      "duration_ms": 6.00,
+      "timing_ns": {
+        "mean": 35.88,
+        "median": 35.00,
+        "stddev": 3.07,
+        "min": 32.00,
+        "max": 189.00
+      },
+      "percentiles_ns": {
+        "p50": 35.00,
+        "p75": 37.00,
+        "p90": 39.00,
+        "p95": 39.00,
+        "p99": 44.00,
+        "p999": 64.00
+      },
+      "throughput": 27872941.34,
+      "slo_passed": true
+    },
+    {
+      "name": "mpmc_cycle",
+      "category": "core",
+      "component": "queue",
+      "iterations": 99985,
+      "duration_ms": 7.00,
+      "timing_ns": {
+        "mean": 40.68,
+        "median": 41.00,
+        "stddev": 2.70,
+        "min": 39.00,
+        "max": 194.00
+      },
+      "percentiles_ns": {
+        "p50": 41.00,
+        "p75": 41.00,
+        "p90": 41.00,
+        "p95": 41.00,
+        "p99": 46.00,
+        "p999": 59.00
+      },
+      "throughput": 24583734.93,
+      "slo_passed": true
+    },
+    {
+      "name": "mpmc_dequeue",
+      "category": "core",
+      "component": "queue",
+      "iterations": 99985,
+      "duration_ms": 100.00,
+      "timing_ns": {
+        "mean": 33.70,
+        "median": 33.00,
+        "stddev": 4.25,
+        "min": 30.00,
+        "max": 188.00
+      },
+      "percentiles_ns": {
+        "p50": 33.00,
+        "p75": 33.00,
+        "p90": 34.00,
+        "p95": 39.00,
+        "p99": 54.00,
+        "p999": 65.00
+      },
+      "throughput": 29674951.18,
+      "slo_passed": true
+    },
+    {
+      "name": "mpmc_enqueue",
+      "category": "core",
+      "component": "queue",
+      "iterations": 99986,
+      "duration_ms": 8.00,
+      "timing_ns": {
+        "mean": 34.81,
+        "median": 35.00,
+        "stddev": 2.50,
+        "min": 33.00,
+        "max": 137.00
+      },
+      "percentiles_ns": {
+        "p50": 35.00,
+        "p75": 35.00,
+        "p90": 35.00,
+        "p95": 36.00,
+        "p99": 36.00,
+        "p999": 48.00
+      },
+      "throughput": 28726879.17,
+      "slo_passed": true
+    },
+    {
+      "name": "spsc_cycle",
+      "category": "core",
+      "component": "queue",
+      "iterations": 99989,
+      "duration_ms": 7.00,
+      "timing_ns": {
+        "mean": 39.22,
+        "median": 39.00,
+        "stddev": 1.54,
+        "min": 37.00,
+        "max": 138.00
+      },
+      "percentiles_ns": {
+        "p50": 39.00,
+        "p75": 40.00,
+        "p90": 40.00,
+        "p95": 40.00,
+        "p99": 42.00,
+        "p999": 44.00
+      },
+      "throughput": 25495645.25,
+      "slo_passed": true
+    },
+    {
+      "name": "spsc_dequeue",
+      "category": "core",
+      "component": "queue",
+      "iterations": 99981,
+      "duration_ms": 639.00,
+      "timing_ns": {
+        "mean": 33.95,
+        "median": 33.00,
+        "stddev": 5.36,
+        "min": 31.00,
+        "max": 152.00
+      },
+      "percentiles_ns": {
+        "p50": 33.00,
+        "p75": 33.00,
+        "p90": 34.00,
+        "p95": 36.00,
+        "p99": 63.00,
+        "p999": 75.00
+      },
+      "throughput": 29454872.31,
+      "slo_passed": true
+    },
+    {
+      "name": "spsc_enqueue",
+      "category": "core",
+      "component": "queue",
+      "iterations": 99983,
+      "duration_ms": 7.00,
+      "timing_ns": {
+        "mean": 32.77,
+        "median": 33.00,
+        "stddev": 2.94,
+        "min": 30.00,
+        "max": 173.00
+      },
+      "percentiles_ns": {
+        "p50": 33.00,
+        "p75": 33.00,
+        "p90": 33.00,
+        "p95": 33.00,
+        "p99": 34.00,
+        "p999": 105.00
+      },
+      "throughput": 30518378.70,
+      "slo_passed": true
+    },
+    {
+      "name": "sliding_window",
+      "category": "core",
+      "component": "rate_limiter",
+      "iterations": 99962,
+      "duration_ms": 12.00,
+      "timing_ns": {
+        "mean": 91.45,
+        "median": 88.00,
+        "stddev": 12.02,
+        "min": 82.00,
+        "max": 353.00
+      },
+      "percentiles_ns": {
+        "p50": 88.00,
+        "p75": 90.00,
+        "p90": 104.00,
+        "p95": 122.00,
+        "p99": 132.00,
+        "p999": 203.00
+      },
+      "throughput": 10935341.33,
+      "slo_passed": true
+    },
+    {
+      "name": "token_bucket_allowed",
+      "category": "core",
+      "component": "rate_limiter",
+      "iterations": 99974,
+      "duration_ms": 12.00,
+      "timing_ns": {
+        "mean": 85.69,
+        "median": 83.00,
+        "stddev": 8.13,
+        "min": 80.00,
+        "max": 331.00
+      },
+      "percentiles_ns": {
+        "p50": 83.00,
+        "p75": 84.00,
+        "p90": 96.00,
+        "p95": 103.00,
+        "p99": 111.00,
+        "p999": 169.00
+      },
+      "throughput": 11669315.32,
+      "slo_passed": false
+    },
+    {
+      "name": "token_bucket_limited",
+      "category": "core",
+      "component": "rate_limiter",
+      "iterations": 99983,
+      "duration_ms": 10.00,
+      "timing_ns": {
+        "mean": 76.61,
+        "median": 77.00,
+        "stddev": 0.79,
+        "min": 74.00,
+        "max": 158.00
+      },
+      "percentiles_ns": {
+        "p50": 77.00,
+        "p75": 77.00,
+        "p90": 77.00,
+        "p95": 77.00,
+        "p99": 78.00,
+        "p999": 78.00
+      },
+      "throughput": 13053374.40,
+      "slo_passed": false
+    }
+  ]
+}

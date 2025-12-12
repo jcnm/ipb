@@ -277,6 +277,12 @@ if(BUILD_TESTING)
     ipb_add_subdirectory(tests TRUE)
 endif()
 
+# --- BENCHMARKS ---
+option(IPB_BUILD_BENCHMARKS "Build IPB benchmark suite" ON)
+if(IPB_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()
+
 # ============================================================================
 # INSTALL & EXPORT
 # ============================================================================
