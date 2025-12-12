@@ -1,5 +1,9 @@
 #include "ipb/scoop/mqtt/mqtt_scoop.hpp"
 
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
+
 #include <json/json.h>
 #include <sstream>
 #include <algorithm>
@@ -7,6 +11,12 @@
 #include <condition_variable>
 
 namespace ipb::scoop::mqtt {
+
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::PROTOCOL;
+}
 
 //=============================================================================
 // TopicMapping Implementation
@@ -144,22 +154,31 @@ public:
     explicit Impl(const MQTTScoopConfig& config)
         : config_(config)
         , running_(false)
-        , connected_(false) {}
+        , connected_(false) {
+        IPB_LOG_DEBUG(LOG_CAT, "MQTTScoop::Impl created");
+    }
 
     ~Impl() {
+        IPB_LOG_TRACE(LOG_CAT, "MQTTScoop::Impl destructor");
         stop();
     }
 
     common::Result<> start() {
-        if (running_.load()) {
+        IPB_SPAN_CAT("MQTTScoop::start", LOG_CAT);
+
+        if (IPB_UNLIKELY(running_.load())) {
+            IPB_LOG_WARN(LOG_CAT, "MQTTScoop already running");
             return common::Result<>::success();
         }
+
+        IPB_LOG_INFO(LOG_CAT, "Starting MQTTScoop...");
 
         // Get or create shared MQTT connection
         auto& manager = transport::mqtt::MQTTConnectionManager::instance();
         connection_ = manager.get_or_create(config_.connection_id, config_.mqtt_config);
 
-        if (!connection_) {
+        if (IPB_UNLIKELY(!connection_)) {
+            IPB_LOG_ERROR(LOG_CAT, "Failed to create MQTT connection");
             return common::Result<>::failure("Failed to create MQTT connection");
         }
 
@@ -179,25 +198,35 @@ public:
         );
 
         // Connect
-        if (!connection_->connect()) {
+        if (IPB_UNLIKELY(!connection_->connect())) {
+            IPB_LOG_ERROR(LOG_CAT, "Failed to connect to MQTT broker");
             return common::Result<>::failure("Failed to connect to MQTT broker");
         }
+
+        IPB_LOG_DEBUG(LOG_CAT, "Connected to MQTT broker");
 
         running_.store(true);
 
         // Start processing thread
         processing_thread_ = std::thread(&Impl::processing_loop, this);
+        IPB_LOG_DEBUG(LOG_CAT, "Processing thread started");
 
         // Subscribe to topics
         subscribe_all();
 
+        IPB_LOG_INFO(LOG_CAT, "MQTTScoop started successfully");
         return common::Result<>::success();
     }
 
     common::Result<> stop() {
+        IPB_SPAN_CAT("MQTTScoop::stop", LOG_CAT);
+
         if (!running_.load()) {
+            IPB_LOG_DEBUG(LOG_CAT, "MQTTScoop already stopped");
             return common::Result<>::success();
         }
+
+        IPB_LOG_INFO(LOG_CAT, "Stopping MQTTScoop...");
 
         running_.store(false);
 
@@ -210,6 +239,7 @@ public:
         // Wait for processing thread
         if (processing_thread_.joinable()) {
             processing_thread_.join();
+            IPB_LOG_DEBUG(LOG_CAT, "Processing thread stopped");
         }
 
         // Unsubscribe and disconnect
@@ -217,10 +247,12 @@ public:
             for (const auto& mapping : config_.subscription.mappings) {
                 connection_->unsubscribe(mapping.topic_pattern);
             }
+            IPB_LOG_DEBUG(LOG_CAT, "Unsubscribed from all topics");
             // Don't disconnect - shared connection may be used by others
         }
 
         connected_.store(false);
+        IPB_LOG_INFO(LOG_CAT, "MQTTScoop stopped successfully");
         return common::Result<>::success();
     }
 
@@ -345,15 +377,19 @@ private:
         stats_.messages_received++;
         stats_.bytes_received += payload.size();
 
+        IPB_LOG_TRACE(LOG_CAT, "Received message on topic: " << topic << " (size=" << payload.size() << ")");
+
         // Check retained filter
         if (retained && config_.subscription.ignore_retained) {
             stats_.messages_dropped++;
+            IPB_LOG_TRACE(LOG_CAT, "Dropped retained message on: " << topic);
             return;
         }
 
         // Check payload size
-        if (payload.size() > config_.subscription.max_payload_size) {
+        if (IPB_UNLIKELY(payload.size() > config_.subscription.max_payload_size)) {
             stats_.messages_dropped++;
+            IPB_LOG_WARN(LOG_CAT, "Dropped oversized message on: " << topic << " (size=" << payload.size() << ")");
             return;
         }
 
@@ -369,17 +405,19 @@ private:
             }
         }
 
-        if (!mapping) {
+        if (IPB_UNLIKELY(!mapping)) {
             stats_.messages_dropped++;
+            IPB_LOG_TRACE(LOG_CAT, "No mapping for topic: " << topic);
             return;
         }
 
         // Parse payload and create DataPoints
         auto data_points = parse_payload(topic, payload, *mapping);
 
-        if (data_points.empty()) {
+        if (IPB_UNLIKELY(data_points.empty())) {
             if (!config_.processing.skip_parse_errors) {
                 stats_.parse_errors++;
+                IPB_LOG_WARN(LOG_CAT, "Failed to parse message on: " << topic);
             }
             return;
         }

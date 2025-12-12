@@ -1,4 +1,7 @@
 #include "ipb/scoop/modbus/modbus_scoop.hpp"
+#include <ipb/common/error.hpp>
+#include <ipb/common/debug.hpp>
+#include <ipb/common/platform.hpp>
 #include <modbus/modbus.h>
 #include <json/json.h>
 #include <thread>
@@ -7,11 +10,19 @@
 
 namespace ipb::scoop::modbus {
 
+using namespace common::debug;
+
+namespace {
+    constexpr const char* LOG_CAT = category::PROTOCOL;
+}
+
 ModbusScoop::ModbusScoop(const ModbusScoopConfig& config)
     : config_(config) {
+    IPB_LOG_DEBUG(LOG_CAT, "ModbusScoop created");
 }
 
 ModbusScoop::~ModbusScoop() {
+    IPB_LOG_TRACE(LOG_CAT, "ModbusScoop destructor");
     if (running_.load()) {
         stop();
     }
@@ -19,39 +30,48 @@ ModbusScoop::~ModbusScoop() {
 }
 
 common::Result<void> ModbusScoop::initialize(const std::string& config_path) {
+    IPB_SPAN_CAT("ModbusScoop::initialize", LOG_CAT);
+    IPB_LOG_INFO(LOG_CAT, "Initializing ModbusScoop...");
+
     try {
         // Initialize libmodbus context
         if (config_.connection_type == ModbusConnectionType::TCP) {
+            IPB_LOG_DEBUG(LOG_CAT, "Creating TCP context: " << config_.host << ":" << config_.port);
             modbus_ctx_ = modbus_new_tcp(config_.host.c_str(), config_.port);
         } else {
-            modbus_ctx_ = modbus_new_rtu(config_.device.c_str(), config_.baud_rate, 
+            IPB_LOG_DEBUG(LOG_CAT, "Creating RTU context: " << config_.device << " @ " << config_.baud_rate);
+            modbus_ctx_ = modbus_new_rtu(config_.device.c_str(), config_.baud_rate,
                                         config_.parity, config_.data_bits, config_.stop_bits);
         }
-        
-        if (!modbus_ctx_) {
+
+        if (IPB_UNLIKELY(!modbus_ctx_)) {
+            IPB_LOG_ERROR(LOG_CAT, "Failed to create Modbus context");
             return common::Result<void>::failure("Failed to create Modbus context");
         }
-        
+
         // Set slave ID
-        if (modbus_set_slave(modbus_ctx_, config_.slave_id) == -1) {
+        if (IPB_UNLIKELY(modbus_set_slave(modbus_ctx_, config_.slave_id) == -1)) {
+            IPB_LOG_ERROR(LOG_CAT, "Failed to set Modbus slave ID: " << config_.slave_id);
             modbus_free(modbus_ctx_);
             modbus_ctx_ = nullptr;
             return common::Result<void>::failure("Failed to set Modbus slave ID");
         }
-        
+
         // Set timeouts
-        modbus_set_response_timeout(modbus_ctx_, 
-                                   config_.response_timeout.count() / 1000, 
+        modbus_set_response_timeout(modbus_ctx_,
+                                   config_.response_timeout.count() / 1000,
                                    (config_.response_timeout.count() % 1000) * 1000);
-        
+
         // Set debug mode if enabled
         if (config_.enable_debug) {
             modbus_set_debug(modbus_ctx_, TRUE);
         }
-        
+
+        IPB_LOG_INFO(LOG_CAT, "ModbusScoop initialized successfully");
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
+        IPB_LOG_ERROR(LOG_CAT, "Exception during initialization: " << e.what());
         return common::Result<void>::failure(
             "Failed to initialize Modbus scoop: " + std::string(e.what())
         );
@@ -59,35 +79,47 @@ common::Result<void> ModbusScoop::initialize(const std::string& config_path) {
 }
 
 common::Result<void> ModbusScoop::start() {
-    if (running_.load()) {
+    IPB_SPAN_CAT("ModbusScoop::start", LOG_CAT);
+
+    if (IPB_UNLIKELY(running_.load())) {
+        IPB_LOG_WARN(LOG_CAT, "Modbus scoop is already running");
         return common::Result<void>::failure("Modbus scoop is already running");
     }
-    
+
+    IPB_LOG_INFO(LOG_CAT, "Starting ModbusScoop...");
+
     try {
         // Connect to Modbus device
-        if (modbus_connect(modbus_ctx_) == -1) {
+        if (IPB_UNLIKELY(modbus_connect(modbus_ctx_) == -1)) {
+            IPB_LOG_ERROR(LOG_CAT, "Failed to connect to Modbus device: " << modbus_strerror(errno));
             return common::Result<void>::failure(
                 "Failed to connect to Modbus device: " + std::string(modbus_strerror(errno))
             );
         }
-        
+
+        IPB_LOG_DEBUG(LOG_CAT, "Connected to Modbus device");
+
         running_.store(true);
         shutdown_requested_.store(false);
-        
+
         // Start polling thread
         polling_thread_ = std::thread(&ModbusScoop::polling_loop, this);
-        
+        IPB_LOG_DEBUG(LOG_CAT, "Polling thread started");
+
         // Start statistics thread if enabled
         if (config_.enable_statistics) {
             statistics_thread_ = std::thread(&ModbusScoop::statistics_loop, this);
+            IPB_LOG_DEBUG(LOG_CAT, "Statistics thread started");
         }
-        
+
         // Reset statistics
         statistics_.reset();
-        
+
+        IPB_LOG_INFO(LOG_CAT, "ModbusScoop started successfully");
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
+        IPB_LOG_ERROR(LOG_CAT, "Exception during start: " << e.what());
         running_.store(false);
         return common::Result<void>::failure(
             "Failed to start Modbus scoop: " + std::string(e.what())
@@ -96,31 +128,41 @@ common::Result<void> ModbusScoop::start() {
 }
 
 common::Result<void> ModbusScoop::stop() {
+    IPB_SPAN_CAT("ModbusScoop::stop", LOG_CAT);
+
     if (!running_.load()) {
+        IPB_LOG_DEBUG(LOG_CAT, "ModbusScoop already stopped");
         return common::Result<void>::success();
     }
-    
+
+    IPB_LOG_INFO(LOG_CAT, "Stopping ModbusScoop...");
+
     try {
         running_.store(false);
-        
+
         // Wait for polling thread to finish
         if (polling_thread_.joinable()) {
             polling_thread_.join();
+            IPB_LOG_DEBUG(LOG_CAT, "Polling thread stopped");
         }
-        
+
         // Stop statistics thread
         if (statistics_thread_.joinable()) {
             statistics_thread_.join();
+            IPB_LOG_DEBUG(LOG_CAT, "Statistics thread stopped");
         }
-        
+
         // Disconnect from Modbus device
         if (modbus_ctx_) {
             modbus_close(modbus_ctx_);
+            IPB_LOG_DEBUG(LOG_CAT, "Disconnected from Modbus device");
         }
-        
+
+        IPB_LOG_INFO(LOG_CAT, "ModbusScoop stopped successfully");
         return common::Result<void>::success();
-        
+
     } catch (const std::exception& e) {
+        IPB_LOG_ERROR(LOG_CAT, "Exception during stop: " << e.what());
         return common::Result<void>::failure(
             "Failed to stop Modbus scoop: " + std::string(e.what())
         );
@@ -202,43 +244,44 @@ std::string ModbusScoop::get_protocol_info() const {
 }
 
 void ModbusScoop::polling_loop() {
+    IPB_LOG_DEBUG(LOG_CAT, "Polling loop started");
+
     while (running_.load()) {
         auto cycle_start = std::chrono::high_resolution_clock::now();
-        
+
         // Poll all configured registers
         for (const auto& register_config : config_.registers) {
             if (!running_.load()) break;
-            
+
             auto read_result = read_register(register_config);
-            if (read_result.is_success()) {
+            if (IPB_LIKELY(read_result.is_success())) {
                 auto data_point = read_result.get_value();
-                
+
                 // Send data point to router if callback is set
                 if (data_callback_) {
                     data_callback_(data_point);
                 }
-                
+
                 statistics_.successful_reads.fetch_add(1);
             } else {
                 statistics_.failed_reads.fetch_add(1);
-                
-                if (config_.enable_debug) {
-                    std::cerr << "Failed to read register " << register_config.address 
-                             << ": " << read_result.get_error() << std::endl;
-                }
+                IPB_LOG_WARN(LOG_CAT, "Failed to read register " << register_config.address
+                            << ": " << read_result.get_error());
             }
         }
-        
+
         // Calculate cycle time and sleep if necessary
         auto cycle_end = std::chrono::high_resolution_clock::now();
         auto cycle_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             cycle_end - cycle_start
         );
-        
+
         if (cycle_duration < config_.polling_interval) {
             std::this_thread::sleep_for(config_.polling_interval - cycle_duration);
         }
     }
+
+    IPB_LOG_DEBUG(LOG_CAT, "Polling loop stopped");
 }
 
 void ModbusScoop::statistics_loop() {
