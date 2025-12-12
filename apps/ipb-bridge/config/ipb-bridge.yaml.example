@@ -1,0 +1,64 @@
+# IPB Bridge Configuration
+# Lightweight industrial protocol bridge for edge/embedded deployments
+
+# Instance identification
+instance_id: "bridge-001"
+name: "IPB Bridge - Edge Gateway"
+
+# Watchdog configuration (for embedded systems)
+watchdog:
+  enabled: true
+  timeout: 30000  # milliseconds
+
+# Data forwarding behavior
+forwarding:
+  # round_robin: Send to one sink at a time (load balancing)
+  # false: Send to all sinks (redundancy)
+  round_robin: false
+
+  # Drop data if sink fails (vs. queue for retry)
+  drop_on_error: false
+
+# Resource limits (important for embedded)
+limits:
+  max_sources: 16    # Maximum data sources
+  max_sinks: 8       # Maximum data sinks
+  max_queue_size: 1000  # Internal buffer size
+
+# Logging
+log_level: info  # trace, debug, info, warn, error
+
+# Example sources configuration
+# (Uncomment and modify based on your deployment)
+#
+# sources:
+#   - id: modbus-plc-1
+#     type: modbus_tcp
+#     host: 192.168.1.100
+#     port: 502
+#     polling_interval: 1000
+#     registers:
+#       - address: 0
+#         count: 10
+#         type: holding
+#
+#   - id: serial-sensor
+#     type: modbus_rtu
+#     device: /dev/ttyUSB0
+#     baud_rate: 9600
+#     slave_id: 1
+
+# Example sinks configuration
+#
+# sinks:
+#   - id: mqtt-cloud
+#     type: mqtt
+#     host: mqtt.example.com
+#     port: 8883
+#     tls: true
+#     client_id: bridge-001
+#     topic_prefix: plant/area1/
+#
+#   - id: local-log
+#     type: console
+#     format: json

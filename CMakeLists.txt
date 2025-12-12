@@ -54,6 +54,7 @@ option(IPB_TRANSPORT_HTTP "Build HTTP transport" ON)
 
 # Application options
 option(IPB_BUILD_GATE "Build ipb-gate application" ON)
+option(IPB_BUILD_BRIDGE "Build ipb-bridge application" ON)
 
 # ============================================================================
 # BUILD PROFILES
@@ -66,6 +67,7 @@ if(IPB_EMBEDDED)
     set(IPB_SINK_MQTT OFF)
     set(IPB_SINK_KAFKA OFF)
     set(IPB_BUILD_GATE OFF)
+    set(IPB_BUILD_BRIDGE ON)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os")
     add_compile_definitions(IPB_EMBEDDED=1)
 endif()
@@ -84,6 +86,7 @@ if(IPB_FULL)
     set(IPB_TRANSPORT_MQTT ON)
     set(IPB_TRANSPORT_HTTP ON)
     set(IPB_BUILD_GATE ON)
+    set(IPB_BUILD_BRIDGE ON)
 endif()
 
 # ============================================================================
@@ -256,7 +259,13 @@ if(MQTT_TRANSPORT_AVAILABLE)
 endif()
 
 # --- APPLICATIONS ---
-ipb_add_subdirectory(apps/ipb-gate IPB_BUILD_GATE)
+# Use apps aggregator if it exists, otherwise add individual apps
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/apps/CMakeLists.txt")
+    add_subdirectory(apps)
+else()
+    ipb_add_subdirectory(apps/ipb-gate IPB_BUILD_GATE)
+    ipb_add_subdirectory(apps/ipb-bridge IPB_BUILD_BRIDGE)
+endif()
 
 # --- EXAMPLES & TESTS ---
 if(BUILD_EXAMPLES)

@@ -24,6 +24,18 @@ if(IPB_CORE_USE_CTRE)
     endif()
 endif()
 
+# Find dependencies for config loader
+find_package(yaml-cpp REQUIRED)
+find_package(PkgConfig REQUIRED)
+
+# Find jsoncpp
+if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
+    find_package(jsoncpp QUIET)
+    if(NOT jsoncpp_FOUND)
+        pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+    endif()
+endif()
+
 # Library sources
 set(SOURCES
     # Message Bus
@@ -44,6 +56,9 @@ set(SOURCES
 
     # Scoop Registry
     src/scoop_registry/scoop_registry.cpp
+
+    # Config Loader
+    src/config/config_loader.cpp
 )
 
 add_library(ipb-core-components ${SOURCES})
@@ -55,6 +70,7 @@ target_include_directories(ipb-core-components
         $<INSTALL_INTERFACE:include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${JSONCPP_INCLUDE_DIRS}
 )
 
 if(CTRE_INCLUDE_DIR)
@@ -67,6 +83,8 @@ target_link_libraries(ipb-core-components
         ipb::common
     PRIVATE
         pthread
+        yaml-cpp
+        jsoncpp_lib
 )
 
 # Compiler flags for real-time performance

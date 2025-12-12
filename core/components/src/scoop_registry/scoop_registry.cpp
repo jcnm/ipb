@@ -400,7 +400,7 @@ public:
 
         stats_.failed_reads.fetch_add(1, std::memory_order_relaxed);
         return common::Result<common::DataSet>(
-            common::ErrorCode::INTERNAL_ERROR,
+            common::ErrorCode::UNKNOWN_ERROR,
             "All scoops failed to read");
     }
 
@@ -454,7 +454,7 @@ public:
             if (result.is_success()) {
                 // Merge data points
                 for (const auto& dp : result.value()) {
-                    merged.add(dp);
+                    merged.push_back(dp);
                 }
             }
         }
