@@ -884,3 +884,352 @@ TEST_F(RouterMoveTest, MoveAssignment) {
     auto sinks = router2.get_registered_sinks();
     EXPECT_EQ(sinks.size(), 1u);
 }
+
+// ============================================================================
+// ValueCondition Tests
+// ============================================================================
+
+class ValueConditionTest : public ::testing::Test {};
+
+TEST_F(ValueConditionTest, EqualOperator) {
+    common::Value ref;
+    ref.set(42);
+
+    router::ValueCondition cond;
+    cond.op = router::ValueOperator::EQUAL;
+    cond.reference_value = ref;
+
+    common::Value test_equal;
+    test_equal.set(42);
+    EXPECT_TRUE(cond.evaluate(test_equal));
+
+    common::Value test_not_equal;
+    test_not_equal.set(99);
+    EXPECT_FALSE(cond.evaluate(test_not_equal));
+}
+
+TEST_F(ValueConditionTest, NotEqualOperator) {
+    common::Value ref;
+    ref.set(42);
+
+    router::ValueCondition cond;
+    cond.op = router::ValueOperator::NOT_EQUAL;
+    cond.reference_value = ref;
+
+    common::Value test_not_equal;
+    test_not_equal.set(99);
+    EXPECT_TRUE(cond.evaluate(test_not_equal));
+
+    common::Value test_equal;
+    test_equal.set(42);
+    EXPECT_FALSE(cond.evaluate(test_equal));
+}
+
+TEST_F(ValueConditionTest, DefaultOperator) {
+    router::ValueCondition cond;
+    // Default operator should return false
+
+    common::Value test;
+    test.set(42);
+    EXPECT_FALSE(cond.evaluate(test));
+}
+
+// ============================================================================
+// RoutingRule Validation Tests
+// ============================================================================
+
+class RoutingRuleValidationTest : public ::testing::Test {};
+
+TEST_F(RoutingRuleValidationTest, EmptyNameInvalid) {
+    router::RoutingRule rule;
+    rule.name = "";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::STATIC;
+    rule.source_addresses.push_back("sensor/temp");
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, NoTargetsInvalid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.type = router::RuleType::STATIC;
+    rule.source_addresses.push_back("sensor/temp");
+    // No target_sink_ids and no custom_target_selector
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, StaticValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::STATIC;
+    rule.source_addresses.push_back("sensor/temp");
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, StaticEmptyAddressesInvalid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::STATIC;
+    // No source_addresses
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, ProtocolBasedValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::PROTOCOL_BASED;
+    rule.protocol_ids.push_back(1);
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, ProtocolBasedEmptyInvalid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::PROTOCOL_BASED;
+    // No protocol_ids
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, QualityBasedValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::QUALITY_BASED;
+    rule.quality_levels.push_back(common::Quality::GOOD);
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, QualityBasedEmptyInvalid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::QUALITY_BASED;
+    // No quality_levels
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, TimestampBasedValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::TIMESTAMP_BASED;
+    rule.start_time = Timestamp(std::chrono::nanoseconds(100));
+    rule.end_time = Timestamp(std::chrono::nanoseconds(200));
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, TimestampBasedInvalidRange) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::TIMESTAMP_BASED;
+    rule.start_time = Timestamp(std::chrono::nanoseconds(200));
+    rule.end_time = Timestamp(std::chrono::nanoseconds(100));  // end < start
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, ValueBasedValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::VALUE_BASED;
+    router::ValueCondition cond;
+    cond.op = router::ValueOperator::EQUAL;
+    rule.value_conditions.push_back(cond);
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, ValueBasedEmptyInvalid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::VALUE_BASED;
+    // No value_conditions
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, CustomLogicValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::CUSTOM_LOGIC;
+    rule.custom_condition = [](const DataPoint&) { return true; };
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, CustomLogicNoConditionInvalid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::CUSTOM_LOGIC;
+    // No custom_condition
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, LoadBalancingValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.target_sink_ids.push_back("sink2");
+    rule.type = router::RuleType::LOAD_BALANCING;
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, FailoverValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.target_sink_ids.push_back("sink2");
+    rule.type = router::RuleType::FAILOVER;
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, FailoverEmptyInvalid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.type = router::RuleType::FAILOVER;
+    // No target_sink_ids
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, RegexPatternValid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::REGEX_PATTERN;
+    rule.address_pattern = "sensor/.*";
+    EXPECT_TRUE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, RegexPatternEmptyInvalid) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::REGEX_PATTERN;
+    rule.address_pattern = "";
+    EXPECT_FALSE(rule.is_valid());
+}
+
+TEST_F(RoutingRuleValidationTest, CustomTargetSelector) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    // No target_sink_ids but has custom_target_selector
+    rule.type = router::RuleType::CUSTOM_LOGIC;
+    rule.custom_condition = [](const DataPoint&) { return true; };
+    rule.custom_target_selector = [](const DataPoint&) { return std::vector<std::string>{"sink1"}; };
+    EXPECT_TRUE(rule.is_valid());
+}
+
+// ============================================================================
+// RoutingRule Matches Tests
+// ============================================================================
+
+class RoutingRuleMatchesTest : public ::testing::Test {};
+
+TEST_F(RoutingRuleMatchesTest, DisabledRuleDoesNotMatch) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::STATIC;
+    rule.source_addresses.push_back("sensor/temp");
+    rule.enabled = false;
+
+    DataPoint dp("sensor/temp");
+    EXPECT_FALSE(rule.matches(dp));
+}
+
+TEST_F(RoutingRuleMatchesTest, StaticMatches) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::STATIC;
+    rule.source_addresses.push_back("sensor/temp");
+    rule.enabled = true;
+
+    DataPoint dp("sensor/temp");
+    EXPECT_TRUE(rule.matches(dp));
+
+    DataPoint dp2("sensor/humidity");
+    EXPECT_FALSE(rule.matches(dp2));
+}
+
+TEST_F(RoutingRuleMatchesTest, ProtocolBasedMatches) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::PROTOCOL_BASED;
+    rule.protocol_ids.push_back(42);
+    rule.enabled = true;
+
+    DataPoint dp("sensor/temp");
+    dp.set_protocol_id(42);
+    EXPECT_TRUE(rule.matches(dp));
+
+    DataPoint dp2("sensor/humidity");
+    dp2.set_protocol_id(99);
+    EXPECT_FALSE(rule.matches(dp2));
+}
+
+TEST_F(RoutingRuleMatchesTest, QualityBasedMatches) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::QUALITY_BASED;
+    rule.quality_levels.push_back(common::Quality::GOOD);
+    rule.enabled = true;
+
+    DataPoint dp("sensor/temp");
+    dp.set_quality(common::Quality::GOOD);
+    EXPECT_TRUE(rule.matches(dp));
+
+    DataPoint dp2("sensor/humidity");
+    dp2.set_quality(common::Quality::BAD);
+    EXPECT_FALSE(rule.matches(dp2));
+}
+
+TEST_F(RoutingRuleMatchesTest, CustomLogicMatches) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.type = router::RuleType::CUSTOM_LOGIC;
+    rule.custom_condition = [](const DataPoint& dp) {
+        return dp.address().find("temp") != std::string_view::npos;
+    };
+    rule.enabled = true;
+
+    DataPoint dp("sensor/temp");
+    EXPECT_TRUE(rule.matches(dp));
+
+    DataPoint dp2("sensor/humidity");
+    EXPECT_FALSE(rule.matches(dp2));
+}
+
+TEST_F(RoutingRuleMatchesTest, FailoverMatches) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.target_sink_ids.push_back("sink2");
+    rule.type = router::RuleType::FAILOVER;
+    rule.enabled = true;
+
+    DataPoint dp("any/address");
+    // FAILOVER rules match all data points
+    EXPECT_TRUE(rule.matches(dp));
+}
+
+TEST_F(RoutingRuleMatchesTest, LoadBalancingMatches) {
+    router::RoutingRule rule;
+    rule.name = "test_rule";
+    rule.target_sink_ids.push_back("sink1");
+    rule.target_sink_ids.push_back("sink2");
+    rule.type = router::RuleType::LOAD_BALANCING;
+    rule.enabled = true;
+
+    DataPoint dp("any/address");
+    // LOAD_BALANCING rules match all data points
+    EXPECT_TRUE(rule.matches(dp));
+}
