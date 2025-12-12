@@ -1,1 +1,0 @@
-/usr/bin/c++  -Wall -Wextra -Wpedantic -O3 -DNDEBUG -O3 -arch arm64 -dynamiclib -Wl,-headerpad_max_install_names -o libipb-sink-syslog.dylib -install_name @rpath/libipb-sink-syslog.dylib "CMakeFiles/ipb-sink-syslog.dir/src/syslog_sink.cpp.o"  ../libipb-common/libipb-common.a /opt/homebrew/lib/libjsoncpp.26.dylib -lpthread
