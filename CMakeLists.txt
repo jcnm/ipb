@@ -1,11 +1,17 @@
 # IPB - Industrial Protocol Bridge
 cmake_minimum_required(VERSION 3.16)
 
-project(IPB VERSION 1.4.0 LANGUAGES CXX)
+project(IPB VERSION 1.5.0 LANGUAGES CXX)
 
 # C++ Standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Include IPB build system modules
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(IPBOptions)
+include(IPBDependencies)
+include(IPBPrintConfig)
 
 # Build options
 option(BUILD_TESTING "Build tests" OFF)
@@ -232,58 +238,35 @@ if(BUILD_TESTING)
     conditional_add_subdirectory(tests TRUE)
 endif()
 
-# Create build info file
+# Create build info file (legacy)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_info.hpp.in"
     "${CMAKE_CURRENT_BINARY_DIR}/include/ipb/build_info.hpp"
     @ONLY
 )
 
-# Install build info
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/include/ipb/build_info.hpp"
-    DESTINATION include/ipb
+# Create build config file (new multi-target system)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_config.hpp.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/ipb/common/build_config.hpp"
+    @ONLY
 )
 
-# Configuration summary
-message(STATUS "")
-message(STATUS "IPB Configuration Summary:")
-message(STATUS "  Version: ${PROJECT_VERSION}")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  C++ standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
-message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID}")
-if(PLATFORM_MACOS)
-    message(STATUS "  Homebrew prefix: ${CMAKE_PREFIX_PATH}")
-endif()
-message(STATUS "")
-message(STATUS "Components:")
-message(STATUS "  Common library: ${BUILD_COMMON}")
-message(STATUS "  Router: ${BUILD_ROUTER}")
-message(STATUS "  IPB Gate: ${BUILD_GATE}")
-message(STATUS "")
-message(STATUS "Transport:")
-message(STATUS "  MQTT transport: ${MQTT_TRANSPORT_AVAILABLE}")
-message(STATUS "")
-message(STATUS "Sinks:")
-message(STATUS "  Console sink: ${ENABLE_CONSOLE_SINK}")
-message(STATUS "  Syslog sink: ${ENABLE_SYSLOG_SINK}")
-message(STATUS "  MQTT sink: ${ENABLE_MQTT_SINK}")
-message(STATUS "  Sparkplug B sink: ${ENABLE_SPARKPLUG_SINK}")
-message(STATUS "")
-message(STATUS "Scoops (Data Collectors):")
-message(STATUS "  Modbus scoop: ${ENABLE_MODBUS_SCOOP}")
-message(STATUS "  OPC UA scoop: ${ENABLE_OPCUA_SCOOP}")
-message(STATUS "  MQTT scoop: ${ENABLE_MQTT_SCOOP}")
-message(STATUS "  Sparkplug B scoop: ${ENABLE_SPARKPLUG_SCOOP}")
-message(STATUS "")
-message(STATUS "Options:")
-message(STATUS "  Examples: ${BUILD_EXAMPLES}")
-message(STATUS "  Tests: ${BUILD_TESTING}")
-message(STATUS "  Optimizations: ${ENABLE_OPTIMIZATIONS}")
-message(STATUS "  LTO: ${ENABLE_LTO}")
-message(STATUS "  Sanitizers: ${ENABLE_SANITIZERS}")
-message(STATUS "  Coverage: ${ENABLE_COVERAGE}")
-message(STATUS "")
+# Install build headers
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/include/ipb/build_info.hpp"
+    DESTINATION include/ipb
+)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/include/ipb/common/build_config.hpp"
+    DESTINATION include/ipb/common
+)
+
+# Add generated include directory
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
+
+# Print IPB configuration banner
+ipb_print_config()
 
 # Print build instructions
 if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
@@ -292,7 +275,7 @@ if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
     else()
         set(NPROC_CMD "$(nproc)")
     endif()
-    
+
     message(STATUS "Build with: make -j${NPROC_CMD}")
     message(STATUS "Install with: sudo make install")
     if(BUILD_TESTING)

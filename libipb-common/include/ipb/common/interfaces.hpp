@@ -14,62 +14,92 @@
 namespace ipb::common {
 
 /**
- * @brief Result type for operations with error handling
+ * @brief Common error codes for Result type
  */
-template<typename T = void>
+enum class ResultErrorCode : uint32_t {
+    SUCCESS = 0,
+    INVALID_ARGUMENT,
+    TIMEOUT,
+    CONNECTION_FAILED,
+    PROTOCOL_ERROR,
+    BUFFER_OVERFLOW,
+    INSUFFICIENT_MEMORY,
+    PERMISSION_DENIED,
+    DEVICE_NOT_FOUND,
+    OPERATION_CANCELLED,
+    INTERNAL_ERROR
+};
+
+/**
+ * @brief Result type for operations with error handling (non-void specialization)
+ */
+template<typename T>
 class Result {
 public:
-    enum class ErrorCode : uint32_t {
-        SUCCESS = 0,
-        INVALID_ARGUMENT,
-        TIMEOUT,
-        CONNECTION_FAILED,
-        PROTOCOL_ERROR,
-        BUFFER_OVERFLOW,
-        INSUFFICIENT_MEMORY,
-        PERMISSION_DENIED,
-        DEVICE_NOT_FOUND,
-        OPERATION_CANCELLED,
-        INTERNAL_ERROR
-    };
-    
-    // Success constructor
-    Result() noexcept : error_code_(ErrorCode::SUCCESS) {}
-    
+    using ErrorCode = ResultErrorCode;
+
     // Success constructor with value
-    template<typename U = T, std::enable_if_t<!std::is_void_v<U>, int> = 0>
-    Result(U&& value) noexcept : value_(std::forward<U>(value)), error_code_(ErrorCode::SUCCESS) {}
-    
+    Result(T value) noexcept : value_(std::move(value)), error_code_(ErrorCode::SUCCESS) {}
+
     // Error constructor
-    Result(ErrorCode error, std::string_view message = {}) noexcept 
+    Result(ErrorCode error, std::string_view message = {}) noexcept
         : error_code_(error) {
         if (!message.empty()) {
             error_message_ = std::string(message);
         }
     }
-    
+
     // Status checks
     bool is_success() const noexcept { return error_code_ == ErrorCode::SUCCESS; }
     bool is_error() const noexcept { return error_code_ != ErrorCode::SUCCESS; }
-    
+
     ErrorCode error_code() const noexcept { return error_code_; }
     const std::string& error_message() const noexcept { return error_message_; }
-    
-    // Value access (only for non-void types)
-    template<typename U = T, std::enable_if_t<!std::is_void_v<U>, int> = 0>
-    const U& value() const& noexcept { return value_; }
-    
-    template<typename U = T, std::enable_if_t<!std::is_void_v<U>, int> = 0>
-    U& value() & noexcept { return value_; }
-    
-    template<typename U = T, std::enable_if_t<!std::is_void_v<U>, int> = 0>
-    U&& value() && noexcept { return std::move(value_); }
-    
+
+    // Value access
+    const T& value() const& noexcept { return value_; }
+    T& value() & noexcept { return value_; }
+    T&& value() && noexcept { return std::move(value_); }
+
     // Conversion operators
     explicit operator bool() const noexcept { return is_success(); }
 
 private:
-    [[no_unique_address]] T value_{};
+    T value_{};
+    ErrorCode error_code_;
+    std::string error_message_;
+};
+
+/**
+ * @brief Result type specialization for void (no value)
+ */
+template<>
+class Result<void> {
+public:
+    using ErrorCode = ResultErrorCode;
+
+    // Success constructor
+    Result() noexcept : error_code_(ErrorCode::SUCCESS) {}
+
+    // Error constructor
+    Result(ErrorCode error, std::string_view message = {}) noexcept
+        : error_code_(error) {
+        if (!message.empty()) {
+            error_message_ = std::string(message);
+        }
+    }
+
+    // Status checks
+    bool is_success() const noexcept { return error_code_ == ErrorCode::SUCCESS; }
+    bool is_error() const noexcept { return error_code_ != ErrorCode::SUCCESS; }
+
+    ErrorCode error_code() const noexcept { return error_code_; }
+    const std::string& error_message() const noexcept { return error_message_; }
+
+    // Conversion operators
+    explicit operator bool() const noexcept { return is_success(); }
+
+private:
     ErrorCode error_code_;
     std::string error_message_;
 };
@@ -98,9 +128,8 @@ struct Statistics {
     
     double messages_per_second() const noexcept {
         auto duration = last_update_time - start_time;
-        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::nanoseconds(duration.nanoseconds()));
-        return seconds.count() > 0 ? 
+        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration);
+        return seconds.count() > 0 ?
             static_cast<double>(total_messages) / seconds.count() : 0.0;
     }
     
@@ -124,11 +153,11 @@ public:
     virtual ~ConfigurationBase() = default;
     
     // Validation interface
-    virtual Result<> validate() const = 0;
+    virtual Result<void> validate() const = 0;
     
     // Serialization interface
     virtual std::string to_string() const = 0;
-    virtual Result<> from_string(std::string_view config) = 0;
+    virtual Result<void> from_string(std::string_view config) = 0;
     
     // Clone interface for type erasure
     virtual std::unique_ptr<ConfigurationBase> clone() const = 0;
@@ -142,12 +171,12 @@ public:
     virtual ~IIPBComponent() = default;
     
     // Lifecycle management
-    virtual Result<> start() = 0;
-    virtual Result<> stop() = 0;
+    virtual Result<void> start() = 0;
+    virtual Result<void> stop() = 0;
     virtual bool is_running() const noexcept = 0;
     
     // Configuration management
-    virtual Result<> configure(const ConfigurationBase& config) = 0;
+    virtual Result<void> configure(const ConfigurationBase& config) = 0;
     virtual std::unique_ptr<ConfigurationBase> get_configuration() const = 0;
     
     // Statistics and monitoring
@@ -174,19 +203,19 @@ public:
     
     // Subscription interface for real-time data
     using DataCallback = std::function<void(DataSet)>;
-    using ErrorCallback = std::function<void(Result<>::ErrorCode, std::string_view)>;
+    using ErrorCallback = std::function<void(Result<void>::ErrorCode, std::string_view)>;
     
-    virtual Result<> subscribe(DataCallback data_cb, ErrorCallback error_cb) = 0;
-    virtual Result<> unsubscribe() = 0;
+    virtual Result<void> subscribe(DataCallback data_cb, ErrorCallback error_cb) = 0;
+    virtual Result<void> unsubscribe() = 0;
     
     // Address space management
-    virtual Result<> add_address(std::string_view address) = 0;
-    virtual Result<> remove_address(std::string_view address) = 0;
+    virtual Result<void> add_address(std::string_view address) = 0;
+    virtual Result<void> remove_address(std::string_view address) = 0;
     virtual std::vector<std::string> get_addresses() const = 0;
     
     // Connection management
-    virtual Result<> connect() = 0;
-    virtual Result<> disconnect() = 0;
+    virtual Result<void> connect() = 0;
+    virtual Result<void> disconnect() = 0;
     virtual bool is_connected() const noexcept = 0;
     
     // Protocol-specific information
@@ -219,30 +248,30 @@ public:
     Result<DataSet> read() { return impl_->read(); }
     Result<DataSet> read_async() { return impl_->read_async(); }
     
-    Result<> subscribe(IProtocolSourceBase::DataCallback data_cb, 
+    Result<void> subscribe(IProtocolSourceBase::DataCallback data_cb, 
                       IProtocolSourceBase::ErrorCallback error_cb) {
         return impl_->subscribe(std::move(data_cb), std::move(error_cb));
     }
     
-    Result<> unsubscribe() { return impl_->unsubscribe(); }
+    Result<void> unsubscribe() { return impl_->unsubscribe(); }
     
-    Result<> add_address(std::string_view address) { return impl_->add_address(address); }
-    Result<> remove_address(std::string_view address) { return impl_->remove_address(address); }
+    Result<void> add_address(std::string_view address) { return impl_->add_address(address); }
+    Result<void> remove_address(std::string_view address) { return impl_->remove_address(address); }
     std::vector<std::string> get_addresses() const { return impl_->get_addresses(); }
     
-    Result<> connect() { return impl_->connect(); }
-    Result<> disconnect() { return impl_->disconnect(); }
+    Result<void> connect() { return impl_->connect(); }
+    Result<void> disconnect() { return impl_->disconnect(); }
     bool is_connected() const noexcept { return impl_->is_connected(); }
     
     uint16_t protocol_id() const noexcept { return impl_->protocol_id(); }
     std::string_view protocol_name() const noexcept { return impl_->protocol_name(); }
     
     // IIPBComponent interface
-    Result<> start() { return impl_->start(); }
-    Result<> stop() { return impl_->stop(); }
+    Result<void> start() { return impl_->start(); }
+    Result<void> stop() { return impl_->stop(); }
     bool is_running() const noexcept { return impl_->is_running(); }
     
-    Result<> configure(const ConfigurationBase& config) { return impl_->configure(config); }
+    Result<void> configure(const ConfigurationBase& config) { return impl_->configure(config); }
     std::unique_ptr<ConfigurationBase> get_configuration() const { return impl_->get_configuration(); }
     
     Statistics get_statistics() const noexcept { return impl_->get_statistics(); }
@@ -264,16 +293,16 @@ private:
 class IIPBSinkBase : public IIPBComponent {
 public:
     // Data writing interface
-    virtual Result<> write(const DataPoint& data_point) = 0;
-    virtual Result<> write_batch(std::span<const DataPoint> data_points) = 0;
-    virtual Result<> write_dataset(const DataSet& dataset) = 0;
+    virtual Result<void> write(const DataPoint& data_point) = 0;
+    virtual Result<void> write_batch(std::span<const DataPoint> data_points) = 0;
+    virtual Result<void> write_dataset(const DataSet& dataset) = 0;
     
     // Asynchronous writing
-    virtual std::future<Result<>> write_async(const DataPoint& data_point) = 0;
-    virtual std::future<Result<>> write_batch_async(std::span<const DataPoint> data_points) = 0;
+    virtual std::future<Result<void>> write_async(const DataPoint& data_point) = 0;
+    virtual std::future<Result<void>> write_batch_async(std::span<const DataPoint> data_points) = 0;
     
     // Flow control
-    virtual Result<> flush() = 0;
+    virtual Result<void> flush() = 0;
     virtual size_t pending_count() const noexcept = 0;
     virtual bool can_accept_data() const noexcept = 0;
     
@@ -304,20 +333,20 @@ public:
     IIPBSink& operator=(const IIPBSink&) = delete;
     
     // Forward all interface methods
-    Result<> write(const DataPoint& data_point) { return impl_->write(data_point); }
-    Result<> write_batch(std::span<const DataPoint> data_points) { 
+    Result<void> write(const DataPoint& data_point) { return impl_->write(data_point); }
+    Result<void> write_batch(std::span<const DataPoint> data_points) { 
         return impl_->write_batch(data_points); 
     }
-    Result<> write_dataset(const DataSet& dataset) { return impl_->write_dataset(dataset); }
+    Result<void> write_dataset(const DataSet& dataset) { return impl_->write_dataset(dataset); }
     
-    std::future<Result<>> write_async(const DataPoint& data_point) { 
+    std::future<Result<void>> write_async(const DataPoint& data_point) { 
         return impl_->write_async(data_point); 
     }
-    std::future<Result<>> write_batch_async(std::span<const DataPoint> data_points) { 
+    std::future<Result<void>> write_batch_async(std::span<const DataPoint> data_points) { 
         return impl_->write_batch_async(data_points); 
     }
     
-    Result<> flush() { return impl_->flush(); }
+    Result<void> flush() { return impl_->flush(); }
     size_t pending_count() const noexcept { return impl_->pending_count(); }
     bool can_accept_data() const noexcept { return impl_->can_accept_data(); }
     
@@ -325,11 +354,11 @@ public:
     size_t max_batch_size() const noexcept { return impl_->max_batch_size(); }
     
     // IIPBComponent interface
-    Result<> start() { return impl_->start(); }
-    Result<> stop() { return impl_->stop(); }
+    Result<void> start() { return impl_->start(); }
+    Result<void> stop() { return impl_->stop(); }
     bool is_running() const noexcept { return impl_->is_running(); }
     
-    Result<> configure(const ConfigurationBase& config) { return impl_->configure(config); }
+    Result<void> configure(const ConfigurationBase& config) { return impl_->configure(config); }
     std::unique_ptr<ConfigurationBase> get_configuration() const { return impl_->get_configuration(); }
     
     Statistics get_statistics() const noexcept { return impl_->get_statistics(); }

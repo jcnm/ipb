@@ -19,6 +19,8 @@
 #include <optional>
 #include <utility>
 #include <array>
+#include <memory>
+#include <vector>
 
 #if defined(IPB_HAS_SOURCE_LOCATION)
     #include <source_location>
@@ -649,19 +651,21 @@ public:
 
     // Transform the value (if success)
     template<typename F>
-    auto map(F&& func) const& -> Result<decltype(func(value_))> {
+    auto map(F&& func) const& -> Result<decltype(func(std::declval<const T&>()))> {
+        using ReturnType = Result<decltype(func(std::declval<const T&>()))>;
         if (has_value_) {
-            return Result<decltype(func(value_))>(func(value_));
+            return ReturnType(func(value_));
         }
-        return error_;
+        return ReturnType(error_);
     }
 
     template<typename F>
-    auto map(F&& func) && -> Result<decltype(func(std::move(value_)))> {
+    auto map(F&& func) && -> Result<decltype(func(std::declval<T&&>()))> {
+        using ReturnType = Result<decltype(func(std::declval<T&&>()))>;
         if (has_value_) {
-            return Result<decltype(func(std::move(value_)))>(func(std::move(value_)));
+            return ReturnType(func(std::move(value_)));
         }
-        return error_;
+        return ReturnType(error_);
     }
 
 private:

@@ -228,7 +228,8 @@ public:
         bool include_trace_id = false;
     };
 
-    explicit ConsoleSink(Config config = {});
+    ConsoleSink();  // Uses default config
+    explicit ConsoleSink(const Config& config);
     ~ConsoleSink() override;
 
     void write(const LogRecord& record) override;

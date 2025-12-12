@@ -29,6 +29,7 @@ set_target_properties(ipb-sink-console PROPERTIES
 target_include_directories(ipb-sink-console PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+    ${JSONCPP_INCLUDE_DIRS}
 )
 
 # Link libraries

@@ -209,8 +209,15 @@ bool should_use_colors() noexcept {
 
 } // anonymous namespace
 
-ConsoleSink::ConsoleSink(Config config)
-    : config_(std::move(config)) {
+ConsoleSink::ConsoleSink()
+    : config_() {
+    if (config_.use_colors) {
+        config_.use_colors = should_use_colors();
+    }
+}
+
+ConsoleSink::ConsoleSink(const Config& config)
+    : config_(config) {
     if (config_.use_colors) {
         config_.use_colors = should_use_colors();
     }
