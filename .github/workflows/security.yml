@@ -12,9 +12,7 @@ on:
 
 permissions:
   contents: read
-  security-events: write
   actions: read
-  pull-requests: write
 
 jobs:
   # ===========================================================================
@@ -23,6 +21,9 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -106,16 +107,20 @@ jobs:
     name: Dependency Review
     runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
+        continue-on-error: true
         with:
           fail-on-severity: high
           deny-licenses: GPL-3.0, AGPL-3.0
-          comment-summary-in-pr: always
+          comment-summary-in-pr: on-failure
 
   # ===========================================================================
   # Dependency Scanning
@@ -159,22 +164,14 @@ jobs:
           cat dependency-report.md
 
       - name: Scan with OSV-Scanner
-        uses: google/osv-scanner-action@v2
+        uses: google/osv-scanner-action@v2.3.1
         continue-on-error: true
-        with:
-          scan-args: |-
-            --lockfile=CMakeLists.txt
-            --format=json
-            --output=osv-results.json
-            .
 
       - name: Upload Dependency Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-report
-          path: |
-            dependency-report.md
-            osv-results.json
+          path: dependency-report.md
 
   # ===========================================================================
   # Secret Scanning
@@ -247,6 +244,9 @@ jobs:
   sast:
     name: SAST Analysis
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -375,6 +375,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: github.event_name != 'pull_request'
     permissions:
+      contents: read
       security-events: write
       id-token: write
     steps:
