@@ -749,7 +749,7 @@ void MQTTSink::print_statistics() const {
         return;
     }
 
-    auto stats = get_statistics();
+    const auto& stats = statistics_;
 
     std::cout << "MQTT Sink Statistics [" << config_.sink_id
               << "]: " << "sent=" << stats.messages_sent.load()
@@ -759,6 +759,95 @@ void MQTTSink::print_statistics() const {
               << ", avg_time=" << stats.get_average_publish_time().count() << "ns"
               << ", p95_time=" << stats.get_p95_publish_time().count() << "ns"
               << ", error_rate=" << (stats.get_error_rate() * 100.0) << "%" << std::endl;
+}
+
+// Missing method implementations
+common::Result<void> MQTTSink::configure(const MQTTSinkConfig& config) {
+    config_ = config;
+    return common::ok();
+}
+
+const MQTTSinkStatistics& MQTTSink::get_statistics() const {
+    return statistics_;
+}
+
+std::string MQTTSink::format_batch_message(const common::DataSet& data_set) const {
+    Json::Value batch_json(Json::arrayValue);
+    for (const auto& dp : data_set) {
+        batch_json.append(data_point_to_json(dp));
+    }
+    Json::StreamWriterBuilder builder;
+    return Json::writeString(builder, batch_json);
+}
+
+common::Result<void> MQTTSink::publish_batch_internal(const std::vector<common::DataPoint>& batch) {
+    if (batch.empty()) {
+        return common::ok();
+    }
+
+    common::DataSet data_set;
+    for (const auto& dp : batch) {
+        data_set.push_back(dp);
+    }
+
+    auto batch_message = format_batch_message(data_set);
+    auto topic = config_.messages.base_topic + "/batch";
+
+    return publish_message(topic, batch_message, config_.messages.qos, config_.messages.retain);
+}
+
+void MQTTSink::flush_current_batch() {
+    std::lock_guard<std::mutex> lock(batch_mutex_);
+    if (current_batch_.empty()) {
+        return;
+    }
+    publish_batch_internal(current_batch_);
+    current_batch_.clear();
+    last_batch_time_ = std::chrono::steady_clock::now();
+}
+
+bool MQTTSink::should_flush_batch() const {
+    if (current_batch_.size() >= config_.performance.batch_size) {
+        return true;
+    }
+    auto elapsed = std::chrono::steady_clock::now() - last_batch_time_;
+    return elapsed >= config_.performance.batch_timeout;
+}
+
+std::string MQTTSink::data_point_to_csv(const common::DataPoint& data_point) const {
+    std::ostringstream oss;
+    oss << data_point.get_address() << ","
+        << data_point.get_timestamp().nanoseconds() << ","
+        << static_cast<int>(data_point.get_quality());
+    return oss.str();
+}
+
+std::string MQTTSink::data_point_to_influx_line(const common::DataPoint& data_point) const {
+    std::ostringstream oss;
+    oss << "datapoint,address=" << data_point.get_address()
+        << " quality=" << static_cast<int>(data_point.get_quality())
+        << " " << data_point.get_timestamp().nanoseconds();
+    return oss.str();
+}
+
+std::string MQTTSink::generate_single_topic() const {
+    return config_.messages.base_topic;
+}
+
+std::string MQTTSink::generate_protocol_topic(const common::DataPoint& data_point) const {
+    return config_.messages.base_topic + config_.messages.topic_separator +
+           std::to_string(data_point.get_protocol_id());
+}
+
+std::string MQTTSink::generate_address_topic(const common::DataPoint& data_point) const {
+    return config_.messages.base_topic + config_.messages.topic_separator +
+           std::string(data_point.get_address());
+}
+
+std::string MQTTSink::generate_hierarchical_topic(const common::DataPoint& data_point) const {
+    return config_.messages.base_topic + config_.messages.topic_separator +
+           std::to_string(data_point.get_protocol_id()) + config_.messages.topic_separator +
+           std::string(data_point.get_address());
 }
 
 // Factory implementations
