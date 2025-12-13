@@ -41,10 +41,24 @@ class LockFreeSkipList;
 // ============================================================================
 
 /**
+ * @brief Task state flags
+ */
+enum class TaskState : uint8_t {
+    PENDING = 0,
+    RUNNING = 1,
+    COMPLETED = 2,
+    CANCELLED = 3,
+    FAILED = 4
+};
+
+/**
  * @brief Lightweight task structure optimized for lock-free operations
  *
  * Uses fixed-size arrays instead of std::string/std::function to eliminate
  * heap allocations in the hot path.
+ *
+ * Note: This struct contains no atomic members to allow copy/move semantics
+ * required by the lock-free skip list. State management is handled separately.
  */
 struct alignas(64) LockFreeTask {
     /// Maximum task name length (stack allocated)
@@ -65,15 +79,8 @@ struct alignas(64) LockFreeTask {
     /// Priority for tie-breaking (higher = more priority)
     uint8_t priority = 128;
 
-    /// Task state flags
-    enum class State : uint8_t {
-        PENDING = 0,
-        RUNNING = 1,
-        COMPLETED = 2,
-        CANCELLED = 3,
-        FAILED = 4
-    };
-    std::atomic<State> state{State::PENDING};
+    /// Task state (non-atomic for copy/move compatibility)
+    TaskState state = TaskState::PENDING;
 
     /// Task function pointer (lightweight alternative to std::function)
     using TaskFunction = void(*)(void* context);
@@ -81,12 +88,27 @@ struct alignas(64) LockFreeTask {
     void* task_context = nullptr;
 
     /// Callback on completion
-    using CompletionCallback = void(*)(uint64_t task_id, State state, int64_t execution_ns, void* context);
+    using CompletionCallback = void(*)(uint64_t task_id, TaskState state, int64_t execution_ns, void* context);
     CompletionCallback completion_cb = nullptr;
     void* completion_context = nullptr;
 
     /// Execution time (set after completion)
-    std::atomic<int64_t> execution_time_ns{0};
+    int64_t execution_time_ns = 0;
+
+    /// Default constructor
+    LockFreeTask() noexcept = default;
+
+    /// Copy constructor
+    LockFreeTask(const LockFreeTask& other) noexcept = default;
+
+    /// Move constructor
+    LockFreeTask(LockFreeTask&& other) noexcept = default;
+
+    /// Copy assignment
+    LockFreeTask& operator=(const LockFreeTask& other) noexcept = default;
+
+    /// Move assignment
+    LockFreeTask& operator=(LockFreeTask&& other) noexcept = default;
 
     // Comparison for priority queue (earliest deadline first)
     bool operator>(const LockFreeTask& other) const noexcept {
@@ -98,6 +120,10 @@ struct alignas(64) LockFreeTask {
 
     bool operator<(const LockFreeTask& other) const noexcept {
         return other > *this;
+    }
+
+    bool operator==(const LockFreeTask& other) const noexcept {
+        return id == other.id;
     }
 
     /// Set task name from string_view
@@ -112,17 +138,23 @@ struct alignas(64) LockFreeTask {
         return std::string_view(name.data());
     }
 
-    /// Check if task can be cancelled
+    /// Mark task as cancelled
     bool try_cancel() noexcept {
-        State expected = State::PENDING;
-        return state.compare_exchange_strong(expected, State::CANCELLED,
-                                             std::memory_order_release,
-                                             std::memory_order_relaxed);
+        if (state == TaskState::PENDING) {
+            state = TaskState::CANCELLED;
+            return true;
+        }
+        return false;
     }
 
     /// Check if task is still valid for execution
     bool is_pending() const noexcept {
-        return state.load(std::memory_order_acquire) == State::PENDING;
+        return state == TaskState::PENDING;
+    }
+
+    /// Check if task is cancelled
+    bool is_cancelled() const noexcept {
+        return state == TaskState::CANCELLED;
     }
 };
 

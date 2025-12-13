@@ -127,6 +127,77 @@ public:
 
     CompiledPattern() = default;
 
+    // Copy constructor - must update data_ pointer
+    CompiledPattern(const CompiledPattern& other)
+        : pattern_(other.pattern_),
+          type_(other.type_),
+          match_fn_(other.match_fn_),
+          data_(nullptr),
+          valid_(other.valid_) {
+        if (other.regex_) {
+            regex_ = std::make_unique<std::regex>(*other.regex_);
+            data_ = regex_.get();
+        } else if (other.data_ != nullptr) {
+            // data_ should point to our own pattern_ buffer
+            data_ = pattern_.data();
+        }
+    }
+
+    // Copy assignment
+    CompiledPattern& operator=(const CompiledPattern& other) {
+        if (this != &other) {
+            pattern_ = other.pattern_;
+            type_ = other.type_;
+            match_fn_ = other.match_fn_;
+            valid_ = other.valid_;
+            if (other.regex_) {
+                regex_ = std::make_unique<std::regex>(*other.regex_);
+                data_ = regex_.get();
+            } else if (other.data_ != nullptr) {
+                data_ = pattern_.data();
+            } else {
+                data_ = nullptr;
+            }
+        }
+        return *this;
+    }
+
+    // Move constructor
+    CompiledPattern(CompiledPattern&& other) noexcept
+        : pattern_(std::move(other.pattern_)),
+          type_(other.type_),
+          match_fn_(other.match_fn_),
+          data_(nullptr),
+          regex_(std::move(other.regex_)),
+          valid_(other.valid_) {
+        if (regex_) {
+            data_ = regex_.get();
+        } else if (match_fn_ != nullptr && match_fn_ != &match_regex) {
+            data_ = pattern_.data();
+        }
+        other.valid_ = false;
+    }
+
+    // Move assignment
+    CompiledPattern& operator=(CompiledPattern&& other) noexcept {
+        if (this != &other) {
+            pattern_ = std::move(other.pattern_);
+            type_ = other.type_;
+            match_fn_ = other.match_fn_;
+            regex_ = std::move(other.regex_);
+            valid_ = other.valid_;
+            if (regex_) {
+                data_ = regex_.get();
+            } else if (match_fn_ != nullptr && match_fn_ != &match_regex) {
+                data_ = pattern_.data();
+            } else {
+                data_ = nullptr;
+            }
+            other.valid_ = false;
+        }
+        return *this;
+    }
+
     /// Compile a pattern
     static std::optional<CompiledPattern> compile(std::string_view pattern) noexcept {
         CompiledPattern result;
