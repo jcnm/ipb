@@ -126,23 +126,31 @@ endif()
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
-# Find jsoncpp
-if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
-    find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
-        pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-        add_library(jsoncpp_lib INTERFACE IMPORTED)
-        set_target_properties(jsoncpp_lib PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIRS}"
-            INTERFACE_LINK_LIBRARIES "${JSONCPP_LIBRARIES}"
-        )
+# Find jsoncpp (not required for EMBEDDED mode)
+if(NOT IPB_BUILD_MODE STREQUAL "EMBEDDED")
+    if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
+        find_package(jsoncpp QUIET)
+        if(NOT jsoncpp_FOUND)
+            pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+            add_library(jsoncpp_lib INTERFACE IMPORTED)
+            set_target_properties(jsoncpp_lib PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIRS}"
+                INTERFACE_LINK_LIBRARIES "${JSONCPP_LIBRARIES}"
+            )
+        endif()
     endif()
-endif()
 
-# Find YAML-CPP
-find_package(yaml-cpp QUIET)
-if(NOT yaml-cpp_FOUND)
-    pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+    # Find YAML-CPP (not required for EMBEDDED mode)
+    find_package(yaml-cpp QUIET)
+    if(NOT yaml-cpp_FOUND)
+        pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+    endif()
+else()
+    # EMBEDDED mode: use cJSON instead
+    pkg_check_modules(CJSON cjson)
+    if(CJSON_FOUND)
+        message(STATUS "EMBEDDED mode: using cJSON")
+    endif()
 endif()
 
 # ============================================================================

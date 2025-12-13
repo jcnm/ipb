@@ -593,6 +593,7 @@ jobs:
             libjsoncpp-dev libyaml-cpp-dev \
             libpaho-mqtt-dev libpaho-mqttpp-dev \
             libcurl4-openssl-dev libssl-dev \
+            libmodbus-dev \
             libgtest-dev libgmock-dev lcov
 
       - name: Install Dependencies (Linux - EMBEDDED)
@@ -614,7 +615,7 @@ jobs:
         if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '2024.01.12'
+          vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55ef6'
 
       - name: Install Dependencies (Windows - SERVER/EDGE)
         if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows' && matrix.build_mode != 'EMBEDDED'

@@ -9,10 +9,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find dependencies
 find_package(PkgConfig REQUIRED)
-find_package(jsoncpp REQUIRED)
+
+# Find jsoncpp (optional - may not be present in EMBEDDED mode)
+find_package(jsoncpp QUIET)
+if(NOT jsoncpp_FOUND AND NOT TARGET jsoncpp_lib)
+    pkg_check_modules(JSONCPP jsoncpp)
+    if(NOT JSONCPP_FOUND)
+        message(WARNING "jsoncpp not found - Modbus scoop will be disabled")
+        return()
+    endif()
+endif()
 
 # Find libmodbus
-pkg_check_modules(LIBMODBUS REQUIRED libmodbus)
+pkg_check_modules(LIBMODBUS libmodbus)
+if(NOT LIBMODBUS_FOUND)
+    message(WARNING "libmodbus not found - Modbus scoop will be disabled")
+    message(STATUS "  Install with: sudo apt install libmodbus-dev (Ubuntu)")
+    message(STATUS "  Install with: brew install libmodbus (macOS)")
+    return()
+endif()
 
 # Include directories
 include_directories(
@@ -83,11 +98,11 @@ install(FILES
 )
 
 # Tests
-if(BUILD_TESTING)
+if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests)
 endif()
 
 # Examples
-if(BUILD_EXAMPLES)
+if(BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
     add_subdirectory(examples)
 endif()

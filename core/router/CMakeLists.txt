@@ -121,13 +121,13 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ipb-router.pc"
 
 # Examples
 option(BUILD_ROUTER_EXAMPLES "Build router examples" OFF)
-if(BUILD_ROUTER_EXAMPLES)
+if(BUILD_ROUTER_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
     add_subdirectory(examples)
 endif()
 
 # Tests
 option(BUILD_ROUTER_TESTS "Build router tests" OFF)
-if(BUILD_ROUTER_TESTS)
+if(BUILD_ROUTER_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests)
 endif()
 

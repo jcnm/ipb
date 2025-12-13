@@ -102,12 +102,12 @@ install(FILES
 )
 
 # Tests
-if(ENABLE_TESTS)
+if(ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_subdirectory(tests)
 endif()
 
 # Examples
-if(ENABLE_EXAMPLES)
+if(ENABLE_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
     add_subdirectory(examples)
 endif()
 
