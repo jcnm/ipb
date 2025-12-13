@@ -41,6 +41,7 @@ jobs:
       run: |
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DIPB_BUILD_MODE=SERVER \
           -DBUILD_BENCHMARKS=ON
 
     - name: Build

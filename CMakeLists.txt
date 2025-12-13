@@ -18,8 +18,7 @@ include(IPBPrintConfig)
 # BUILD OPTIONS
 # ============================================================================
 
-# Build profiles
-option(IPB_EMBEDDED "Build for embedded systems (minimal footprint)" OFF)
+# Component profiles (WHAT to build)
 option(IPB_FULL "Build all components" OFF)
 
 # Development options
@@ -57,11 +56,12 @@ option(IPB_BUILD_GATE "Build ipb-gate application" ON)
 option(IPB_BUILD_BRIDGE "Build ipb-bridge application" ON)
 
 # ============================================================================
-# BUILD PROFILES
+# BUILD PROFILES (based on IPB_BUILD_MODE from cmake/IPBOptions.cmake)
 # ============================================================================
 
-if(IPB_EMBEDDED)
-    message(STATUS "IPB: Embedded profile - minimal build")
+# Apply mode-specific component defaults
+if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
+    message(STATUS "IPB: EMBEDDED mode - minimal components")
     set(IPB_SINK_CONSOLE ON)
     set(IPB_SINK_SYSLOG OFF)
     set(IPB_SINK_MQTT OFF)
@@ -69,9 +69,17 @@ if(IPB_EMBEDDED)
     set(IPB_BUILD_GATE OFF)
     set(IPB_BUILD_BRIDGE ON)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os")
-    add_compile_definitions(IPB_EMBEDDED=1)
+elseif(IPB_BUILD_MODE STREQUAL "EDGE")
+    message(STATUS "IPB: EDGE mode - balanced components")
+    set(IPB_SINK_CONSOLE ON)
+    set(IPB_SINK_SYSLOG ON)
+    set(IPB_SINK_MQTT ON)
+    set(IPB_SINK_KAFKA OFF)
+    set(IPB_BUILD_GATE ON)
+    set(IPB_BUILD_BRIDGE ON)
 endif()
 
+# IPB_FULL overrides mode defaults with all components
 if(IPB_FULL)
     message(STATUS "IPB: Full profile - all components")
     set(IPB_SINK_CONSOLE ON)
