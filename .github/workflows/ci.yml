@@ -61,9 +61,33 @@ on:
         default: 'all'
         options:
           - all
-          - core-only
-          - sinks-only
-          - scoops-only
+          # Core components
+          - core-all
+          - core-common
+          - core-components
+          - core-router
+          - core-security
+          - core-testing
+          # Transport layer
+          - transport-all
+          - transport-mqtt
+          - transport-http
+          # Sinks
+          - sinks-all
+          - sink-mqtt
+          - sink-console
+          - sink-syslog
+          - sink-kafka
+          - sink-zmq
+          - sink-sparkplug
+          # Scoops
+          - scoops-all
+          - scoop-mqtt
+          - scoop-modbus
+          - scoop-opcua
+          - scoop-console
+          - scoop-sparkplug
+          # Applications
           - apps-only
       # Test Options
       run_tests:
@@ -624,15 +648,85 @@ jobs:
           # Component selection for manual dispatch
           COMPONENT_FLAGS=""
           if [ "${{ needs.changes.outputs.is_manual }}" == "true" ]; then
-            case "${{ github.event.inputs.components }}" in
-              core-only)
-                COMPONENT_FLAGS="-DIPB_SINK_MQTT=OFF -DIPB_SCOOP_MQTT=OFF"
+            COMP="${{ github.event.inputs.components }}"
+            case "$COMP" in
+              # Core components
+              core-all)
+                COMPONENT_FLAGS="-DIPB_BUILD_CORE=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF -DIPB_BUILD_TRANSPORT=OFF"
                 ;;
-              sinks-only)
-                COMPONENT_FLAGS="-DIPB_SCOOP_MQTT=OFF"
+              core-common)
+                COMPONENT_FLAGS="-DIPB_CORE_COMMON=ON -DIPB_CORE_ROUTER=OFF -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF"
                 ;;
-              scoops-only)
-                COMPONENT_FLAGS="-DIPB_SINK_MQTT=OFF"
+              core-components)
+                COMPONENT_FLAGS="-DIPB_CORE_COMPONENTS=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              core-router)
+                COMPONENT_FLAGS="-DIPB_CORE_ROUTER=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              core-security)
+                COMPONENT_FLAGS="-DIPB_CORE_SECURITY=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              core-testing)
+                COMPONENT_FLAGS="-DIPB_CORE_TESTING=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              # Transport layer
+              transport-all)
+                COMPONENT_FLAGS="-DIPB_TRANSPORT_MQTT=ON -DIPB_TRANSPORT_HTTP=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              transport-mqtt)
+                COMPONENT_FLAGS="-DIPB_TRANSPORT_MQTT=ON -DIPB_TRANSPORT_HTTP=OFF -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              transport-http)
+                COMPONENT_FLAGS="-DIPB_TRANSPORT_HTTP=ON -DIPB_TRANSPORT_MQTT=OFF -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              # Sinks
+              sinks-all)
+                COMPONENT_FLAGS="-DIPB_BUILD_SINKS=ON -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              sink-mqtt)
+                COMPONENT_FLAGS="-DIPB_SINK_MQTT=ON -DIPB_SINK_CONSOLE=OFF -DIPB_SINK_SYSLOG=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              sink-console)
+                COMPONENT_FLAGS="-DIPB_SINK_CONSOLE=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              sink-syslog)
+                COMPONENT_FLAGS="-DIPB_SINK_SYSLOG=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              sink-kafka)
+                COMPONENT_FLAGS="-DIPB_SINK_KAFKA=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              sink-zmq)
+                COMPONENT_FLAGS="-DIPB_SINK_ZMQ=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              sink-sparkplug)
+                COMPONENT_FLAGS="-DIPB_SINK_SPARKPLUG=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF"
+                ;;
+              # Scoops
+              scoops-all)
+                COMPONENT_FLAGS="-DIPB_BUILD_SCOOPS=ON -DIPB_BUILD_SINKS=OFF"
+                ;;
+              scoop-mqtt)
+                COMPONENT_FLAGS="-DIPB_SCOOP_MQTT=ON -DIPB_SCOOP_MODBUS=OFF -DIPB_BUILD_SINKS=OFF"
+                ;;
+              scoop-modbus)
+                COMPONENT_FLAGS="-DIPB_SCOOP_MODBUS=ON -DIPB_SCOOP_MQTT=OFF -DIPB_BUILD_SINKS=OFF"
+                ;;
+              scoop-opcua)
+                COMPONENT_FLAGS="-DIPB_SCOOP_OPCUA=ON -DIPB_SCOOP_MQTT=OFF -DIPB_BUILD_SINKS=OFF"
+                ;;
+              scoop-console)
+                COMPONENT_FLAGS="-DIPB_SCOOP_CONSOLE=ON -DIPB_SCOOP_MQTT=OFF -DIPB_BUILD_SINKS=OFF"
+                ;;
+              scoop-sparkplug)
+                COMPONENT_FLAGS="-DIPB_SCOOP_SPARKPLUG=ON -DIPB_SCOOP_MQTT=OFF -DIPB_BUILD_SINKS=OFF"
+                ;;
+              # Applications only
+              apps-only)
+                COMPONENT_FLAGS="-DIPB_BUILD_GATE=ON -DIPB_BUILD_BRIDGE=ON"
+                ;;
+              # Default: build all
+              all|*)
+                COMPONENT_FLAGS=""
                 ;;
             esac
           fi
@@ -656,13 +750,51 @@ jobs:
             $FULL_FLAG = "-DIPB_FULL=ON"
           }
 
+          # Component selection for manual dispatch
+          $COMPONENT_FLAGS = ""
+          if ("${{ needs.changes.outputs.is_manual }}" -eq "true") {
+            $comp = "${{ github.event.inputs.components }}"
+            switch ($comp) {
+              # Core components
+              "core-all" { $COMPONENT_FLAGS = "-DIPB_BUILD_CORE=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "core-common" { $COMPONENT_FLAGS = "-DIPB_CORE_COMMON=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "core-components" { $COMPONENT_FLAGS = "-DIPB_CORE_COMPONENTS=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "core-router" { $COMPONENT_FLAGS = "-DIPB_CORE_ROUTER=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "core-security" { $COMPONENT_FLAGS = "-DIPB_CORE_SECURITY=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "core-testing" { $COMPONENT_FLAGS = "-DIPB_CORE_TESTING=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              # Transport layer
+              "transport-all" { $COMPONENT_FLAGS = "-DIPB_TRANSPORT_MQTT=ON -DIPB_TRANSPORT_HTTP=ON -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "transport-mqtt" { $COMPONENT_FLAGS = "-DIPB_TRANSPORT_MQTT=ON -DIPB_TRANSPORT_HTTP=OFF -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "transport-http" { $COMPONENT_FLAGS = "-DIPB_TRANSPORT_HTTP=ON -DIPB_TRANSPORT_MQTT=OFF -DIPB_BUILD_SINKS=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              # Sinks
+              "sinks-all" { $COMPONENT_FLAGS = "-DIPB_BUILD_SINKS=ON -DIPB_BUILD_SCOOPS=OFF" }
+              "sink-mqtt" { $COMPONENT_FLAGS = "-DIPB_SINK_MQTT=ON -DIPB_SINK_CONSOLE=OFF -DIPB_SINK_SYSLOG=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "sink-console" { $COMPONENT_FLAGS = "-DIPB_SINK_CONSOLE=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "sink-syslog" { $COMPONENT_FLAGS = "-DIPB_SINK_SYSLOG=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "sink-kafka" { $COMPONENT_FLAGS = "-DIPB_SINK_KAFKA=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "sink-zmq" { $COMPONENT_FLAGS = "-DIPB_SINK_ZMQ=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              "sink-sparkplug" { $COMPONENT_FLAGS = "-DIPB_SINK_SPARKPLUG=ON -DIPB_SINK_MQTT=OFF -DIPB_BUILD_SCOOPS=OFF" }
+              # Scoops
+              "scoops-all" { $COMPONENT_FLAGS = "-DIPB_BUILD_SCOOPS=ON -DIPB_BUILD_SINKS=OFF" }
+              "scoop-mqtt" { $COMPONENT_FLAGS = "-DIPB_SCOOP_MQTT=ON -DIPB_SCOOP_MODBUS=OFF -DIPB_BUILD_SINKS=OFF" }
+              "scoop-modbus" { $COMPONENT_FLAGS = "-DIPB_SCOOP_MODBUS=ON -DIPB_SCOOP_MQTT=OFF -DIPB_BUILD_SINKS=OFF" }
+              "scoop-opcua" { $COMPONENT_FLAGS = "-DIPB_SCOOP_OPCUA=ON -DIPB_SCOOP_MQTT=OFF -DIPB_BUILD_SINKS=OFF" }
+              "scoop-console" { $COMPONENT_FLAGS = "-DIPB_SCOOP_CONSOLE=ON -DIPB_SCOOP_MQTT=OFF -DIPB_BUILD_SINKS=OFF" }
+              "scoop-sparkplug" { $COMPONENT_FLAGS = "-DIPB_SCOOP_SPARKPLUG=ON -DIPB_SCOOP_MQTT=OFF -DIPB_BUILD_SINKS=OFF" }
+              # Applications only
+              "apps-only" { $COMPONENT_FLAGS = "-DIPB_BUILD_GATE=ON -DIPB_BUILD_BRIDGE=ON" }
+              # Default: build all
+              default { $COMPONENT_FLAGS = "" }
+            }
+          }
+
           cmake -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake `
             -DIPB_BUILD_MODE=${{ matrix.build_mode }} `
             -DBUILD_TESTING=ON `
             -DBUILD_EXAMPLES=ON `
-            $FULL_FLAG
+            $FULL_FLAG $COMPONENT_FLAGS
 
       # ===========================================
       # Build
