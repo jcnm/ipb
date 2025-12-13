@@ -82,7 +82,7 @@ jobs:
       previous_tag: ${{ steps.calculate.outputs.previous_tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -339,7 +339,7 @@ jobs:
 
       - name: Checkout
         if: steps.filter.outputs.skip != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Linux Dependencies
       - name: Install Dependencies (Linux - SERVER/EDGE)
@@ -505,7 +505,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -551,7 +551,7 @@ jobs:
       github.event.inputs.dry_run != 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
@@ -601,7 +601,7 @@ jobs:
       (github.event.inputs.create_docker != 'false')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download Linux Artifact
         uses: actions/download-artifact@v4
