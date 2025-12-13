@@ -217,9 +217,9 @@ int test_configuration(const std::string& config_file_path) {
         const auto& config = orchestrator->get_config();
         std::cout << "\nConfiguration Summary:" << std::endl;
         std::cout << "  Instance ID: " << config.instance_id << std::endl;
-        std::cout << "  Log level: " << config.log_level << std::endl;
+        std::cout << "  Log level: " << config.logging.level << std::endl;
         std::cout << "  Real-time scheduling: " << (config.scheduler.enable_realtime_priority ? "enabled" : "disabled") << std::endl;
-        std::cout << "  Hot reload: " << (config.enable_hot_reload ? "enabled" : "disabled") << std::endl;
+        std::cout << "  Hot reload: " << (config.hot_reload.enabled ? "enabled" : "disabled") << std::endl;
 
         return 0;
 
@@ -448,7 +448,7 @@ int main(int argc, char* argv[]) {
                 auto metrics = g_orchestrator->get_metrics();
                 std::cout << "System metrics:" << std::endl;
                 std::cout << "  Messages processed: " << metrics.messages_processed.load() << std::endl;
-                std::cout << "  Router threads: " << g_orchestrator->get_config().router.thread_pool_size << std::endl;
+                std::cout << "  Router threads: " << g_orchestrator->get_config().router.worker_threads << std::endl;
                 std::cout << "  RT scheduling: " << (g_orchestrator->get_config().scheduler.enable_realtime_priority ? "enabled" : "disabled") << std::endl;
             }
         }

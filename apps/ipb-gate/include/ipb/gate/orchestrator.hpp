@@ -4,6 +4,9 @@
 #include "ipb/common/data_point.hpp"
 #include "ipb/common/dataset.hpp"
 #include "ipb/router/router.hpp"
+#include "ipb/core/config/config_types.hpp"
+#include "ipb/core/config/config_loader.hpp"
+#include "ipb/core/rule_engine/rule_engine.hpp"
 #include <yaml-cpp/yaml.h>
 #include <memory>
 #include <vector>
@@ -28,74 +31,8 @@ namespace ipb::sink::syslog { class SyslogSink; }
 
 namespace ipb::gate {
 
-/**
- * @brief Configuration structure for IPB Gateway
- */
-struct GatewayConfig {
-    // General settings
-    std::string instance_id = "ipb-gateway-001";
-    std::string log_level = "INFO";
-    bool enable_hot_reload = true;
-    std::chrono::seconds config_check_interval{10};
-    
-    // EDF Scheduler settings
-    struct {
-        bool enable_realtime_priority = true;
-        int realtime_priority = 50;  // 1-99
-        bool enable_cpu_affinity = true;
-        std::vector<int> cpu_cores;  // Empty = auto-detect
-        std::chrono::microseconds default_deadline{1000};  // 1ms
-        size_t max_tasks = 10000;
-    } scheduler;
-    
-    // Router settings
-    struct {
-        size_t thread_pool_size = 4;
-        bool enable_lock_free = true;
-        bool enable_zero_copy = true;
-        size_t routing_table_size = 1000;
-        std::chrono::microseconds routing_timeout{500};
-    } router;
-    
-    // Scoop configurations (data collectors)
-    std::map<std::string, YAML::Node> scoops;
-    
-    // Sink configurations
-    std::map<std::string, YAML::Node> sinks;
-    
-    // Routing rules
-    std::vector<YAML::Node> routing_rules;
-    
-    // MQTT command interface settings
-    struct {
-        bool enable_mqtt_commands = false;
-        std::string broker_url = "mqtt://localhost:1883";
-        std::string command_topic = "ipb/gateway/commands";
-        std::string response_topic = "ipb/gateway/responses";
-        std::string status_topic = "ipb/gateway/status";
-        std::chrono::seconds status_interval{30};
-        std::string client_id = "ipb-gateway-cmd";
-        
-        // Authentication
-        std::string username;
-        std::string password;
-        
-        // TLS settings
-        bool enable_tls = false;
-        std::string ca_cert_path;
-        std::string client_cert_path;
-        std::string client_key_path;
-    } mqtt_commands;
-    
-    // Monitoring settings
-    struct {
-        bool enable_prometheus_metrics = false;
-        uint16_t prometheus_port = 9090;
-        std::string prometheus_path = "/metrics";
-        bool enable_health_checks = true;
-        std::chrono::seconds health_check_interval{10};
-    } monitoring;
-};
+// Use core configuration types
+using GatewayConfig = core::config::ApplicationConfig;
 
 /**
  * @brief Gateway statistics and metrics
@@ -283,11 +220,13 @@ private:
     // Configuration
     std::string config_file_path_;
     GatewayConfig config_;
+    std::unique_ptr<core::config::ConfigLoader> config_loader_;
     mutable std::mutex config_mutex_;
-    
+
     // Core components
     std::unique_ptr<router::Router> router_;
-    
+    std::unique_ptr<core::RuleEngine> rule_engine_;
+
     // Dynamic components
     std::map<std::string, std::shared_ptr<common::IProtocolSource>> scoops_;
     std::map<std::string, std::shared_ptr<common::ISink>> sinks_;
@@ -330,8 +269,12 @@ private:
     common::Result<void> stop_sink(const std::string& sink_id);
 
     // Dynamic loading
-    std::shared_ptr<common::IProtocolSource> create_scoop(const std::string& type, const YAML::Node& config);
-    std::shared_ptr<common::ISink> create_sink(const std::string& type, const YAML::Node& config);
+    std::shared_ptr<common::IProtocolSource> create_scoop(const core::config::ScoopConfig& config);
+    std::shared_ptr<common::ISink> create_sink(const core::config::SinkConfig& config);
+
+    // Routing integration
+    void setup_rule_engine();
+    common::Result<void> apply_routing_rules();
     
     // MQTT command processing
     void setup_mqtt_commands();
