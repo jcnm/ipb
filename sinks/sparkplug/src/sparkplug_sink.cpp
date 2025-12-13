@@ -5,16 +5,16 @@
 
 #include "ipb/sink/sparkplug/sparkplug_sink.hpp"
 
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <algorithm>
 #include <condition_variable>
 #include <mutex>
+#include <queue>
 #include <shared_mutex>
 #include <thread>
-#include <queue>
 #include <unordered_map>
 
 namespace ipb::sink::sparkplug {
@@ -22,8 +22,8 @@ namespace ipb::sink::sparkplug {
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::PROTOCOL;
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::PROTOCOL;
+}  // anonymous namespace
 
 //=============================================================================
 // MetricDefinition Implementation
@@ -85,54 +85,54 @@ MetricDefinition MetricDefinition::from_data_point(const common::DataPoint& dp) 
 //=============================================================================
 
 bool SparkplugSinkConfig::is_valid() const {
-    if (edge_node.group_id.empty()) return false;
-    if (edge_node.edge_node_id.empty()) return false;
-    if (!mqtt_config.is_valid()) return false;
+    if (edge_node.group_id.empty())
+        return false;
+    if (edge_node.edge_node_id.empty())
+        return false;
+    if (!mqtt_config.is_valid())
+        return false;
     return true;
 }
 
 std::string SparkplugSinkConfig::validation_error() const {
-    if (edge_node.group_id.empty()) return "Group ID is required";
-    if (edge_node.edge_node_id.empty()) return "Edge Node ID is required";
-    if (!mqtt_config.is_valid()) return mqtt_config.validation_error();
+    if (edge_node.group_id.empty())
+        return "Group ID is required";
+    if (edge_node.edge_node_id.empty())
+        return "Edge Node ID is required";
+    if (!mqtt_config.is_valid())
+        return mqtt_config.validation_error();
     return "";
 }
 
-SparkplugSinkConfig SparkplugSinkConfig::create_default(
-    const std::string& group_id,
-    const std::string& edge_node_id)
-{
+SparkplugSinkConfig SparkplugSinkConfig::create_default(const std::string& group_id,
+                                                        const std::string& edge_node_id) {
     SparkplugSinkConfig config;
-    config.edge_node.group_id = group_id;
+    config.edge_node.group_id     = group_id;
     config.edge_node.edge_node_id = edge_node_id;
     config.mqtt_config.broker_url = "tcp://localhost:1883";
     return config;
 }
 
-SparkplugSinkConfig SparkplugSinkConfig::create_high_throughput(
-    const std::string& group_id,
-    const std::string& edge_node_id)
-{
-    SparkplugSinkConfig config = create_default(group_id, edge_node_id);
+SparkplugSinkConfig SparkplugSinkConfig::create_high_throughput(const std::string& group_id,
+                                                                const std::string& edge_node_id) {
+    SparkplugSinkConfig config        = create_default(group_id, edge_node_id);
     config.publishing.enable_batching = true;
-    config.publishing.batch_size = 500;
-    config.publishing.batch_timeout = std::chrono::milliseconds{500};
-    config.publishing.data_qos = transport::mqtt::QoS::AT_MOST_ONCE;
-    config.message_queue_size = 50000;
-    config.worker_threads = 4;
+    config.publishing.batch_size      = 500;
+    config.publishing.batch_timeout   = std::chrono::milliseconds{500};
+    config.publishing.data_qos        = transport::mqtt::QoS::AT_MOST_ONCE;
+    config.message_queue_size         = 50000;
+    config.worker_threads             = 4;
     return config;
 }
 
-SparkplugSinkConfig SparkplugSinkConfig::create_reliable(
-    const std::string& group_id,
-    const std::string& edge_node_id)
-{
-    SparkplugSinkConfig config = create_default(group_id, edge_node_id);
+SparkplugSinkConfig SparkplugSinkConfig::create_reliable(const std::string& group_id,
+                                                         const std::string& edge_node_id) {
+    SparkplugSinkConfig config        = create_default(group_id, edge_node_id);
     config.publishing.enable_batching = true;
-    config.publishing.batch_size = 50;
-    config.publishing.data_qos = transport::mqtt::QoS::AT_LEAST_ONCE;
-    config.publishing.birth_qos = transport::mqtt::QoS::AT_LEAST_ONCE;
-    config.publishing.death_qos = transport::mqtt::QoS::AT_LEAST_ONCE;
+    config.publishing.batch_size      = 50;
+    config.publishing.data_qos        = transport::mqtt::QoS::AT_LEAST_ONCE;
+    config.publishing.birth_qos       = transport::mqtt::QoS::AT_LEAST_ONCE;
+    config.publishing.death_qos       = transport::mqtt::QoS::AT_LEAST_ONCE;
     return config;
 }
 
@@ -143,14 +143,10 @@ SparkplugSinkConfig SparkplugSinkConfig::create_reliable(
 class SparkplugSink::Impl {
 public:
     explicit Impl(const SparkplugSinkConfig& config)
-        : config_(config)
-        , running_(false)
-        , connected_(false)
-        , sequence_number_(0)
-        , bdseq_(0) {
+        : config_(config), running_(false), connected_(false), sequence_number_(0), bdseq_(0) {
         IPB_LOG_DEBUG(LOG_CAT, "SparkplugSink::Impl created for group="
-                     << config_.edge_node.group_id
-                     << " node=" << config_.edge_node.edge_node_id);
+                                   << config_.edge_node.group_id
+                                   << " node=" << config_.edge_node.edge_node_id);
     }
 
     ~Impl() {
@@ -171,12 +167,13 @@ public:
         // Validate configuration
         if (!config_.is_valid()) {
             IPB_LOG_ERROR(LOG_CAT, "Invalid configuration: " << config_.validation_error());
-            return common::Result<>::failure("Invalid configuration: " + config_.validation_error());
+            return common::Result<>::failure("Invalid configuration: " +
+                                             config_.validation_error());
         }
 
         // Get or create shared MQTT connection
         auto& manager = transport::mqtt::MQTTConnectionManager::instance();
-        connection_ = manager.get_or_create(config_.connection_id, config_.mqtt_config);
+        connection_   = manager.get_or_create(config_.connection_id, config_.mqtt_config);
 
         if (IPB_UNLIKELY(!connection_)) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to create MQTT connection");
@@ -187,15 +184,11 @@ public:
         connection_->set_connection_callback(
             [this](transport::mqtt::ConnectionState state, const std::string& reason) {
                 handle_connection_state(state, reason);
-            }
-        );
+            });
 
         connection_->set_message_callback(
-            [this](const std::string& topic, const std::string& payload,
-                   transport::mqtt::QoS qos, bool retained) {
-                handle_message(topic, payload);
-            }
-        );
+            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS qos,
+                   bool retained) { handle_message(topic, payload); });
 
         // Setup Last Will Testament (NDEATH)
         setup_death_certificate();
@@ -350,29 +343,23 @@ public:
         return common::Result<>::success();
     }
 
-    uint64_t get_sequence_number() const noexcept {
-        return sequence_number_.load();
-    }
+    uint64_t get_sequence_number() const noexcept { return sequence_number_.load(); }
 
-    uint64_t get_bdseq() const noexcept {
-        return bdseq_.load();
-    }
+    uint64_t get_bdseq() const noexcept { return bdseq_.load(); }
 
-    SparkplugSinkStatistics get_sparkplug_statistics() const {
-        return stats_;
-    }
+    SparkplugSinkStatistics get_sparkplug_statistics() const { return stats_; }
 
     bool is_healthy() const noexcept {
-        if (!running_.load() || !is_connected()) return false;
+        if (!running_.load() || !is_connected())
+            return false;
         return stats_.publish_failures.load() < 100;  // Threshold
     }
 
-    void reset_statistics() {
-        stats_.reset();
-    }
+    void reset_statistics() { stats_.reset(); }
 
 private:
-    void handle_connection_state(transport::mqtt::ConnectionState state, const std::string& reason) {
+    void handle_connection_state(transport::mqtt::ConnectionState state,
+                                 const std::string& reason) {
         if (state == transport::mqtt::ConnectionState::CONNECTED) {
             connected_.store(true);
             IPB_LOG_INFO(LOG_CAT, "Connected to MQTT broker");
@@ -403,23 +390,22 @@ private:
 
     void setup_death_certificate() {
         // Build NDEATH topic: spBv1.0/{group_id}/NDEATH/{edge_node_id}
-        std::string death_topic = "spBv1.0/" + config_.edge_node.group_id +
-                                  "/NDEATH/" + config_.edge_node.edge_node_id;
+        std::string death_topic =
+            "spBv1.0/" + config_.edge_node.group_id + "/NDEATH/" + config_.edge_node.edge_node_id;
 
         // Build death payload (in real impl, use protobuf)
         std::string death_payload = build_death_payload();
 
         // Set as Last Will Testament
-        connection_->set_will(death_topic, death_payload,
-                             config_.publishing.death_qos, false);
+        connection_->set_will(death_topic, death_payload, config_.publishing.death_qos, false);
 
         IPB_LOG_DEBUG(LOG_CAT, "Set NDEATH as LWT on topic: " << death_topic);
     }
 
     void subscribe_to_commands() {
         // Subscribe to NCMD: spBv1.0/{group_id}/NCMD/{edge_node_id}
-        std::string ncmd_topic = "spBv1.0/" + config_.edge_node.group_id +
-                                 "/NCMD/" + config_.edge_node.edge_node_id;
+        std::string ncmd_topic =
+            "spBv1.0/" + config_.edge_node.group_id + "/NCMD/" + config_.edge_node.edge_node_id;
         connection_->subscribe(ncmd_topic, config_.publishing.birth_qos);
         IPB_LOG_DEBUG(LOG_CAT, "Subscribed to NCMD: " << ncmd_topic);
     }
@@ -428,15 +414,15 @@ private:
         IPB_SPAN_CAT("SparkplugSink::publish_birth", LOG_CAT);
 
         // Build NBIRTH topic: spBv1.0/{group_id}/NBIRTH/{edge_node_id}
-        std::string birth_topic = "spBv1.0/" + config_.edge_node.group_id +
-                                  "/NBIRTH/" + config_.edge_node.edge_node_id;
+        std::string birth_topic =
+            "spBv1.0/" + config_.edge_node.group_id + "/NBIRTH/" + config_.edge_node.edge_node_id;
 
         // Build birth payload (in real impl, use protobuf)
         std::string birth_payload = build_birth_payload();
 
-        bool success = connection_->publish_sync(birth_topic, birth_payload,
-                                                  config_.publishing.birth_qos, false,
-                                                  std::chrono::seconds{5});
+        bool success =
+            connection_->publish_sync(birth_topic, birth_payload, config_.publishing.birth_qos,
+                                      false, std::chrono::seconds{5});
 
         if (success) {
             stats_.births_sent++;
@@ -459,15 +445,14 @@ private:
 
     common::Result<> publish_device_birth(const std::string& device_id) {
         // Build DBIRTH topic: spBv1.0/{group_id}/DBIRTH/{edge_node_id}/{device_id}
-        std::string dbirth_topic = "spBv1.0/" + config_.edge_node.group_id +
-                                   "/DBIRTH/" + config_.edge_node.edge_node_id +
-                                   "/" + device_id;
+        std::string dbirth_topic = "spBv1.0/" + config_.edge_node.group_id + "/DBIRTH/" +
+                                   config_.edge_node.edge_node_id + "/" + device_id;
 
         std::string dbirth_payload = build_device_birth_payload(device_id);
 
-        bool success = connection_->publish_sync(dbirth_topic, dbirth_payload,
-                                                  config_.publishing.birth_qos, false,
-                                                  std::chrono::seconds{5});
+        bool success =
+            connection_->publish_sync(dbirth_topic, dbirth_payload, config_.publishing.birth_qos,
+                                      false, std::chrono::seconds{5});
 
         if (success) {
             stats_.births_sent++;
@@ -482,14 +467,12 @@ private:
 
     void publish_device_death(const std::string& device_id) {
         // Build DDEATH topic
-        std::string ddeath_topic = "spBv1.0/" + config_.edge_node.group_id +
-                                   "/DDEATH/" + config_.edge_node.edge_node_id +
-                                   "/" + device_id;
+        std::string ddeath_topic = "spBv1.0/" + config_.edge_node.group_id + "/DDEATH/" +
+                                   config_.edge_node.edge_node_id + "/" + device_id;
 
         std::string ddeath_payload = build_device_death_payload(device_id);
 
-        connection_->publish(ddeath_topic, ddeath_payload,
-                            config_.publishing.death_qos, false);
+        connection_->publish(ddeath_topic, ddeath_payload, config_.publishing.death_qos, false);
 
         stats_.deaths_sent++;
         IPB_LOG_INFO(LOG_CAT, "Published DDEATH for device: " << device_id);
@@ -501,11 +484,11 @@ private:
 
             {
                 std::unique_lock<std::mutex> lock(queue_mutex_);
-                queue_cv_.wait(lock, [this] {
-                    return !message_queue_.empty() || !running_.load();
-                });
+                queue_cv_.wait(lock,
+                               [this] { return !message_queue_.empty() || !running_.load(); });
 
-                if (!running_.load()) break;
+                if (!running_.load())
+                    break;
 
                 if (!message_queue_.empty()) {
                     dp = std::move(message_queue_.front());
@@ -549,7 +532,8 @@ private:
     }
 
     void flush_batch_internal() {
-        if (current_batch_.empty()) return;
+        if (current_batch_.empty())
+            return;
 
         // Build NDATA message with all metrics
         publish_data_batch(current_batch_);
@@ -563,19 +547,17 @@ private:
         std::string topic;
         if (device_id.empty()) {
             // Node data: spBv1.0/{group_id}/NDATA/{edge_node_id}
-            topic = "spBv1.0/" + config_.edge_node.group_id +
-                    "/NDATA/" + config_.edge_node.edge_node_id;
+            topic = "spBv1.0/" + config_.edge_node.group_id + "/NDATA/" +
+                    config_.edge_node.edge_node_id;
         } else {
             // Device data: spBv1.0/{group_id}/DDATA/{edge_node_id}/{device_id}
-            topic = "spBv1.0/" + config_.edge_node.group_id +
-                    "/DDATA/" + config_.edge_node.edge_node_id +
-                    "/" + device_id;
+            topic = "spBv1.0/" + config_.edge_node.group_id + "/DDATA/" +
+                    config_.edge_node.edge_node_id + "/" + device_id;
         }
 
         std::string payload = build_data_payload({dp});
 
-        int token = connection_->publish(topic, payload,
-                                          config_.publishing.data_qos, false);
+        int token = connection_->publish(topic, payload, config_.publishing.data_qos, false);
 
         if (token >= 0) {
             stats_.data_messages_sent++;
@@ -594,7 +576,8 @@ private:
     }
 
     void publish_data_batch(const std::vector<common::DataPoint>& batch) {
-        if (batch.empty()) return;
+        if (batch.empty())
+            return;
 
         // Group by device
         std::unordered_map<std::string, std::vector<common::DataPoint>> by_device;
@@ -608,18 +591,16 @@ private:
         for (const auto& [device_id, points] : by_device) {
             std::string topic;
             if (device_id.empty()) {
-                topic = "spBv1.0/" + config_.edge_node.group_id +
-                        "/NDATA/" + config_.edge_node.edge_node_id;
+                topic = "spBv1.0/" + config_.edge_node.group_id + "/NDATA/" +
+                        config_.edge_node.edge_node_id;
             } else {
-                topic = "spBv1.0/" + config_.edge_node.group_id +
-                        "/DDATA/" + config_.edge_node.edge_node_id +
-                        "/" + device_id;
+                topic = "spBv1.0/" + config_.edge_node.group_id + "/DDATA/" +
+                        config_.edge_node.edge_node_id + "/" + device_id;
             }
 
             std::string payload = build_data_payload(points);
 
-            int token = connection_->publish(topic, payload,
-                                              config_.publishing.data_qos, false);
+            int token = connection_->publish(topic, payload, config_.publishing.data_qos, false);
 
             if (token >= 0) {
                 stats_.data_messages_sent++;
@@ -656,9 +637,7 @@ private:
         return "NBIRTH_PAYLOAD_PLACEHOLDER";
     }
 
-    std::string build_death_payload() {
-        return "NDEATH_PAYLOAD_PLACEHOLDER";
-    }
+    std::string build_death_payload() { return "NDEATH_PAYLOAD_PLACEHOLDER"; }
 
     std::string build_device_birth_payload(const std::string& device_id) {
         return "DBIRTH_PAYLOAD_" + device_id;
@@ -751,9 +730,9 @@ std::unique_ptr<common::ConfigurationBase> SparkplugSink::get_configuration() co
 common::Statistics SparkplugSink::get_statistics() const noexcept {
     auto stats = impl_->get_sparkplug_statistics();
     common::Statistics result;
-    result.messages_sent = stats.metrics_published.load();
+    result.messages_sent   = stats.metrics_published.load();
     result.messages_failed = stats.publish_failures.load();
-    result.bytes_sent = stats.bytes_sent.load();
+    result.bytes_sent      = stats.bytes_sent.load();
     return result;
 }
 
@@ -813,25 +792,20 @@ SparkplugSinkStatistics SparkplugSink::get_sparkplug_statistics() const {
 // SparkplugSinkFactory Implementation
 //=============================================================================
 
-std::unique_ptr<SparkplugSink> SparkplugSinkFactory::create(
-    const std::string& broker_url,
-    const std::string& group_id,
-    const std::string& edge_node_id)
-{
-    auto config = SparkplugSinkConfig::create_default(group_id, edge_node_id);
+std::unique_ptr<SparkplugSink> SparkplugSinkFactory::create(const std::string& broker_url,
+                                                            const std::string& group_id,
+                                                            const std::string& edge_node_id) {
+    auto config                   = SparkplugSinkConfig::create_default(group_id, edge_node_id);
     config.mqtt_config.broker_url = broker_url;
     return std::make_unique<SparkplugSink>(config);
 }
 
 std::unique_ptr<SparkplugSink> SparkplugSinkFactory::create_with_devices(
-    const std::string& broker_url,
-    const std::string& group_id,
-    const std::string& edge_node_id,
-    const std::vector<DeviceConfig>& devices)
-{
-    auto config = SparkplugSinkConfig::create_default(group_id, edge_node_id);
+    const std::string& broker_url, const std::string& group_id, const std::string& edge_node_id,
+    const std::vector<DeviceConfig>& devices) {
+    auto config                   = SparkplugSinkConfig::create_default(group_id, edge_node_id);
     config.mqtt_config.broker_url = broker_url;
-    config.edge_node.devices = devices;
+    config.edge_node.devices      = devices;
     return std::make_unique<SparkplugSink>(config);
 }
 
@@ -840,23 +814,17 @@ std::unique_ptr<SparkplugSink> SparkplugSinkFactory::create(const SparkplugSinkC
 }
 
 std::unique_ptr<SparkplugSink> SparkplugSinkFactory::create_high_throughput(
-    const std::string& broker_url,
-    const std::string& group_id,
-    const std::string& edge_node_id)
-{
+    const std::string& broker_url, const std::string& group_id, const std::string& edge_node_id) {
     auto config = SparkplugSinkConfig::create_high_throughput(group_id, edge_node_id);
     config.mqtt_config.broker_url = broker_url;
     return std::make_unique<SparkplugSink>(config);
 }
 
 std::unique_ptr<SparkplugSink> SparkplugSinkFactory::create_reliable(
-    const std::string& broker_url,
-    const std::string& group_id,
-    const std::string& edge_node_id)
-{
-    auto config = SparkplugSinkConfig::create_reliable(group_id, edge_node_id);
+    const std::string& broker_url, const std::string& group_id, const std::string& edge_node_id) {
+    auto config                   = SparkplugSinkConfig::create_reliable(group_id, edge_node_id);
     config.mqtt_config.broker_url = broker_url;
     return std::make_unique<SparkplugSink>(config);
 }
 
-} // namespace ipb::sink::sparkplug
+}  // namespace ipb::sink::sparkplug

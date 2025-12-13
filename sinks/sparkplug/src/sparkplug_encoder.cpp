@@ -7,22 +7,22 @@
  * protobuf classes. Otherwise, it provides a stub implementation.
  */
 
-#include "ipb/sink/sparkplug/sparkplug_sink.hpp"
-
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 
+#include <chrono>
 #include <cstring>
 #include <vector>
-#include <chrono>
+
+#include "ipb/sink/sparkplug/sparkplug_sink.hpp"
 
 namespace ipb::sink::sparkplug {
 
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::PROTOCOL;
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::PROTOCOL;
+}  // anonymous namespace
 
 //=============================================================================
 // Sparkplug B Encoder
@@ -35,9 +35,7 @@ namespace encoder {
  */
 inline uint64_t get_timestamp_ms() {
     auto now = std::chrono::system_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch()
-    );
+    auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
     return static_cast<uint64_t>(ms.count());
 }
 
@@ -52,12 +50,8 @@ public:
     /**
      * @brief Encode a birth certificate payload
      */
-    static std::vector<uint8_t> encode_birth(
-        uint64_t timestamp,
-        uint64_t seq,
-        uint64_t bdseq,
-        const std::vector<MetricDefinition>& metrics)
-    {
+    static std::vector<uint8_t> encode_birth(uint64_t timestamp, uint64_t seq, uint64_t bdseq,
+                                             const std::vector<MetricDefinition>& metrics) {
         std::vector<uint8_t> payload;
 
         // In a real implementation, this would use protobuf:
@@ -116,11 +110,9 @@ public:
      * @brief Encode a data payload with metrics
      */
     static std::vector<uint8_t> encode_data(
-        uint64_t timestamp,
-        uint64_t seq,
+        uint64_t timestamp, uint64_t seq,
         const std::vector<std::pair<MetricDefinition, common::Value>>& metrics,
-        bool use_aliases = true)
-    {
+        bool use_aliases = true) {
         std::vector<uint8_t> payload;
 
 #ifdef IPB_HAS_PROTOBUF
@@ -149,12 +141,8 @@ public:
     /**
      * @brief Encode a single data point as a data payload
      */
-    static std::vector<uint8_t> encode_data_point(
-        uint64_t timestamp,
-        uint64_t seq,
-        const common::DataPoint& dp,
-        uint64_t alias = 0)
-    {
+    static std::vector<uint8_t> encode_data_point(uint64_t timestamp, uint64_t seq,
+                                                  const common::DataPoint& dp, uint64_t alias = 0) {
         std::vector<uint8_t> payload;
 
 #ifdef IPB_HAS_PROTOBUF
@@ -172,7 +160,7 @@ public:
         append_uint32(payload, 1);
 
         // Encode the metric
-        auto def = MetricDefinition::from_data_point(dp);
+        auto def  = MetricDefinition::from_data_point(dp);
         def.alias = alias;
         encode_metric_value(payload, def, dp.value(), alias > 0);
 #endif
@@ -211,13 +199,15 @@ private:
 
         // Flags
         uint8_t flags = 0;
-        if (metric.is_transient) flags |= 0x01;
-        if (metric.is_historical) flags |= 0x02;
+        if (metric.is_transient)
+            flags |= 0x01;
+        if (metric.is_historical)
+            flags |= 0x02;
         buf.push_back(flags);
 
         // Optional metadata (simplified)
         bool has_description = metric.description.has_value();
-        bool has_unit = metric.unit.has_value();
+        bool has_unit        = metric.unit.has_value();
         buf.push_back((has_description ? 0x01 : 0x00) | (has_unit ? 0x02 : 0x00));
 
         if (has_description) {
@@ -228,10 +218,8 @@ private:
         }
     }
 
-    static void encode_metric_value(std::vector<uint8_t>& buf,
-                                    const MetricDefinition& def,
-                                    const common::Value& value,
-                                    bool use_alias) {
+    static void encode_metric_value(std::vector<uint8_t>& buf, const MetricDefinition& def,
+                                    const common::Value& value, bool use_alias) {
         // Use alias or name
         if (use_alias && def.alias > 0) {
             buf.push_back(0x01);  // Flag: using alias
@@ -322,6 +310,6 @@ private:
     }
 };
 
-} // namespace encoder
+}  // namespace encoder
 
-} // namespace ipb::sink::sparkplug
+}  // namespace ipb::sink::sparkplug

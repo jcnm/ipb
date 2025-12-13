@@ -3,10 +3,10 @@
  * @brief Sparkplug B topic parsing and building implementation
  */
 
-#include "ipb/scoop/sparkplug/sparkplug_scoop.hpp"
-
-#include <sstream>
 #include <algorithm>
+#include <sstream>
+
+#include "ipb/scoop/sparkplug/sparkplug_scoop.hpp"
 
 namespace ipb::scoop::sparkplug {
 
@@ -16,29 +16,48 @@ namespace ipb::scoop::sparkplug {
 
 std::string_view message_type_to_string(MessageType type) {
     switch (type) {
-        case MessageType::NBIRTH: return "NBIRTH";
-        case MessageType::NDEATH: return "NDEATH";
-        case MessageType::NDATA:  return "NDATA";
-        case MessageType::NCMD:   return "NCMD";
-        case MessageType::DBIRTH: return "DBIRTH";
-        case MessageType::DDEATH: return "DDEATH";
-        case MessageType::DDATA:  return "DDATA";
-        case MessageType::DCMD:   return "DCMD";
-        case MessageType::STATE:  return "STATE";
-        default:                  return "UNKNOWN";
+        case MessageType::NBIRTH:
+            return "NBIRTH";
+        case MessageType::NDEATH:
+            return "NDEATH";
+        case MessageType::NDATA:
+            return "NDATA";
+        case MessageType::NCMD:
+            return "NCMD";
+        case MessageType::DBIRTH:
+            return "DBIRTH";
+        case MessageType::DDEATH:
+            return "DDEATH";
+        case MessageType::DDATA:
+            return "DDATA";
+        case MessageType::DCMD:
+            return "DCMD";
+        case MessageType::STATE:
+            return "STATE";
+        default:
+            return "UNKNOWN";
     }
 }
 
 MessageType string_to_message_type(std::string_view str) {
-    if (str == "NBIRTH") return MessageType::NBIRTH;
-    if (str == "NDEATH") return MessageType::NDEATH;
-    if (str == "NDATA")  return MessageType::NDATA;
-    if (str == "NCMD")   return MessageType::NCMD;
-    if (str == "DBIRTH") return MessageType::DBIRTH;
-    if (str == "DDEATH") return MessageType::DDEATH;
-    if (str == "DDATA")  return MessageType::DDATA;
-    if (str == "DCMD")   return MessageType::DCMD;
-    if (str == "STATE")  return MessageType::STATE;
+    if (str == "NBIRTH")
+        return MessageType::NBIRTH;
+    if (str == "NDEATH")
+        return MessageType::NDEATH;
+    if (str == "NDATA")
+        return MessageType::NDATA;
+    if (str == "NCMD")
+        return MessageType::NCMD;
+    if (str == "DBIRTH")
+        return MessageType::DBIRTH;
+    if (str == "DDEATH")
+        return MessageType::DDEATH;
+    if (str == "DDATA")
+        return MessageType::DDATA;
+    if (str == "DCMD")
+        return MessageType::DCMD;
+    if (str == "STATE")
+        return MessageType::STATE;
     return MessageType::UNKNOWN;
 }
 
@@ -78,7 +97,7 @@ std::optional<SparkplugTopic> SparkplugTopic::parse(const std::string& topic) {
     }
 
     SparkplugTopic result;
-    result.group_id = parts[1];
+    result.group_id     = parts[1];
     result.message_type = string_to_message_type(parts[2]);
     result.edge_node_id = parts[3];
 
@@ -96,8 +115,7 @@ std::string SparkplugTopic::to_string() const {
     }
 
     std::string topic = "spBv1.0/" + group_id + "/" +
-                        std::string(message_type_to_string(message_type)) + "/" +
-                        edge_node_id;
+                        std::string(message_type_to_string(message_type)) + "/" + edge_node_id;
 
     if (!device_id.empty()) {
         topic += "/" + device_id;
@@ -131,23 +149,19 @@ bool SparkplugTopic::is_device_message() const {
 }
 
 bool SparkplugTopic::is_birth() const {
-    return message_type == MessageType::NBIRTH ||
-           message_type == MessageType::DBIRTH;
+    return message_type == MessageType::NBIRTH || message_type == MessageType::DBIRTH;
 }
 
 bool SparkplugTopic::is_death() const {
-    return message_type == MessageType::NDEATH ||
-           message_type == MessageType::DDEATH;
+    return message_type == MessageType::NDEATH || message_type == MessageType::DDEATH;
 }
 
 bool SparkplugTopic::is_data() const {
-    return message_type == MessageType::NDATA ||
-           message_type == MessageType::DDATA;
+    return message_type == MessageType::NDATA || message_type == MessageType::DDATA;
 }
 
 bool SparkplugTopic::is_command() const {
-    return message_type == MessageType::NCMD ||
-           message_type == MessageType::DCMD;
+    return message_type == MessageType::NCMD || message_type == MessageType::DCMD;
 }
 
 //=============================================================================
@@ -174,8 +188,7 @@ std::vector<std::string> SubscriptionFilter::to_mqtt_topics() const {
         // Subscribe to specific message types
         for (MessageType type : message_types) {
             std::string topic = "spBv1.0/" + group_id_pattern + "/" +
-                               std::string(message_type_to_string(type)) + "/" +
-                               edge_node_pattern;
+                                std::string(message_type_to_string(type)) + "/" + edge_node_pattern;
 
             // Device-level messages need device ID
             if (type == MessageType::DBIRTH || type == MessageType::DDEATH ||
@@ -194,4 +207,4 @@ std::vector<std::string> SubscriptionFilter::to_mqtt_topics() const {
     return topics;
 }
 
-} // namespace ipb::scoop::sparkplug
+}  // namespace ipb::scoop::sparkplug

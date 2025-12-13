@@ -5,16 +5,16 @@
 
 #include "ipb/scoop/sparkplug/sparkplug_scoop.hpp"
 
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <algorithm>
 #include <condition_variable>
 #include <mutex>
+#include <queue>
 #include <shared_mutex>
 #include <thread>
-#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -23,8 +23,8 @@ namespace ipb::scoop::sparkplug {
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::PROTOCOL;
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::PROTOCOL;
+}  // anonymous namespace
 
 //=============================================================================
 // SparkplugScoopConfig Implementation
@@ -36,9 +36,9 @@ SparkplugScoopConfig SparkplugScoopConfig::create_default() {
 
     // Subscribe to all Sparkplug messages
     SubscriptionFilter filter;
-    filter.group_id_pattern = "+";
+    filter.group_id_pattern  = "+";
     filter.edge_node_pattern = "+";
-    filter.device_pattern = "#";
+    filter.device_pattern    = "#";
     config.filters.push_back(filter);
 
     return config;
@@ -46,8 +46,8 @@ SparkplugScoopConfig SparkplugScoopConfig::create_default() {
 
 SparkplugScoopConfig SparkplugScoopConfig::create_high_throughput() {
     SparkplugScoopConfig config = create_default();
-    config.message_queue_size = 100000;
-    config.include_metadata = false;
+    config.message_queue_size   = 100000;
+    config.include_metadata     = false;
     return config;
 }
 
@@ -56,9 +56,9 @@ SparkplugScoopConfig SparkplugScoopConfig::create_selective(const std::string& g
     config.mqtt_config.broker_url = "tcp://localhost:1883";
 
     SubscriptionFilter filter;
-    filter.group_id_pattern = group_id;
+    filter.group_id_pattern  = group_id;
     filter.edge_node_pattern = "+";
-    filter.device_pattern = "#";
+    filter.device_pattern    = "#";
     config.filters.push_back(filter);
 
     return config;
@@ -71,16 +71,16 @@ SparkplugScoopConfig SparkplugScoopConfig::create_selective(const std::string& g
 struct NodeState {
     std::string group_id;
     std::string edge_node_id;
-    bool online = false;
+    bool online              = false;
     uint64_t last_birth_time = 0;
-    uint64_t bdseq = 0;
+    uint64_t bdseq           = 0;
     std::vector<std::string> metrics;
     std::unordered_map<uint64_t, std::string> alias_to_name;
 };
 
 struct DeviceState {
     std::string device_id;
-    bool online = false;
+    bool online              = false;
     uint64_t last_birth_time = 0;
     std::vector<std::string> metrics;
     std::unordered_map<uint64_t, std::string> alias_to_name;
@@ -93,9 +93,7 @@ struct DeviceState {
 class SparkplugScoop::Impl {
 public:
     explicit Impl(const SparkplugScoopConfig& config)
-        : config_(config)
-        , running_(false)
-        , connected_(false) {
+        : config_(config), running_(false), connected_(false) {
         IPB_LOG_DEBUG(LOG_CAT, "SparkplugScoop::Impl created");
     }
 
@@ -116,7 +114,7 @@ public:
 
         // Get or create shared MQTT connection
         auto& manager = transport::mqtt::MQTTConnectionManager::instance();
-        connection_ = manager.get_or_create(config_.connection_id, config_.mqtt_config);
+        connection_   = manager.get_or_create(config_.connection_id, config_.mqtt_config);
 
         if (IPB_UNLIKELY(!connection_)) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to create MQTT connection");
@@ -125,17 +123,13 @@ public:
 
         // Setup callbacks
         connection_->set_message_callback(
-            [this](const std::string& topic, const std::string& payload,
-                   transport::mqtt::QoS qos, bool retained) {
-                handle_message(topic, payload, retained);
-            }
-        );
+            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS qos,
+                   bool retained) { handle_message(topic, payload, retained); });
 
         connection_->set_connection_callback(
             [this](transport::mqtt::ConnectionState state, const std::string& reason) {
                 handle_connection_state(state, reason);
-            }
-        );
+            });
 
         // Connect
         if (IPB_UNLIKELY(!connection_->connect())) {
@@ -213,14 +207,14 @@ public:
 
     common::Result<> subscribe(DataCallback data_cb, ErrorCallback error_cb) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
-        data_callback_ = std::move(data_cb);
+        data_callback_  = std::move(data_cb);
         error_callback_ = std::move(error_cb);
         return common::Result<>::success();
     }
 
     common::Result<> unsubscribe() {
         std::lock_guard<std::mutex> lock(callback_mutex_);
-        data_callback_ = nullptr;
+        data_callback_  = nullptr;
         error_callback_ = nullptr;
         return common::Result<>::success();
     }
@@ -228,9 +222,9 @@ public:
     common::Result<> add_address(std::string_view address) {
         // For Sparkplug, address is a topic pattern
         SubscriptionFilter filter;
-        filter.group_id_pattern = std::string(address);
+        filter.group_id_pattern  = std::string(address);
         filter.edge_node_pattern = "+";
-        filter.device_pattern = "#";
+        filter.device_pattern    = "#";
 
         {
             std::lock_guard<std::mutex> lock(filters_mutex_);
@@ -253,11 +247,8 @@ public:
         auto& filters = config_.filters;
         filters.erase(
             std::remove_if(filters.begin(), filters.end(),
-                [&](const SubscriptionFilter& f) {
-                    return f.group_id_pattern == addr;
-                }),
-            filters.end()
-        );
+                           [&](const SubscriptionFilter& f) { return f.group_id_pattern == addr; }),
+            filters.end());
 
         return common::Result<>::success();
     }
@@ -330,10 +321,8 @@ public:
         return {};
     }
 
-    std::vector<std::string> get_device_metrics(
-        const std::string& edge_node_id,
-        const std::string& device_id) const
-    {
+    std::vector<std::string> get_device_metrics(const std::string& edge_node_id,
+                                                const std::string& device_id) const {
         std::shared_lock lock(state_mutex_);
 
         auto node_it = device_states_.find(edge_node_id);
@@ -349,9 +338,7 @@ public:
         return {};
     }
 
-    bool is_healthy() const noexcept {
-        return running_.load() && is_connected();
-    }
+    bool is_healthy() const noexcept { return running_.load() && is_connected(); }
 
     void reset_statistics() {
         stats_.messages_received.store(0);
@@ -385,7 +372,8 @@ private:
         }
     }
 
-    void handle_connection_state(transport::mqtt::ConnectionState state, const std::string& reason) {
+    void handle_connection_state(transport::mqtt::ConnectionState state,
+                                 const std::string& reason) {
         if (state == transport::mqtt::ConnectionState::CONNECTED) {
             connected_.store(true);
             IPB_LOG_INFO(LOG_CAT, "Connected to MQTT broker");
@@ -408,7 +396,7 @@ private:
         }
 
         IPB_LOG_TRACE(LOG_CAT, "Received " << message_type_to_string(parsed_topic->message_type)
-                     << " from " << parsed_topic->edge_node_id);
+                                           << " from " << parsed_topic->edge_node_id);
 
         // Handle based on message type
         switch (parsed_topic->message_type) {
@@ -475,10 +463,10 @@ private:
         {
             std::unique_lock lock(state_mutex_);
 
-            auto& state = node_states_[topic.edge_node_id];
-            state.group_id = topic.group_id;
-            state.edge_node_id = topic.edge_node_id;
-            state.online = true;
+            auto& state           = node_states_[topic.edge_node_id];
+            state.group_id        = topic.group_id;
+            state.edge_node_id    = topic.edge_node_id;
+            state.online          = true;
             state.last_birth_time = decoded->timestamp;
             state.metrics.clear();
             state.alias_to_name.clear();
@@ -535,8 +523,8 @@ private:
     }
 
     void handle_dbirth(const SparkplugTopic& topic, const std::string& payload) {
-        IPB_LOG_INFO(LOG_CAT, "Device birth: " << topic.device_id
-                    << " on node " << topic.edge_node_id);
+        IPB_LOG_INFO(LOG_CAT,
+                     "Device birth: " << topic.device_id << " on node " << topic.edge_node_id);
         stats_.births_received++;
 
         std::vector<uint8_t> data(payload.begin(), payload.end());
@@ -551,9 +539,9 @@ private:
         {
             std::unique_lock lock(state_mutex_);
 
-            auto& state = device_states_[topic.edge_node_id][topic.device_id];
-            state.device_id = topic.device_id;
-            state.online = true;
+            auto& state           = device_states_[topic.edge_node_id][topic.device_id];
+            state.device_id       = topic.device_id;
+            state.online          = true;
             state.last_birth_time = decoded->timestamp;
             state.metrics.clear();
             state.alias_to_name.clear();
@@ -570,8 +558,8 @@ private:
     }
 
     void handle_ddeath(const SparkplugTopic& topic, const std::string& payload) {
-        IPB_LOG_INFO(LOG_CAT, "Device death: " << topic.device_id
-                    << " on node " << topic.edge_node_id);
+        IPB_LOG_INFO(LOG_CAT,
+                     "Device death: " << topic.device_id << " on node " << topic.edge_node_id);
         stats_.deaths_received++;
 
         std::unique_lock lock(state_mutex_);
@@ -605,9 +593,8 @@ private:
         // Host application state - could trigger actions like rebirth
     }
 
-    void resolve_aliases(const std::string& edge_node_id,
-                        const std::string& device_id,
-                        std::vector<SparkplugMetric>& metrics) {
+    void resolve_aliases(const std::string& edge_node_id, const std::string& device_id,
+                         std::vector<SparkplugMetric>& metrics) {
         std::shared_lock lock(state_mutex_);
 
         const std::unordered_map<uint64_t, std::string>* alias_map = nullptr;
@@ -627,7 +614,8 @@ private:
             }
         }
 
-        if (!alias_map) return;
+        if (!alias_map)
+            return;
 
         for (auto& metric : metrics) {
             if (metric.name.empty() && metric.alias > 0) {
@@ -639,20 +627,21 @@ private:
         }
     }
 
-    void process_metrics(const SparkplugPayload& payload,
-                        const std::string& edge_node_id,
-                        const std::string& device_id) {
+    void process_metrics(const SparkplugPayload& payload, const std::string& edge_node_id,
+                         const std::string& device_id) {
         std::vector<common::DataPoint> data_points;
         data_points.reserve(payload.metrics.size());
 
         for (const auto& metric : payload.metrics) {
-            if (metric.name.empty()) continue;  // Skip unresolved aliases
+            if (metric.name.empty())
+                continue;  // Skip unresolved aliases
 
             auto dp = metric.to_data_point(edge_node_id, device_id);
             data_points.push_back(std::move(dp));
         }
 
-        if (data_points.empty()) return;
+        if (data_points.empty())
+            return;
 
         stats_.messages_processed++;
 
@@ -674,11 +663,11 @@ private:
         while (running_.load()) {
             std::unique_lock<std::mutex> lock(buffer_mutex_);
 
-            buffer_cv_.wait_for(lock, std::chrono::milliseconds{100}, [this] {
-                return !data_buffer_.empty() || !running_.load();
-            });
+            buffer_cv_.wait_for(lock, std::chrono::milliseconds{100},
+                                [this] { return !data_buffer_.empty() || !running_.load(); });
 
-            if (!running_.load()) break;
+            if (!running_.load())
+                break;
 
             // Deliver buffered data to callback
             std::vector<common::DataPoint> batch;
@@ -801,10 +790,10 @@ std::unique_ptr<common::ConfigurationBase> SparkplugScoop::get_configuration() c
 
 common::Statistics SparkplugScoop::get_statistics() const noexcept {
     common::Statistics stats;
-    stats.messages_received = impl_->stats_.messages_received.load();
+    stats.messages_received  = impl_->stats_.messages_received.load();
     stats.messages_processed = impl_->stats_.messages_processed.load();
-    stats.messages_dropped = impl_->stats_.messages_dropped.load();
-    stats.errors = impl_->stats_.decode_errors.load();
+    stats.messages_dropped   = impl_->stats_.messages_dropped.load();
+    stats.errors             = impl_->stats_.decode_errors.load();
     return stats;
 }
 
@@ -840,7 +829,8 @@ bool SparkplugScoop::is_node_online(const std::string& edge_node_id) const {
     return impl_->is_node_online(edge_node_id);
 }
 
-bool SparkplugScoop::is_device_online(const std::string& edge_node_id, const std::string& device_id) const {
+bool SparkplugScoop::is_device_online(const std::string& edge_node_id,
+                                      const std::string& device_id) const {
     return impl_->is_device_online(edge_node_id, device_id);
 }
 
@@ -848,10 +838,8 @@ std::vector<std::string> SparkplugScoop::get_node_metrics(const std::string& edg
     return impl_->get_node_metrics(edge_node_id);
 }
 
-std::vector<std::string> SparkplugScoop::get_device_metrics(
-    const std::string& edge_node_id,
-    const std::string& device_id) const
-{
+std::vector<std::string> SparkplugScoop::get_device_metrics(const std::string& edge_node_id,
+                                                            const std::string& device_id) const {
     return impl_->get_device_metrics(edge_node_id, device_id);
 }
 
@@ -860,16 +848,14 @@ std::vector<std::string> SparkplugScoop::get_device_metrics(
 //=============================================================================
 
 std::unique_ptr<SparkplugScoop> SparkplugScoopFactory::create(const std::string& broker_url) {
-    auto config = SparkplugScoopConfig::create_default();
+    auto config                   = SparkplugScoopConfig::create_default();
     config.mqtt_config.broker_url = broker_url;
     return std::make_unique<SparkplugScoop>(config);
 }
 
 std::unique_ptr<SparkplugScoop> SparkplugScoopFactory::create_for_group(
-    const std::string& broker_url,
-    const std::string& group_id)
-{
-    auto config = SparkplugScoopConfig::create_selective(group_id);
+    const std::string& broker_url, const std::string& group_id) {
+    auto config                   = SparkplugScoopConfig::create_selective(group_id);
     config.mqtt_config.broker_url = broker_url;
     return std::make_unique<SparkplugScoop>(config);
 }
@@ -878,10 +864,11 @@ std::unique_ptr<SparkplugScoop> SparkplugScoopFactory::create(const SparkplugSco
     return std::make_unique<SparkplugScoop>(config);
 }
 
-std::unique_ptr<SparkplugScoop> SparkplugScoopFactory::create_high_throughput(const std::string& broker_url) {
-    auto config = SparkplugScoopConfig::create_high_throughput();
+std::unique_ptr<SparkplugScoop> SparkplugScoopFactory::create_high_throughput(
+    const std::string& broker_url) {
+    auto config                   = SparkplugScoopConfig::create_high_throughput();
     config.mqtt_config.broker_url = broker_url;
     return std::make_unique<SparkplugScoop>(config);
 }
 
-} // namespace ipb::scoop::sparkplug
+}  // namespace ipb::scoop::sparkplug
