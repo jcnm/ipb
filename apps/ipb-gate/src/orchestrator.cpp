@@ -18,7 +18,7 @@ namespace ipb::gate {
 using namespace common::debug;
 
 namespace {
-    constexpr const char* LOG_CAT = category::GENERAL;
+    const char* const LOG_CAT = "GENERAL";
 } // anonymous namespace
 
 IPBOrchestrator::IPBOrchestrator(const std::string& config_file_path)
@@ -72,17 +72,15 @@ common::Result<void> IPBOrchestrator::initialize() {
 
         // Initialize router
         IPB_LOG_DEBUG(LOG_CAT, "Initializing router...");
-        router::RouterConfig router_config;
-        router_config.thread_pool_size = config_.router.thread_pool_size;
-        router_config.enable_lock_free = config_.router.enable_lock_free;
-        router_config.enable_zero_copy = config_.router.enable_zero_copy;
-        router_config.routing_table_size = config_.router.routing_table_size;
-        router_config.routing_timeout = config_.router.routing_timeout;
-        
+        router::RouterConfig router_config = router::RouterConfig::default_config();
+        // Apply orchestrator-specific settings to sub-configs
+        router_config.scheduler.worker_threads = config_.router.thread_pool_size;
+        router_config.enable_tracing = config_.router.enable_zero_copy;
+
         router_ = std::make_unique<router::Router>(router_config);
-        auto router_init_result = router_->initialize();
-        if (!router_init_result.is_success()) {
-            return router_init_result;
+        auto router_start_result = router_->start();
+        if (!router_start_result.is_success()) {
+            return router_start_result;
         }
         
         // Load adapters
@@ -286,20 +284,24 @@ common::Result<void> IPBOrchestrator::shutdown() {
     try {
         // Shutdown all components
         for (auto& [scoop_id, adapter] : scoops_) {
-            adapter->shutdown();
+            if (adapter) {
+                adapter->disconnect();
+            }
         }
         scoops_.clear();
-        
+
         for (auto& [sink_id, sink] : sinks_) {
-            sink->shutdown();
+            if (sink) {
+                sink->stop();
+            }
         }
         sinks_.clear();
-        
+
         if (router_) {
-            router_->shutdown();
+            router_->stop();
             router_.reset();
         }
-        
+
         return common::Result<void>();
         
     } catch (const std::exception& e) {
@@ -398,24 +400,24 @@ common::Result<void> IPBOrchestrator::load_config() {
             config_.scoops.clear();
             for (const auto& adapter_node : yaml_config["adapters"]) {
                 std::string scoop_id = adapter_node["id"].as<std::string>();
-                config_.scoops[scoop_id] = adapter_node;
+                config_.scoops[scoop_id] = YAML::Node(adapter_node);
             }
         }
-        
+
         // Load sinks
         if (yaml_config["sinks"]) {
             config_.sinks.clear();
             for (const auto& sink_node : yaml_config["sinks"]) {
                 std::string sink_id = sink_node["id"].as<std::string>();
-                config_.sinks[sink_id] = sink_node;
+                config_.sinks[sink_id] = YAML::Node(sink_node);
             }
         }
-        
+
         // Load routing rules
         if (yaml_config["routing"]) {
             config_.routing_rules.clear();
             for (const auto& rule_node : yaml_config["routing"]["rules"]) {
-                config_.routing_rules.push_back(rule_node);
+                config_.routing_rules.push_back(YAML::Node(rule_node));
             }
         }
         

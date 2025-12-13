@@ -20,46 +20,29 @@ if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
 endif()
 find_package(Threads REQUIRED)
 
-# Mock Data Flow Test Example
-add_executable(mock_data_flow_test mock_data_flow_test.cpp)
+# TODO: Enable these examples once all dependencies are implemented
+# These examples depend on adapters, sinks, and transports that are not yet complete
 
-target_link_libraries(mock_data_flow_test
-    ipb-common
-    ipb-router
-    ipb-sink-console
-    ipb-sink-syslog
-    ipb-sink-mqtt
-    jsoncpp_lib
-    Threads::Threads
-)
+# # Mock Data Flow Test Example
+# add_executable(mock_data_flow_test mock_data_flow_test.cpp)
+# target_link_libraries(mock_data_flow_test
+#     ipb-common ipb-router ipb-sink-console ipb-sink-syslog ipb-sink-mqtt
+#     jsoncpp_lib Threads::Threads
+# )
+# target_compile_options(mock_data_flow_test PRIVATE -Wall -Wextra -Wpedantic -O2)
 
-target_compile_options(mock_data_flow_test PRIVATE
-    -Wall -Wextra -Wpedantic
-    -O2
-)
+# # Complete Industrial Setup Example
+# add_executable(complete_industrial_setup complete_industrial_setup.cpp)
+# target_link_libraries(complete_industrial_setup
+#     ipb-common ipb-router ipb-sink-console ipb-sink-syslog ipb-sink-mqtt
+#     jsoncpp_lib Threads::Threads
+# )
+# target_compile_options(complete_industrial_setup PRIVATE -Wall -Wextra -Wpedantic -O2)
 
-# Complete Industrial Setup Example
-add_executable(complete_industrial_setup complete_industrial_setup.cpp)
-
-target_link_libraries(complete_industrial_setup
-    ipb-common
-    ipb-router
-    ipb-sink-console
-    ipb-sink-syslog
-    ipb-sink-mqtt
-    jsoncpp_lib
-    Threads::Threads
-)
-
-target_compile_options(complete_industrial_setup PRIVATE
-    -Wall -Wextra -Wpedantic
-    -O2
-)
-
-# Install examples
-install(TARGETS mock_data_flow_test complete_industrial_setup
-    RUNTIME DESTINATION bin/examples
-)
+# # Install examples
+# install(TARGETS mock_data_flow_test complete_industrial_setup
+#     RUNTIME DESTINATION bin/examples
+# )
 
 install(FILES gateway-config.yaml
     DESTINATION share/ipb/examples

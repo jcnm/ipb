@@ -36,7 +36,7 @@ bool ConfigLoader::load_from_string(const std::string& config_yaml) {
     }
 }
 
-GatewayConfig ConfigLoader::get_config() const {
+LoadedConfig ConfigLoader::get_config() const {
     return config_;
 }
 

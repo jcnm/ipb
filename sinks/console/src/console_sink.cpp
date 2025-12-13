@@ -704,6 +704,20 @@ void ConsoleSink::print_statistics() {
     write_output(oss.str());
 }
 
+void ConsoleSink::flush() {
+    std::lock_guard<std::mutex> lock(output_mutex_);
+
+    if (config_.enable_console_output && config_.output_stream) {
+        config_.output_stream->flush();
+    }
+
+    if (config_.enable_file_output && file_stream_ && file_stream_->is_open()) {
+        file_stream_->flush();
+    }
+
+    statistics_.flush_operations.fetch_add(1);
+}
+
 // ConsoleSinkFactory implementation
 
 std::unique_ptr<ConsoleSink> ConsoleSinkFactory::create(const ConsoleSinkConfig& config) {

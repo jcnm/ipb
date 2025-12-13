@@ -68,8 +68,8 @@ struct GatewaySettings {
     int worker_threads = 4;
 };
 
-// Complete gateway configuration
-struct GatewayConfig {
+// Complete gateway configuration (loaded from file)
+struct LoadedConfig {
     GatewaySettings gateway;
     std::vector<SinkConfig> sinks;
     std::vector<RoutingRuleConfig> routing_rules;
@@ -88,10 +88,10 @@ public:
     bool load_from_string(const std::string& config_yaml);
     
     // Get loaded configuration
-    GatewayConfig get_config() const;
+    LoadedConfig get_config() const;
 
 private:
-    GatewayConfig config_;
+    LoadedConfig config_;
     
     // Parse YAML configuration
     bool parse_config(const YAML::Node& root);
