@@ -219,7 +219,7 @@ jobs:
           cat changelog.md
 
       - name: Upload Changelog
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: changelog
           path: changelog.md
@@ -482,7 +482,7 @@ jobs:
 
       - name: Upload Artifact
         if: steps.filter.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_name }}
           path: |

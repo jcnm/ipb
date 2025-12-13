@@ -297,7 +297,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload cppcheck Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cppcheck-report
           path: cppcheck-report.txt
@@ -881,7 +881,7 @@ jobs:
           matrix.build_type == 'Release' &&
           matrix.build_mode == 'SERVER' &&
           !matrix.coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ipb-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_mode }}
           path: |
@@ -936,7 +936,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload clang-tidy Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: clang-tidy-report
           path: clang-tidy-report.txt
@@ -1062,7 +1062,7 @@ jobs:
           ctest -L benchmark --output-on-failure || true
 
       - name: Upload Benchmark Results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: benchmark-results
           path: build/benchmark-results/

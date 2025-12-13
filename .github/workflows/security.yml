@@ -84,7 +84,7 @@ jobs:
           output-file: sbom.cyclonedx.json
 
       - name: Upload SBOM Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom
           path: |
@@ -168,7 +168,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Dependency Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dependency-report
           path: dependency-report.md
@@ -282,7 +282,7 @@ jobs:
           sarif_file: flawfinder-results.sarif
 
       - name: Upload Flawfinder Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: flawfinder-report
           path: |
@@ -361,7 +361,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Valgrind Reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: valgrind-reports
           path: build/valgrind-reports/
@@ -470,7 +470,7 @@ jobs:
           cat license-report.md
 
       - name: Upload License Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: license-report
           path: |
