@@ -83,12 +83,8 @@ bool PahoBackend::initialize(const ConnectionConfig& config) {
         connect_opts_->set_keep_alive_interval(std::chrono::seconds(config.keep_alive_seconds));
         connect_opts_->set_automatic_reconnect(config.auto_reconnect);
 
-        if (config.auto_reconnect) {
-            connect_opts_->set_min_retry_interval(
-                std::chrono::seconds(config.reconnect_delay_seconds));
-            connect_opts_->set_max_retry_interval(
-                std::chrono::seconds(config.reconnect_delay_seconds * 4));
-        }
+        // Note: set_min_retry_interval and set_max_retry_interval are not available
+        // in all versions of the Paho library. The default retry behavior is used.
 
         // Credentials
         if (!config.username.empty()) {
