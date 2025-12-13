@@ -131,9 +131,8 @@ struct ConnectionConfig {
 
 using HighLevelConnectionCallback =
     std::function<void(ConnectionState state, const std::string& reason)>;
-using HighLevelMessageCallback = std::function<void(const std::string& topic,
-                                                    const std::string& payload, QoS qos,
-                                                    bool retained)>;
+using HighLevelMessageCallback = std::function<void(
+    const std::string& topic, const std::string& payload, QoS qos, bool retained)>;
 using HighLevelDeliveryCallback =
     std::function<void(int token, bool success, const std::string& error)>;
 

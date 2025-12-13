@@ -175,13 +175,13 @@ struct MQTTSinkStatistics {
 };
 
 // MQTT Sink implementation
-class MQTTSink : public common::IIPBSink {
+class MQTTSink : public common::ISink {
 public:
     explicit MQTTSink(const MQTTSinkConfig& config = MQTTSinkConfig{});
-    virtual ~MQTTSink();
+    ~MQTTSink() override;
 
-    // IIPBSink interface implementation
-    common::Result<void> initialize(const std::string& config_path = "") override;
+    // ISink interface implementation
+    common::Result<void> initialize(const std::string& config_path) override;
     common::Result<void> start() override;
     common::Result<void> stop() override;
     common::Result<void> shutdown() override;

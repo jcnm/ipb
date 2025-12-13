@@ -321,20 +321,7 @@ jobs:
 
           # Extract metrics
           if [ -f "scalability-results/scaling-$t.json" ]; then
-            THROUGHPUT=$(python3 -c "
-import json
-try:
-    with open('scalability-results/scaling-$t.json') as f:
-        data = json.load(f)
-        for b in data.get('benchmarks', []):
-            if 'throughput' in b.get('name', '').lower():
-                print(int(b.get('items_per_second', 0)))
-                break
-        else:
-            print('N/A')
-except:
-    print('N/A')
-" 2>/dev/null || echo "N/A")
+            THROUGHPUT=$(python3 -c "import json; f=open('scalability-results/scaling-$t.json'); data=json.load(f); print(next((int(b.get('items_per_second',0)) for b in data.get('benchmarks',[]) if 'throughput' in b.get('name','').lower()),'N/A'))" 2>/dev/null || echo "N/A")
 
             echo "| $t | $THROUGHPUT | - |" >> scalability-results/SUMMARY.md
           fi
@@ -344,30 +331,21 @@ except:
 
     - name: Generate Scaling Graph Data
       run: |
-        python3 << 'EOF'
-import json
-import os
-
-results = []
-for f in os.listdir('scalability-results'):
-    if f.startswith('scaling-') and f.endswith('.json'):
-        threads = int(f.split('-')[1].split('.')[0])
-        try:
-            with open(f'scalability-results/{f}') as fp:
-                data = json.load(fp)
-                for b in data.get('benchmarks', []):
-                    results.append({
-                        'threads': threads,
-                        'name': b.get('name', ''),
-                        'time_ns': b.get('real_time', 0),
-                        'iterations': b.get('iterations', 0)
-                    })
-        except:
-            pass
-
-with open('scalability-results/scaling-data.json', 'w') as f:
-    json.dump(results, f, indent=2)
-EOF
+        python3 -c "
+        import json, os
+        results = []
+        for f in os.listdir('scalability-results'):
+            if f.startswith('scaling-') and f.endswith('.json'):
+                threads = int(f.split('-')[1].split('.')[0])
+                try:
+                    with open(f'scalability-results/{f}') as fp:
+                        data = json.load(fp)
+                        for b in data.get('benchmarks', []):
+                            results.append({'threads': threads, 'name': b.get('name', ''), 'time_ns': b.get('real_time', 0), 'iterations': b.get('iterations', 0)})
+                except: pass
+        with open('scalability-results/scaling-data.json', 'w') as f:
+            json.dump(results, f, indent=2)
+        "
       continue-on-error: true
 
     - name: Upload Scalability Results

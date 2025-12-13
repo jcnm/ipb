@@ -1,8 +1,8 @@
 #include "ipb/transport/mqtt/backends/coremqtt_backend.hpp"
 
-#include "ipb/transport/mqtt/mqtt_connection.hpp"
-
 #include <iostream>  // For std::cerr in stub implementation
+
+#include "ipb/transport/mqtt/mqtt_connection.hpp"
 
 #ifdef IPB_HAS_COREMQTT
 
