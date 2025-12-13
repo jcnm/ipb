@@ -3,30 +3,28 @@
  * @brief Sparkplug B payload decoding implementation
  */
 
-#include "ipb/scoop/sparkplug/sparkplug_scoop.hpp"
-
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 
-#include <cstring>
 #include <chrono>
+#include <cstring>
+
+#include "ipb/scoop/sparkplug/sparkplug_scoop.hpp"
 
 namespace ipb::scoop::sparkplug {
 
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::PROTOCOL;
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::PROTOCOL;
+}  // anonymous namespace
 
 //=============================================================================
 // SparkplugMetric Implementation
 //=============================================================================
 
-common::DataPoint SparkplugMetric::to_data_point(
-    const std::string& edge_node_id,
-    const std::string& device_id) const
-{
+common::DataPoint SparkplugMetric::to_data_point(const std::string& edge_node_id,
+                                                 const std::string& device_id) const {
     common::DataPoint dp;
 
     // Build address: sparkplug/{group}/{node}[/{device}]/{metric_name}
@@ -40,9 +38,8 @@ common::DataPoint SparkplugMetric::to_data_point(
 
     // Set timestamp
     if (timestamp > 0) {
-        auto time_point = std::chrono::system_clock::time_point(
-            std::chrono::milliseconds(timestamp)
-        );
+        auto time_point =
+            std::chrono::system_clock::time_point(std::chrono::milliseconds(timestamp));
         dp.set_timestamp(common::Timestamp(time_point));
     } else {
         dp.set_timestamp(common::Timestamp::now());
@@ -59,45 +56,47 @@ common::DataPoint SparkplugMetric::to_data_point(
     }
 
     // Set value based on variant type
-    std::visit([&dp](auto&& arg) {
-        using T = std::decay_t<decltype(arg)>;
+    std::visit(
+        [&dp](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
 
-        if constexpr (std::is_same_v<T, bool>) {
-            dp.set_value(arg);
-        } else if constexpr (std::is_same_v<T, int8_t>) {
-            dp.set_value(static_cast<int32_t>(arg));
-        } else if constexpr (std::is_same_v<T, int16_t>) {
-            dp.set_value(static_cast<int32_t>(arg));
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-            dp.set_value(arg);
-        } else if constexpr (std::is_same_v<T, int64_t>) {
-            dp.set_value(arg);
-        } else if constexpr (std::is_same_v<T, uint8_t>) {
-            dp.set_value(static_cast<uint32_t>(arg));
-        } else if constexpr (std::is_same_v<T, uint16_t>) {
-            dp.set_value(static_cast<uint32_t>(arg));
-        } else if constexpr (std::is_same_v<T, uint32_t>) {
-            dp.set_value(arg);
-        } else if constexpr (std::is_same_v<T, uint64_t>) {
-            dp.set_value(arg);
-        } else if constexpr (std::is_same_v<T, float>) {
-            dp.set_value(arg);
-        } else if constexpr (std::is_same_v<T, double>) {
-            dp.set_value(arg);
-        } else if constexpr (std::is_same_v<T, std::string>) {
-            dp.set_value(arg);
-        } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
-            // For binary data, encode as hex string for now
-            std::string hex;
-            hex.reserve(arg.size() * 2);
-            for (uint8_t b : arg) {
-                static const char hex_chars[] = "0123456789ABCDEF";
-                hex.push_back(hex_chars[b >> 4]);
-                hex.push_back(hex_chars[b & 0x0F]);
+            if constexpr (std::is_same_v<T, bool>) {
+                dp.set_value(arg);
+            } else if constexpr (std::is_same_v<T, int8_t>) {
+                dp.set_value(static_cast<int32_t>(arg));
+            } else if constexpr (std::is_same_v<T, int16_t>) {
+                dp.set_value(static_cast<int32_t>(arg));
+            } else if constexpr (std::is_same_v<T, int32_t>) {
+                dp.set_value(arg);
+            } else if constexpr (std::is_same_v<T, int64_t>) {
+                dp.set_value(arg);
+            } else if constexpr (std::is_same_v<T, uint8_t>) {
+                dp.set_value(static_cast<uint32_t>(arg));
+            } else if constexpr (std::is_same_v<T, uint16_t>) {
+                dp.set_value(static_cast<uint32_t>(arg));
+            } else if constexpr (std::is_same_v<T, uint32_t>) {
+                dp.set_value(arg);
+            } else if constexpr (std::is_same_v<T, uint64_t>) {
+                dp.set_value(arg);
+            } else if constexpr (std::is_same_v<T, float>) {
+                dp.set_value(arg);
+            } else if constexpr (std::is_same_v<T, double>) {
+                dp.set_value(arg);
+            } else if constexpr (std::is_same_v<T, std::string>) {
+                dp.set_value(arg);
+            } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+                // For binary data, encode as hex string for now
+                std::string hex;
+                hex.reserve(arg.size() * 2);
+                for (uint8_t b : arg) {
+                    static const char hex_chars[] = "0123456789ABCDEF";
+                    hex.push_back(hex_chars[b >> 4]);
+                    hex.push_back(hex_chars[b & 0x0F]);
+                }
+                dp.set_value(hex);
             }
-            dp.set_value(hex);
-        }
-    }, value);
+        },
+        value);
 
     return dp;
 }
@@ -112,36 +111,32 @@ namespace {
  * @brief Read a big-endian uint64 from buffer
  */
 inline uint64_t read_uint64_be(const uint8_t* data) {
-    return (static_cast<uint64_t>(data[0]) << 56) |
-           (static_cast<uint64_t>(data[1]) << 48) |
-           (static_cast<uint64_t>(data[2]) << 40) |
-           (static_cast<uint64_t>(data[3]) << 32) |
-           (static_cast<uint64_t>(data[4]) << 24) |
-           (static_cast<uint64_t>(data[5]) << 16) |
-           (static_cast<uint64_t>(data[6]) << 8) |
-           static_cast<uint64_t>(data[7]);
+    return (static_cast<uint64_t>(data[0]) << 56) | (static_cast<uint64_t>(data[1]) << 48) |
+           (static_cast<uint64_t>(data[2]) << 40) | (static_cast<uint64_t>(data[3]) << 32) |
+           (static_cast<uint64_t>(data[4]) << 24) | (static_cast<uint64_t>(data[5]) << 16) |
+           (static_cast<uint64_t>(data[6]) << 8) | static_cast<uint64_t>(data[7]);
 }
 
 /**
  * @brief Read a big-endian uint32 from buffer
  */
 inline uint32_t read_uint32_be(const uint8_t* data) {
-    return (static_cast<uint32_t>(data[0]) << 24) |
-           (static_cast<uint32_t>(data[1]) << 16) |
-           (static_cast<uint32_t>(data[2]) << 8) |
-           static_cast<uint32_t>(data[3]);
+    return (static_cast<uint32_t>(data[0]) << 24) | (static_cast<uint32_t>(data[1]) << 16) |
+           (static_cast<uint32_t>(data[2]) << 8) | static_cast<uint32_t>(data[3]);
 }
 
 /**
  * @brief Read a string from buffer (length-prefixed)
  */
 inline std::string read_string(const uint8_t* data, size_t& offset, size_t max_size) {
-    if (offset + 4 > max_size) return "";
+    if (offset + 4 > max_size)
+        return "";
 
     uint32_t len = read_uint32_be(data + offset);
     offset += 4;
 
-    if (offset + len > max_size) return "";
+    if (offset + len > max_size)
+        return "";
 
     std::string result(reinterpret_cast<const char*>(data + offset), len);
     offset += len;
@@ -149,10 +144,11 @@ inline std::string read_string(const uint8_t* data, size_t& offset, size_t max_s
     return result;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 std::optional<SparkplugPayload> SparkplugPayload::decode(const std::vector<uint8_t>& data) {
-    if (data.size() < 24) {  // Minimum: timestamp(8) + seq(8) + metric_count(4) + at least something
+    if (data.size() <
+        24) {  // Minimum: timestamp(8) + seq(8) + metric_count(4) + at least something
         IPB_LOG_WARN(LOG_CAT, "Payload too small: " << data.size() << " bytes");
         return std::nullopt;
     }
@@ -194,12 +190,14 @@ std::optional<SparkplugPayload> SparkplugPayload::decode(const std::vector<uint8
         SparkplugMetric metric;
 
         // Read name/alias flag
-        if (offset >= data.size()) break;
+        if (offset >= data.size())
+            break;
         bool use_alias = (data[offset++] != 0);
 
         if (use_alias) {
             // Read alias
-            if (offset + 8 > data.size()) break;
+            if (offset + 8 > data.size())
+                break;
             metric.alias = read_uint64_be(data.data() + offset);
             offset += 8;
         } else {
@@ -208,71 +206,78 @@ std::optional<SparkplugPayload> SparkplugPayload::decode(const std::vector<uint8
         }
 
         // Read datatype
-        if (offset + 4 > data.size()) break;
+        if (offset + 4 > data.size())
+            break;
         metric.datatype = static_cast<SparkplugDataType>(read_uint32_be(data.data() + offset));
         offset += 4;
 
         // Read value based on datatype
         switch (metric.datatype) {
             case SparkplugDataType::Boolean:
-                if (offset >= data.size()) break;
+                if (offset >= data.size())
+                    break;
                 metric.value = (data[offset++] != 0);
                 break;
 
             case SparkplugDataType::Int8:
-                if (offset >= data.size()) break;
+                if (offset >= data.size())
+                    break;
                 metric.value = static_cast<int8_t>(data[offset++]);
                 break;
 
             case SparkplugDataType::Int16:
-                if (offset + 2 > data.size()) break;
-                metric.value = static_cast<int16_t>(
-                    (static_cast<int16_t>(data[offset]) << 8) |
-                    static_cast<int16_t>(data[offset + 1])
-                );
+                if (offset + 2 > data.size())
+                    break;
+                metric.value = static_cast<int16_t>((static_cast<int16_t>(data[offset]) << 8) |
+                                                    static_cast<int16_t>(data[offset + 1]));
                 offset += 2;
                 break;
 
             case SparkplugDataType::Int32:
-                if (offset + 4 > data.size()) break;
+                if (offset + 4 > data.size())
+                    break;
                 metric.value = static_cast<int32_t>(read_uint32_be(data.data() + offset));
                 offset += 4;
                 break;
 
             case SparkplugDataType::Int64:
-                if (offset + 8 > data.size()) break;
+                if (offset + 8 > data.size())
+                    break;
                 metric.value = static_cast<int64_t>(read_uint64_be(data.data() + offset));
                 offset += 8;
                 break;
 
             case SparkplugDataType::UInt8:
-                if (offset >= data.size()) break;
+                if (offset >= data.size())
+                    break;
                 metric.value = data[offset++];
                 break;
 
             case SparkplugDataType::UInt16:
-                if (offset + 2 > data.size()) break;
-                metric.value = static_cast<uint16_t>(
-                    (static_cast<uint16_t>(data[offset]) << 8) |
-                    static_cast<uint16_t>(data[offset + 1])
-                );
+                if (offset + 2 > data.size())
+                    break;
+                metric.value = static_cast<uint16_t>((static_cast<uint16_t>(data[offset]) << 8) |
+                                                     static_cast<uint16_t>(data[offset + 1]));
                 offset += 2;
                 break;
 
             case SparkplugDataType::UInt32:
-                if (offset + 4 > data.size()) break;
+                if (offset + 4 > data.size())
+                    break;
                 metric.value = read_uint32_be(data.data() + offset);
                 offset += 4;
                 break;
 
             case SparkplugDataType::UInt64:
-                if (offset + 8 > data.size()) break;
+                if (offset + 8 > data.size())
+                    break;
                 metric.value = read_uint64_be(data.data() + offset);
                 offset += 8;
                 break;
 
             case SparkplugDataType::Float:
-                if (offset + 4 > data.size()) break;
+                if (offset + 4 > data.size())
+                    break;
                 {
                     uint32_t bits = read_uint32_be(data.data() + offset);
                     float f;
@@ -283,7 +288,8 @@ std::optional<SparkplugPayload> SparkplugPayload::decode(const std::vector<uint8
                 break;
 
             case SparkplugDataType::Double:
-                if (offset + 8 > data.size()) break;
+                if (offset + 8 > data.size())
+                    break;
                 {
                     uint64_t bits = read_uint64_be(data.data() + offset);
                     double d;
@@ -298,18 +304,17 @@ std::optional<SparkplugPayload> SparkplugPayload::decode(const std::vector<uint8
                 metric.value = read_string(data.data(), offset, data.size());
                 break;
 
-            case SparkplugDataType::Bytes:
-                {
-                    if (offset + 4 > data.size()) break;
-                    uint32_t len = read_uint32_be(data.data() + offset);
-                    offset += 4;
-                    if (offset + len > data.size()) break;
-                    std::vector<uint8_t> bytes(data.begin() + offset,
-                                               data.begin() + offset + len);
-                    metric.value = std::move(bytes);
-                    offset += len;
-                }
-                break;
+            case SparkplugDataType::Bytes: {
+                if (offset + 4 > data.size())
+                    break;
+                uint32_t len = read_uint32_be(data.data() + offset);
+                offset += 4;
+                if (offset + len > data.size())
+                    break;
+                std::vector<uint8_t> bytes(data.begin() + offset, data.begin() + offset + len);
+                metric.value = std::move(bytes);
+                offset += len;
+            } break;
 
             default:
                 // Skip unknown types
@@ -358,4 +363,4 @@ std::vector<uint8_t> SparkplugPayload::encode() const {
     return data;
 }
 
-} // namespace ipb::scoop::sparkplug
+}  // namespace ipb::scoop::sparkplug
