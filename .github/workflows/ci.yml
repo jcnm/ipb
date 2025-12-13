@@ -1,3 +1,7 @@
+# IPB CI Pipeline
+# Smart conditional builds based on file changes
+# Extensive manual dispatch options for targeted testing
+#
 name: CI Pipeline
 
 on:
@@ -7,10 +11,96 @@ on:
     branches: [main, develop]
   workflow_dispatch:
     inputs:
-      debug_enabled:
-        type: boolean
-        description: 'Run with debug logging'
+      # Platform Selection
+      platform:
+        description: 'Target platform'
+        type: choice
         required: false
+        default: 'all'
+        options:
+          - all
+          - linux
+          - macos
+          - windows
+      # Compiler Selection
+      compiler:
+        description: 'Compiler (Linux only)'
+        type: choice
+        required: false
+        default: 'all'
+        options:
+          - all
+          - gcc-13
+          - clang-18
+      # Build Mode
+      build_mode:
+        description: 'Build mode'
+        type: choice
+        required: false
+        default: 'all'
+        options:
+          - all
+          - SERVER
+          - EDGE
+          - EMBEDDED
+      # Build Type
+      build_type:
+        description: 'Build type'
+        type: choice
+        required: false
+        default: 'Release'
+        options:
+          - Release
+          - Debug
+          - both
+      # Components to build
+      components:
+        description: 'Components to build'
+        type: choice
+        required: false
+        default: 'all'
+        options:
+          - all
+          - core-only
+          - sinks-only
+          - scoops-only
+          - apps-only
+      # Test Options
+      run_tests:
+        description: 'Run unit tests'
+        type: boolean
+        default: true
+      run_integration:
+        description: 'Run integration tests'
+        type: boolean
+        default: false
+      run_benchmarks:
+        description: 'Run benchmarks'
+        type: boolean
+        default: false
+      # Analysis Options
+      run_static_analysis:
+        description: 'Run static analysis (clang-tidy)'
+        type: boolean
+        default: false
+      run_sanitizers:
+        description: 'Run sanitizers (ASan, UBSan, TSan)'
+        type: boolean
+        default: false
+      # Coverage
+      coverage:
+        description: 'Generate coverage report'
+        type: boolean
+        default: false
+      # Force full rebuild
+      force_rebuild:
+        description: 'Force full rebuild (ignore change detection)'
+        type: boolean
+        default: false
+      # Debug mode
+      debug_enabled:
+        description: 'Enable debug logging'
+        type: boolean
         default: false
 
 concurrency:
@@ -27,11 +117,129 @@ env:
 
 jobs:
   # ===========================================================================
-  # Code Quality Checks
+  # Change Detection - Determines what needs to run
+  # ===========================================================================
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-24.04
+    outputs:
+      # Component changes
+      core_changed: ${{ steps.filter.outputs.core }}
+      sinks_changed: ${{ steps.filter.outputs.sinks }}
+      scoops_changed: ${{ steps.filter.outputs.scoops }}
+      transport_changed: ${{ steps.filter.outputs.transport }}
+      apps_changed: ${{ steps.filter.outputs.apps }}
+      tests_changed: ${{ steps.filter.outputs.tests }}
+      benchmarks_changed: ${{ steps.filter.outputs.benchmarks }}
+      cmake_changed: ${{ steps.filter.outputs.cmake }}
+      ci_changed: ${{ steps.filter.outputs.ci }}
+      # Aggregated flags
+      any_source_changed: ${{ steps.aggregate.outputs.any_source }}
+      needs_full_build: ${{ steps.aggregate.outputs.needs_full_build }}
+      # Manual dispatch flags
+      is_manual: ${{ steps.dispatch.outputs.is_manual }}
+      force_rebuild: ${{ steps.dispatch.outputs.force_rebuild }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect File Changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            core:
+              - 'core/**'
+            sinks:
+              - 'sinks/**'
+            scoops:
+              - 'scoops/**'
+            transport:
+              - 'transport/**'
+            apps:
+              - 'apps/**'
+            tests:
+              - 'tests/**'
+              - '**/*_test.cpp'
+              - '**/*_tests.cpp'
+            benchmarks:
+              - 'benchmarks/**'
+              - '**/*_benchmark.cpp'
+            cmake:
+              - 'CMakeLists.txt'
+              - 'cmake/**'
+              - '**/CMakeLists.txt'
+            ci:
+              - '.github/workflows/**'
+
+      - name: Aggregate Changes
+        id: aggregate
+        run: |
+          # Check if any source files changed
+          ANY_SOURCE="false"
+          if [ "${{ steps.filter.outputs.core }}" == "true" ] || \
+             [ "${{ steps.filter.outputs.sinks }}" == "true" ] || \
+             [ "${{ steps.filter.outputs.scoops }}" == "true" ] || \
+             [ "${{ steps.filter.outputs.transport }}" == "true" ] || \
+             [ "${{ steps.filter.outputs.apps }}" == "true" ]; then
+            ANY_SOURCE="true"
+          fi
+          echo "any_source=$ANY_SOURCE" >> $GITHUB_OUTPUT
+
+          # Check if full rebuild is needed (cmake or CI changes)
+          NEEDS_FULL="false"
+          if [ "${{ steps.filter.outputs.cmake }}" == "true" ] || \
+             [ "${{ steps.filter.outputs.ci }}" == "true" ]; then
+            NEEDS_FULL="true"
+          fi
+          echo "needs_full_build=$NEEDS_FULL" >> $GITHUB_OUTPUT
+
+          echo "Any source changed: $ANY_SOURCE"
+          echo "Needs full build: $NEEDS_FULL"
+
+      - name: Manual Dispatch Detection
+        id: dispatch
+        run: |
+          IS_MANUAL="false"
+          FORCE_REBUILD="false"
+
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            IS_MANUAL="true"
+            FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
+          fi
+
+          echo "is_manual=$IS_MANUAL" >> $GITHUB_OUTPUT
+          echo "force_rebuild=$FORCE_REBUILD" >> $GITHUB_OUTPUT
+
+      - name: Summary
+        run: |
+          echo "## Change Detection Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Changed |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Core | ${{ steps.filter.outputs.core }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Sinks | ${{ steps.filter.outputs.sinks }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Scoops | ${{ steps.filter.outputs.scoops }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Transport | ${{ steps.filter.outputs.transport }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Apps | ${{ steps.filter.outputs.apps }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ steps.filter.outputs.tests }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Benchmarks | ${{ steps.filter.outputs.benchmarks }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CMake | ${{ steps.filter.outputs.cmake }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CI | ${{ steps.filter.outputs.ci }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Code Quality Checks (always run on PRs)
   # ===========================================================================
   lint:
     name: Code Quality
     runs-on: ubuntu-24.04
+    needs: changes
+    if: |
+      needs.changes.outputs.any_source_changed == 'true' ||
+      needs.changes.outputs.is_manual == 'true' ||
+      github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,43 +275,110 @@ jobs:
           path: cppcheck-report.txt
 
   # ===========================================================================
-  # Build Matrix - Tests all build modes (SERVER, EDGE, EMBEDDED)
+  # Build Matrix
   # ===========================================================================
   build:
     name: Build (${{ matrix.os }}, ${{ matrix.compiler }}, ${{ matrix.build_mode }}, ${{ matrix.build_type }})
     runs-on: ${{ matrix.os }}
-    needs: lint
+    needs: [changes, lint]
+    if: |
+      always() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      (
+        needs.changes.outputs.any_source_changed == 'true' ||
+        needs.changes.outputs.needs_full_build == 'true' ||
+        needs.changes.outputs.force_rebuild == 'true' ||
+        needs.changes.outputs.is_manual == 'true'
+      )
     strategy:
       fail-fast: false
       matrix:
-        # Linux GCC-13 - All modes
-        os: [ubuntu-24.04]
-        build_mode: [SERVER, EDGE, EMBEDDED]
-        build_type: [Release, Debug]
-        compiler: [gcc-13]
-        cc: [gcc-13]
-        cxx: [g++-13]
-        coverage: [false]
         include:
           # ===========================================
-          # Linux - Additional compilers
+          # Linux GCC-13 - All modes (primary)
           # ===========================================
-          # Coverage build (SERVER mode only)
+          - os: ubuntu-24.04
+            compiler: gcc-13
+            cc: gcc-13
+            cxx: g++-13
+            build_mode: SERVER
+            build_type: Release
+            platform_id: linux
+            run_tests: true
+            coverage: false
+
           - os: ubuntu-24.04
             compiler: gcc-13
             cc: gcc-13
             cxx: g++-13
             build_mode: SERVER
             build_type: Debug
+            platform_id: linux
+            run_tests: true
+            coverage: false
+
+          - os: ubuntu-24.04
+            compiler: gcc-13
+            cc: gcc-13
+            cxx: g++-13
+            build_mode: EDGE
+            build_type: Release
+            platform_id: linux
+            run_tests: true
+            coverage: false
+
+          - os: ubuntu-24.04
+            compiler: gcc-13
+            cc: gcc-13
+            cxx: g++-13
+            build_mode: EDGE
+            build_type: Debug
+            platform_id: linux
+            run_tests: true
+            coverage: false
+
+          - os: ubuntu-24.04
+            compiler: gcc-13
+            cc: gcc-13
+            cxx: g++-13
+            build_mode: EMBEDDED
+            build_type: Release
+            platform_id: linux
+            run_tests: true
+            coverage: false
+
+          - os: ubuntu-24.04
+            compiler: gcc-13
+            cc: gcc-13
+            cxx: g++-13
+            build_mode: EMBEDDED
+            build_type: Debug
+            platform_id: linux
+            run_tests: true
+            coverage: false
+
+          # Coverage build
+          - os: ubuntu-24.04
+            compiler: gcc-13
+            cc: gcc-13
+            cxx: g++-13
+            build_mode: SERVER
+            build_type: Debug
+            platform_id: linux
+            run_tests: true
             coverage: true
 
-          # Clang-18 builds (SERVER mode)
+          # ===========================================
+          # Linux Clang-18 (SERVER mode only by default)
+          # ===========================================
           - os: ubuntu-24.04
             compiler: clang-18
             cc: clang-18
             cxx: clang++-18
             build_mode: SERVER
             build_type: Release
+            platform_id: linux
+            run_tests: true
             coverage: false
 
           - os: ubuntu-24.04
@@ -112,10 +387,12 @@ jobs:
             cxx: clang++-18
             build_mode: SERVER
             build_type: Debug
+            platform_id: linux
+            run_tests: true
             coverage: false
 
           # ===========================================
-          # macOS - All modes (SERVER, EDGE, EMBEDDED)
+          # macOS - All modes
           # ===========================================
           - os: macos-13
             compiler: clang
@@ -123,6 +400,8 @@ jobs:
             cxx: clang++
             build_mode: SERVER
             build_type: Release
+            platform_id: macos
+            run_tests: true
             coverage: false
 
           - os: macos-13
@@ -131,6 +410,8 @@ jobs:
             cxx: clang++
             build_mode: SERVER
             build_type: Debug
+            platform_id: macos
+            run_tests: true
             coverage: false
 
           - os: macos-13
@@ -139,14 +420,8 @@ jobs:
             cxx: clang++
             build_mode: EDGE
             build_type: Release
-            coverage: false
-
-          - os: macos-13
-            compiler: clang
-            cc: clang
-            cxx: clang++
-            build_mode: EDGE
-            build_type: Debug
+            platform_id: macos
+            run_tests: true
             coverage: false
 
           - os: macos-13
@@ -155,14 +430,8 @@ jobs:
             cxx: clang++
             build_mode: EMBEDDED
             build_type: Release
-            coverage: false
-
-          - os: macos-13
-            compiler: clang
-            cc: clang
-            cxx: clang++
-            build_mode: EMBEDDED
-            build_type: Debug
+            platform_id: macos
+            run_tests: true
             coverage: false
 
           # ===========================================
@@ -174,6 +443,8 @@ jobs:
             cxx: cl
             build_mode: SERVER
             build_type: Release
+            platform_id: windows
+            run_tests: true
             coverage: false
 
           - os: windows-2022
@@ -182,6 +453,8 @@ jobs:
             cxx: cl
             build_mode: SERVER
             build_type: Debug
+            platform_id: windows
+            run_tests: true
             coverage: false
 
           - os: windows-2022
@@ -190,14 +463,8 @@ jobs:
             cxx: cl
             build_mode: EDGE
             build_type: Release
-            coverage: false
-
-          - os: windows-2022
-            compiler: msvc
-            cc: cl
-            cxx: cl
-            build_mode: EDGE
-            build_type: Debug
+            platform_id: windows
+            run_tests: true
             coverage: false
 
           - os: windows-2022
@@ -206,122 +473,164 @@ jobs:
             cxx: cl
             build_mode: EMBEDDED
             build_type: Release
-            coverage: false
-
-          - os: windows-2022
-            compiler: msvc
-            cc: cl
-            cxx: cl
-            build_mode: EMBEDDED
-            build_type: Debug
+            platform_id: windows
+            run_tests: true
             coverage: false
 
     steps:
+      # ===========================================
+      # Filter based on manual dispatch options
+      # ===========================================
+      - name: Check Filters
+        id: filter
+        shell: bash
+        run: |
+          SKIP="false"
+
+          # Manual dispatch filters
+          if [ "${{ needs.changes.outputs.is_manual }}" == "true" ]; then
+            # Platform filter
+            PLATFORM="${{ github.event.inputs.platform }}"
+            if [ "$PLATFORM" != "all" ] && [ "$PLATFORM" != "${{ matrix.platform_id }}" ]; then
+              SKIP="true"
+              echo "Skipping: platform filter ($PLATFORM != ${{ matrix.platform_id }})"
+            fi
+
+            # Compiler filter (Linux only)
+            COMPILER="${{ github.event.inputs.compiler }}"
+            if [ "${{ matrix.platform_id }}" == "linux" ] && \
+               [ "$COMPILER" != "all" ] && \
+               [ "$COMPILER" != "${{ matrix.compiler }}" ]; then
+              SKIP="true"
+              echo "Skipping: compiler filter ($COMPILER != ${{ matrix.compiler }})"
+            fi
+
+            # Build mode filter
+            BUILD_MODE="${{ github.event.inputs.build_mode }}"
+            if [ "$BUILD_MODE" != "all" ] && [ "$BUILD_MODE" != "${{ matrix.build_mode }}" ]; then
+              SKIP="true"
+              echo "Skipping: build_mode filter ($BUILD_MODE != ${{ matrix.build_mode }})"
+            fi
+
+            # Build type filter
+            BUILD_TYPE="${{ github.event.inputs.build_type }}"
+            if [ "$BUILD_TYPE" != "both" ] && [ "$BUILD_TYPE" != "${{ matrix.build_type }}" ]; then
+              SKIP="true"
+              echo "Skipping: build_type filter ($BUILD_TYPE != ${{ matrix.build_type }})"
+            fi
+
+            # Coverage filter
+            COVERAGE="${{ github.event.inputs.coverage }}"
+            if [ "${{ matrix.coverage }}" == "true" ] && [ "$COVERAGE" != "true" ]; then
+              SKIP="true"
+              echo "Skipping: coverage not requested"
+            fi
+          else
+            # Automatic triggers: skip coverage builds unless explicitly needed
+            if [ "${{ matrix.coverage }}" == "true" ] && [ "${{ github.event_name }}" != "push" ]; then
+              # Only run coverage on push to main/develop
+              if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.ref }}" != "refs/heads/develop" ]; then
+                SKIP="true"
+                echo "Skipping: coverage only on main/develop push"
+              fi
+            fi
+          fi
+
+          echo "skip=$SKIP" >> $GITHUB_OUTPUT
+
+      - name: Skip Notice
+        if: steps.filter.outputs.skip == 'true'
+        run: echo "Build skipped due to filters"
+
       - name: Checkout
+        if: steps.filter.outputs.skip != 'true'
         uses: actions/checkout@v4
 
       - name: Setup ccache (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: steps.filter.outputs.skip != 'true' && runner.os != 'Windows'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_mode }}-${{ matrix.build_type }}
           max-size: 500M
 
       # ===========================================
-      # Linux Dependencies
+      # Dependencies
       # ===========================================
       - name: Install Dependencies (Linux - SERVER/EDGE)
-        if: runner.os == 'Linux' && matrix.build_mode != 'EMBEDDED'
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Linux' && matrix.build_mode != 'EMBEDDED'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libgtest-dev \
-            libgmock-dev \
-            lcov
+            cmake ninja-build pkg-config \
+            libjsoncpp-dev libyaml-cpp-dev \
+            libpaho-mqtt-dev libpaho-mqttpp-dev \
+            libcurl4-openssl-dev libssl-dev \
+            libgtest-dev libgmock-dev lcov
 
       - name: Install Dependencies (Linux - EMBEDDED)
-        if: runner.os == 'Linux' && matrix.build_mode == 'EMBEDDED'
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Linux' && matrix.build_mode == 'EMBEDDED'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libcjson-dev \
-            libssl-dev \
-            libgtest-dev \
-            libgmock-dev
-          # Note: rapidyaml (ryml) may need to be built from source or skipped
+            cmake ninja-build pkg-config \
+            libcjson-dev libssl-dev \
+            libgtest-dev libgmock-dev
 
-      # ===========================================
-      # macOS Dependencies
-      # ===========================================
-      - name: Install Dependencies (macOS - SERVER/EDGE)
-        if: runner.os == 'macOS' && matrix.build_mode != 'EMBEDDED'
+      - name: Install Dependencies (macOS)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'macOS'
         run: |
-          brew install \
-            cmake \
-            ninja \
-            jsoncpp \
-            yaml-cpp \
-            paho-mqtt-c \
-            paho-mqtt-cpp \
-            curl \
-            openssl@3 \
-            googletest \
-            lcov
+          brew install cmake ninja jsoncpp yaml-cpp \
+            paho-mqtt-c paho-mqtt-cpp curl openssl@3 googletest lcov
 
-      - name: Install Dependencies (macOS - EMBEDDED)
-        if: runner.os == 'macOS' && matrix.build_mode == 'EMBEDDED'
-        run: |
-          brew install \
-            cmake \
-            ninja \
-            cjson \
-            openssl@3 \
-            googletest
-
-      # ===========================================
-      # Windows Dependencies (vcpkg)
-      # ===========================================
       - name: Setup vcpkg (Windows)
-        if: runner.os == 'Windows'
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: '2024.01.12'
 
       - name: Install Dependencies (Windows - SERVER/EDGE)
-        if: runner.os == 'Windows' && matrix.build_mode != 'EMBEDDED'
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows' && matrix.build_mode != 'EMBEDDED'
         run: |
           vcpkg install jsoncpp:x64-windows yaml-cpp:x64-windows openssl:x64-windows gtest:x64-windows
 
       - name: Install Dependencies (Windows - EMBEDDED)
-        if: runner.os == 'Windows' && matrix.build_mode == 'EMBEDDED'
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows' && matrix.build_mode == 'EMBEDDED'
         run: |
           vcpkg install cjson:x64-windows openssl:x64-windows gtest:x64-windows
 
       # ===========================================
-      # Configure (Linux/macOS)
+      # Configure
       # ===========================================
       - name: Configure (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: steps.filter.outputs.skip != 'true' && runner.os != 'Windows'
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
         run: |
-          # Set IPB_FULL only for SERVER mode (EDGE/EMBEDDED use mode defaults)
           FULL_FLAG=""
           if [ "${{ matrix.build_mode }}" = "SERVER" ]; then
             FULL_FLAG="-DIPB_FULL=ON"
+          fi
+
+          COVERAGE_FLAG=""
+          if [ "${{ matrix.coverage }}" = "true" ]; then
+            COVERAGE_FLAG="-DENABLE_COVERAGE=ON"
+          fi
+
+          # Component selection for manual dispatch
+          COMPONENT_FLAGS=""
+          if [ "${{ needs.changes.outputs.is_manual }}" == "true" ]; then
+            case "${{ github.event.inputs.components }}" in
+              core-only)
+                COMPONENT_FLAGS="-DIPB_SINK_MQTT=OFF -DIPB_SCOOP_MQTT=OFF"
+                ;;
+              sinks-only)
+                COMPONENT_FLAGS="-DIPB_SCOOP_MQTT=OFF"
+                ;;
+              scoops-only)
+                COMPONENT_FLAGS="-DIPB_SINK_MQTT=OFF"
+                ;;
+            esac
           fi
 
           cmake -B build -G Ninja \
@@ -332,13 +641,11 @@ jobs:
             -DBUILD_TESTING=ON \
             -DBUILD_EXAMPLES=ON \
             $FULL_FLAG \
-            -DENABLE_COVERAGE=${{ matrix.coverage && 'ON' || 'OFF' }}
+            $COVERAGE_FLAG \
+            $COMPONENT_FLAGS
 
-      # ===========================================
-      # Configure (Windows)
-      # ===========================================
       - name: Configure (Windows)
-        if: runner.os == 'Windows'
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
         run: |
           $FULL_FLAG = ""
           if ("${{ matrix.build_mode }}" -eq "SERVER") {
@@ -357,64 +664,63 @@ jobs:
       # Build
       # ===========================================
       - name: Build (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: steps.filter.outputs.skip != 'true' && runner.os != 'Windows'
         run: cmake --build build --parallel $(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
       - name: Build (Windows)
-        if: runner.os == 'Windows'
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
         run: cmake --build build --config ${{ matrix.build_type }} --parallel
 
       # ===========================================
-      # Run Tests
+      # Tests (conditional)
       # ===========================================
       - name: Run Tests (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: |
+          steps.filter.outputs.skip != 'true' &&
+          runner.os != 'Windows' &&
+          matrix.run_tests &&
+          (
+            needs.changes.outputs.is_manual != 'true' ||
+            github.event.inputs.run_tests == 'true'
+          )
         run: |
           cd build
           ctest --output-on-failure --parallel $(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
       - name: Run Tests (Windows)
-        if: runner.os == 'Windows'
+        if: |
+          steps.filter.outputs.skip != 'true' &&
+          runner.os == 'Windows' &&
+          matrix.run_tests &&
+          (
+            needs.changes.outputs.is_manual != 'true' ||
+            github.event.inputs.run_tests == 'true'
+          )
         run: |
           cd build
           ctest -C ${{ matrix.build_type }} --output-on-failure --parallel
 
+      # ===========================================
+      # Coverage
+      # ===========================================
       - name: Generate Coverage Report
-        if: matrix.coverage
+        if: steps.filter.outputs.skip != 'true' && matrix.coverage
         run: |
-          # Install gcovr for coverage reporting
           pip3 install gcovr --quiet
 
-          # Run the test report script with XML output for CI
-          chmod +x scripts/run-tests.sh
-          ./scripts/run-tests.sh --xml --output-dir test-reports
-
-          # Also generate lcov format for Codecov
           lcov --capture --directory build --output-file coverage.info \
             --ignore-errors mismatch \
             --rc lcov_branch_coverage=1
 
           lcov --remove coverage.info \
-            '/usr/*' \
-            '*/tests/*' \
-            '*/examples/*' \
-            '*/googletest/*' \
+            '/usr/*' '*/tests/*' '*/examples/*' '*/googletest/*' \
             --output-file coverage.info \
             --rc lcov_branch_coverage=1
 
           lcov --list coverage.info --rc lcov_branch_coverage=1
 
-      - name: Upload Test Reports
-        if: matrix.coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports-${{ matrix.os }}-${{ matrix.compiler }}
-          path: |
-            test-reports/
-          retention-days: 14
-
       - name: Upload Coverage to Codecov
-        if: matrix.coverage
+        if: steps.filter.outputs.skip != 'true' && matrix.coverage
         uses: codecov/codecov-action@v4
         with:
           files: coverage.info
@@ -424,23 +730,39 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+      # ===========================================
+      # Artifacts
+      # ===========================================
       - name: Upload Build Artifacts
-        if: matrix.build_type == 'Release' && matrix.build_mode == 'SERVER'
+        if: |
+          steps.filter.outputs.skip != 'true' &&
+          matrix.build_type == 'Release' &&
+          matrix.build_mode == 'SERVER' &&
+          !matrix.coverage
         uses: actions/upload-artifact@v4
         with:
           name: ipb-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_mode }}
           path: |
-            build/apps/ipb-gate/ipb-gate
-            build/apps/ipb-bridge/ipb-bridge
+            build/apps/ipb-gate/ipb-gate*
+            build/apps/ipb-bridge/ipb-bridge*
           retention-days: 7
 
   # ===========================================================================
-  # Static Analysis
+  # Static Analysis (optional, manual or on schedule)
   # ===========================================================================
   static-analysis:
     name: Static Analysis
     runs-on: ubuntu-24.04
-    needs: lint
+    needs: [changes, lint]
+    if: |
+      (
+        needs.changes.outputs.is_manual == 'true' &&
+        github.event.inputs.run_static_analysis == 'true'
+      ) ||
+      (
+        github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+      )
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -449,16 +771,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            clang-18 \
-            clang-tidy-18 \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev
+            cmake ninja-build \
+            clang-18 clang-tidy-18 \
+            libjsoncpp-dev libyaml-cpp-dev \
+            libpaho-mqtt-dev libpaho-mqttpp-dev \
+            libcurl4-openssl-dev libssl-dev
 
       - name: Configure
         env:
@@ -486,12 +803,21 @@ jobs:
           path: clang-tidy-report.txt
 
   # ===========================================================================
-  # Sanitizers
+  # Sanitizers (optional)
   # ===========================================================================
   sanitizers:
     name: Sanitizer (${{ matrix.sanitizer }})
     runs-on: ubuntu-24.04
-    needs: build
+    needs: [changes, build]
+    if: |
+      (
+        needs.changes.outputs.is_manual == 'true' &&
+        github.event.inputs.run_sanitizers == 'true'
+      ) ||
+      (
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main'
+      )
     strategy:
       fail-fast: false
       matrix:
@@ -504,15 +830,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake \
-            ninja-build \
+            cmake ninja-build \
             clang-18 \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
+            libjsoncpp-dev libyaml-cpp-dev \
+            libpaho-mqtt-dev libpaho-mqttpp-dev \
+            libcurl4-openssl-dev libssl-dev \
             libgtest-dev
 
       - name: Configure
@@ -555,11 +877,145 @@ jobs:
           ctest --output-on-failure --parallel 1
 
   # ===========================================================================
-  # Documentation
+  # Benchmarks (conditional on changes)
+  # ===========================================================================
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-24.04
+    needs: [changes, build]
+    if: |
+      needs.build.result == 'success' &&
+      (
+        (
+          needs.changes.outputs.is_manual == 'true' &&
+          github.event.inputs.run_benchmarks == 'true'
+        ) ||
+        (
+          needs.changes.outputs.benchmarks_changed == 'true'
+        ) ||
+        (
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main'
+        )
+      )
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build \
+            libjsoncpp-dev libyaml-cpp-dev \
+            libpaho-mqtt-dev libpaho-mqttpp-dev \
+            libcurl4-openssl-dev libssl-dev \
+            libbenchmark-dev
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DIPB_BUILD_MODE=SERVER \
+            -DENABLE_OPTIMIZATIONS=ON \
+            -DBUILD_TESTING=ON \
+            -DIPB_FULL=ON
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run Benchmarks
+        run: |
+          cd build
+          ctest -L benchmark --output-on-failure || true
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: build/benchmark-results/
+          retention-days: 30
+        continue-on-error: true
+
+  # ===========================================================================
+  # Integration Tests (conditional)
+  # ===========================================================================
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-24.04
+    needs: [changes, build]
+    if: |
+      needs.build.result == 'success' &&
+      (
+        (
+          needs.changes.outputs.is_manual == 'true' &&
+          github.event.inputs.run_integration == 'true'
+        ) ||
+        (
+          needs.changes.outputs.sinks_changed == 'true' ||
+          needs.changes.outputs.scoops_changed == 'true' ||
+          needs.changes.outputs.transport_changed == 'true'
+        )
+      )
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:2
+        ports:
+          - 1883:1883
+        options: >-
+          --health-cmd "mosquitto_sub -t '#' -C 1 -W 1 || true"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build \
+            libjsoncpp-dev libyaml-cpp-dev \
+            libpaho-mqtt-dev libpaho-mqttpp-dev \
+            libcurl4-openssl-dev libssl-dev \
+            mosquitto-clients
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DIPB_SINK_MQTT=ON \
+            -DIPB_SCOOP_MQTT=ON \
+            -DIPB_BUILD_GATE=ON
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Test MQTT Connectivity
+        run: |
+          mosquitto_pub -h localhost -t "test" -m "hello" -q 1
+          echo "MQTT broker is accessible"
+
+      - name: Run Integration Tests
+        run: |
+          cd build
+          ctest -L integration --output-on-failure || true
+
+  # ===========================================================================
+  # Documentation (on doc changes only)
   # ===========================================================================
   docs:
     name: Documentation
     runs-on: ubuntu-24.04
+    needs: changes
+    if: |
+      github.event_name == 'pull_request' ||
+      (
+        github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+      )
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -589,123 +1045,53 @@ jobs:
           echo "All documentation files present"
 
   # ===========================================================================
-  # Integration Tests
-  # ===========================================================================
-  integration:
-    name: Integration Tests
-    runs-on: ubuntu-24.04
-    needs: build
-    services:
-      mosquitto:
-        image: eclipse-mosquitto:2
-        ports:
-          - 1883:1883
-        options: >-
-          --health-cmd "mosquitto_sub -t '#' -C 1 -W 1 || true"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            mosquitto-clients
-
-      - name: Configure
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=ON \
-            -DIPB_SINK_MQTT=ON \
-            -DIPB_SCOOP_MQTT=ON \
-            -DIPB_BUILD_GATE=ON
-
-      - name: Build
-        run: cmake --build build --parallel $(nproc)
-
-      - name: Test MQTT Connectivity
-        run: |
-          mosquitto_pub -h localhost -t "test" -m "hello" -q 1
-          echo "MQTT broker is accessible"
-
-      - name: Run Integration Tests
-        run: |
-          cd build
-          ctest -L integration --output-on-failure || true
-
-  # ===========================================================================
-  # Performance Benchmarks
-  # ===========================================================================
-  benchmark:
-    name: Performance Benchmarks
-    runs-on: ubuntu-24.04
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libbenchmark-dev
-
-      - name: Configure
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DIPB_BUILD_MODE=SERVER \
-            -DENABLE_OPTIMIZATIONS=ON \
-            -DBUILD_TESTING=ON \
-            -DIPB_FULL=ON
-
-      - name: Build
-        run: cmake --build build --parallel $(nproc)
-
-      - name: Run Benchmarks
-        run: |
-          cd build
-          ctest -L benchmark --output-on-failure || true
-
-  # ===========================================================================
   # Final Status
   # ===========================================================================
   ci-status:
     name: CI Status
     runs-on: ubuntu-24.04
-    needs: [build, static-analysis, sanitizers, docs, integration]
+    needs: [changes, lint, build, static-analysis, sanitizers, benchmarks, integration, docs]
     if: always()
     steps:
-      - name: Check Status
+      - name: Determine Status
+        id: status
         run: |
-          if [ "${{ needs.build.result }}" != "success" ]; then
-            echo "Build failed"
+          # Build is mandatory
+          if [ "${{ needs.build.result }}" == "failure" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "Build failed!"
             exit 1
           fi
-          if [ "${{ needs.docs.result }}" != "success" ]; then
-            echo "Documentation check failed"
+
+          # Lint is mandatory on PRs
+          if [ "${{ github.event_name }}" == "pull_request" ] && \
+             [ "${{ needs.lint.result }}" == "failure" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "Lint failed!"
             exit 1
           fi
+
+          echo "status=success" >> $GITHUB_OUTPUT
           echo "CI pipeline completed successfully"
+
+      - name: Summary
+        run: |
+          echo "## CI Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Changes | ${{ needs.changes.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Analysis | ${{ needs.static-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Sanitizers | ${{ needs.sanitizers.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Benchmarks | ${{ needs.benchmarks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration | ${{ needs.integration.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docs | ${{ needs.docs.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show what was skipped
+          echo "### Change Detection" >> $GITHUB_STEP_SUMMARY
+          echo "- Source changed: ${{ needs.changes.outputs.any_source_changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Full rebuild needed: ${{ needs.changes.outputs.needs_full_build }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Manual dispatch: ${{ needs.changes.outputs.is_manual }}" >> $GITHUB_STEP_SUMMARY

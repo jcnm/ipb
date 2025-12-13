@@ -1,3 +1,10 @@
+# IPB Release Workflow
+# Automatic semver versioning with flexible options
+#
+# Usage:
+#   - Push tag v1.2.3: Creates release with that version
+#   - Manual dispatch: Choose bump type (major/minor/patch) or fixed version
+#
 name: Release
 
 on:
@@ -6,11 +13,50 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release (e.g., 1.5.0)'
-        required: true
-      prerelease:
-        description: 'Is this a pre-release?'
+      version_bump:
+        description: 'Version bump type (ignored if fixed_version is set)'
+        type: choice
+        required: false
+        default: 'patch'
+        options:
+          - patch
+          - minor
+          - major
+          - none
+      fixed_version:
+        description: 'Fixed version (e.g., 2.0.0) - overrides bump type'
+        required: false
+        default: ''
+      prerelease_tag:
+        description: 'Pre-release tag (e.g., alpha, beta, rc1) - leave empty for stable'
+        required: false
+        default: ''
+      build_mode:
+        description: 'Build mode for release artifacts'
+        type: choice
+        required: false
+        default: 'SERVER'
+        options:
+          - SERVER
+          - EDGE
+          - EMBEDDED
+          - ALL
+      platforms:
+        description: 'Target platforms'
+        type: choice
+        required: false
+        default: 'all'
+        options:
+          - all
+          - linux-only
+          - macos-only
+          - windows-only
+      create_docker:
+        description: 'Build and push Docker image'
+        type: boolean
+        default: true
+      dry_run:
+        description: 'Dry run (no tag/release creation)'
         type: boolean
         default: false
 
@@ -23,176 +69,491 @@ env:
 
 jobs:
   # ===========================================================================
-  # Prepare Release
+  # Calculate Version
   # ===========================================================================
-  prepare:
-    name: Prepare Release
-    runs-on: ubuntu-22.04
+  version:
+    name: Calculate Version
+    runs-on: ubuntu-24.04
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      prerelease: ${{ steps.version.outputs.prerelease }}
+      version: ${{ steps.calculate.outputs.version }}
+      version_tag: ${{ steps.calculate.outputs.version_tag }}
+      prerelease: ${{ steps.calculate.outputs.prerelease }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+      previous_tag: ${{ steps.calculate.outputs.previous_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Determine Version
-        id: version
+      - name: Get Latest Tag
+        id: latest_tag
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-            PRERELEASE="${{ github.event.inputs.prerelease }}"
-          else
-            VERSION="${GITHUB_REF#refs/tags/v}"
-            if [[ "$VERSION" == *"-"* ]]; then
-              PRERELEASE="true"
-            else
-              PRERELEASE="false"
-            fi
+          # Get the latest semver tag
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.0.0"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION (prerelease: $PRERELEASE)"
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST_TAG"
 
-      - name: Validate Version
+      - name: Calculate Version
+        id: calculate
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
-            echo "Invalid version format: $VERSION"
+          LATEST_TAG="${{ steps.latest_tag.outputs.latest_tag }}"
+          CURRENT_VERSION="${LATEST_TAG#v}"
+
+          # Parse current version
+          IFS='.-' read -r MAJOR MINOR PATCH PRERELEASE_PART <<< "$CURRENT_VERSION"
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
+          echo "Current: $MAJOR.$MINOR.$PATCH"
+
+          # Determine new version
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # Tag push - use tag version directly
+            NEW_VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [ -n "${{ github.event.inputs.fixed_version }}" ]; then
+            # Fixed version specified
+            NEW_VERSION="${{ github.event.inputs.fixed_version }}"
+          else
+            # Calculate based on bump type
+            case "${{ github.event.inputs.version_bump }}" in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+              none)
+                # Use current version
+                ;;
+            esac
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+
+          # Add prerelease tag if specified
+          PRERELEASE_TAG="${{ github.event.inputs.prerelease_tag }}"
+          IS_PRERELEASE="false"
+          if [ -n "$PRERELEASE_TAG" ]; then
+            NEW_VERSION="$NEW_VERSION-$PRERELEASE_TAG"
+            IS_PRERELEASE="true"
+          elif [[ "$NEW_VERSION" == *"-"* ]]; then
+            IS_PRERELEASE="true"
+          fi
+
+          VERSION_TAG="v$NEW_VERSION"
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
+          echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+          echo "previous_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+          echo "New version: $NEW_VERSION"
+          echo "Tag: $VERSION_TAG"
+          echo "Prerelease: $IS_PRERELEASE"
+
+      - name: Validate Version Format
+        run: |
+          VERSION="${{ steps.calculate.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z or X.Y.Z-prerelease"
             exit 1
           fi
+          echo "Version format valid: $VERSION"
+
+      - name: Check Version Not Exists
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          VERSION_TAG="${{ steps.calculate.outputs.version_tag }}"
+          if git rev-parse "$VERSION_TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $VERSION_TAG already exists!"
+            exit 1
+          fi
+          echo "Tag $VERSION_TAG does not exist, proceeding..."
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG="${{ steps.calculate.outputs.previous_tag }}"
+          VERSION="${{ steps.calculate.outputs.version }}"
+
+          # Generate changelog from commits since last tag
+          echo "## What's Changed in v$VERSION" > changelog.md
+          echo "" >> changelog.md
+
+          if git rev-parse "$PREVIOUS_TAG" >/dev/null 2>&1; then
+            # Group commits by type
+            echo "### Features" >> changelog.md
+            git log "$PREVIOUS_TAG"..HEAD --pretty=format:"* %s (%h)" --grep="^feat" | head -20 >> changelog.md || true
+            echo "" >> changelog.md
+
+            echo "### Bug Fixes" >> changelog.md
+            git log "$PREVIOUS_TAG"..HEAD --pretty=format:"* %s (%h)" --grep="^fix" | head -20 >> changelog.md || true
+            echo "" >> changelog.md
+
+            echo "### Other Changes" >> changelog.md
+            git log "$PREVIOUS_TAG"..HEAD --pretty=format:"* %s (%h)" --invert-grep --grep="^feat" --grep="^fix" | head -20 >> changelog.md || true
+            echo "" >> changelog.md
+
+            echo "**Full Changelog**: ${{ github.server_url }}/${{ github.repository }}/compare/$PREVIOUS_TAG..v$VERSION" >> changelog.md
+          else
+            echo "Initial release" >> changelog.md
+          fi
+
+          # Store as output (escape newlines)
+          CHANGELOG=$(cat changelog.md)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          cat changelog.md
+
+      - name: Upload Changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: changelog.md
+          retention-days: 1
 
   # ===========================================================================
-  # Build Release Artifacts
+  # Build Matrix
   # ===========================================================================
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.os }}, ${{ matrix.build_mode }})
     runs-on: ${{ matrix.os }}
-    needs: prepare
+    needs: version
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          # Linux x64 - All modes
+          - os: ubuntu-24.04
             artifact_name: ipb-linux-x64
+            build_mode: SERVER
+            arch: x64
             archive_type: tar.gz
+            platform_filter: linux
 
-          - os: ubuntu-20.04
-            artifact_name: ipb-linux-x64-ubuntu20
+          - os: ubuntu-24.04
+            artifact_name: ipb-linux-x64-edge
+            build_mode: EDGE
+            arch: x64
             archive_type: tar.gz
+            platform_filter: linux
 
+          - os: ubuntu-24.04
+            artifact_name: ipb-linux-x64-embedded
+            build_mode: EMBEDDED
+            arch: x64
+            archive_type: tar.gz
+            platform_filter: linux
+
+          # macOS x64
           - os: macos-13
             artifact_name: ipb-macos-x64
+            build_mode: SERVER
+            arch: x64
             archive_type: tar.gz
+            platform_filter: macos
 
+          - os: macos-13
+            artifact_name: ipb-macos-x64-edge
+            build_mode: EDGE
+            arch: x64
+            archive_type: tar.gz
+            platform_filter: macos
+
+          # macOS ARM64
           - os: macos-14
             artifact_name: ipb-macos-arm64
+            build_mode: SERVER
+            arch: arm64
             archive_type: tar.gz
+            platform_filter: macos
+
+          - os: macos-14
+            artifact_name: ipb-macos-arm64-edge
+            build_mode: EDGE
+            arch: arm64
+            archive_type: tar.gz
+            platform_filter: macos
+
+          # Windows x64
+          - os: windows-2022
+            artifact_name: ipb-windows-x64
+            build_mode: SERVER
+            arch: x64
+            archive_type: zip
+            platform_filter: windows
+
+          - os: windows-2022
+            artifact_name: ipb-windows-x64-edge
+            build_mode: EDGE
+            arch: x64
+            archive_type: zip
+            platform_filter: windows
 
     steps:
+      - name: Check Platform Filter
+        id: filter
+        shell: bash
+        run: |
+          PLATFORMS="${{ github.event.inputs.platforms || 'all' }}"
+          BUILD_MODE_INPUT="${{ github.event.inputs.build_mode || 'ALL' }}"
+          MATRIX_MODE="${{ matrix.build_mode }}"
+          MATRIX_PLATFORM="${{ matrix.platform_filter }}"
+
+          # Check platform
+          SKIP="false"
+          if [ "$PLATFORMS" != "all" ]; then
+            case "$PLATFORMS" in
+              linux-only)
+                [ "$MATRIX_PLATFORM" != "linux" ] && SKIP="true"
+                ;;
+              macos-only)
+                [ "$MATRIX_PLATFORM" != "macos" ] && SKIP="true"
+                ;;
+              windows-only)
+                [ "$MATRIX_PLATFORM" != "windows" ] && SKIP="true"
+                ;;
+            esac
+          fi
+
+          # Check build mode
+          if [ "$BUILD_MODE_INPUT" != "ALL" ] && [ "$BUILD_MODE_INPUT" != "$MATRIX_MODE" ]; then
+            SKIP="true"
+          fi
+
+          echo "skip=$SKIP" >> $GITHUB_OUTPUT
+          echo "Platform: $MATRIX_PLATFORM, Mode: $MATRIX_MODE, Skip: $SKIP"
+
       - name: Checkout
+        if: steps.filter.outputs.skip != 'true'
         uses: actions/checkout@v4
 
-      - name: Install Dependencies (Linux)
-        if: runner.os == 'Linux'
+      # Linux Dependencies
+      - name: Install Dependencies (Linux - SERVER/EDGE)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Linux' && matrix.build_mode != 'EMBEDDED'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev
+            cmake ninja-build pkg-config \
+            libjsoncpp-dev libyaml-cpp-dev \
+            libpaho-mqtt-dev libpaho-mqttpp-dev \
+            libcurl4-openssl-dev libssl-dev
 
+      - name: Install Dependencies (Linux - EMBEDDED)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Linux' && matrix.build_mode == 'EMBEDDED'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build pkg-config \
+            libcjson-dev libssl-dev
+
+      # macOS Dependencies
       - name: Install Dependencies (macOS)
-        if: runner.os == 'macOS'
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'macOS'
         run: |
-          brew install \
-            cmake \
-            ninja \
-            jsoncpp \
-            yaml-cpp \
-            paho-mqtt-c \
-            paho-mqtt-cpp \
-            curl \
-            openssl@3
+          brew install cmake ninja jsoncpp yaml-cpp \
+            paho-mqtt-c paho-mqtt-cpp curl openssl@3
 
-      - name: Configure
+      # Windows Dependencies
+      - name: Setup vcpkg (Windows)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '2024.01.12'
+
+      - name: Install Dependencies (Windows)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
         run: |
+          vcpkg install jsoncpp:x64-windows yaml-cpp:x64-windows openssl:x64-windows
+
+      # Configure and Build
+      - name: Configure (Unix)
+        if: steps.filter.outputs.skip != 'true' && runner.os != 'Windows'
+        run: |
+          FULL_FLAG=""
+          if [ "${{ matrix.build_mode }}" = "SERVER" ]; then
+            FULL_FLAG="-DIPB_FULL=ON"
+          fi
+
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_OPTIMIZATIONS=ON \
             -DENABLE_LTO=ON \
-            -DIPB_FULL=ON \
+            -DIPB_BUILD_MODE=${{ matrix.build_mode }} \
+            $FULL_FLAG \
             -DBUILD_TESTING=OFF \
             -DBUILD_EXAMPLES=OFF
 
-      - name: Build
+      - name: Configure (Windows)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
+        run: |
+          $FULL_FLAG = ""
+          if ("${{ matrix.build_mode }}" -eq "SERVER") {
+            $FULL_FLAG = "-DIPB_FULL=ON"
+          }
+
+          cmake -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake `
+            -DIPB_BUILD_MODE=${{ matrix.build_mode }} `
+            $FULL_FLAG `
+            -DBUILD_TESTING=OFF `
+            -DBUILD_EXAMPLES=OFF
+
+      - name: Build (Unix)
+        if: steps.filter.outputs.skip != 'true' && runner.os != 'Windows'
         run: cmake --build build --parallel $(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
-      - name: Create Package
+      - name: Build (Windows)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
+        run: cmake --build build --config Release --parallel
+
+      # Package
+      - name: Create Package (Unix)
+        if: steps.filter.outputs.skip != 'true' && runner.os != 'Windows'
         run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
+          VERSION="${{ needs.version.outputs.version }}"
           PACKAGE_NAME="${{ matrix.artifact_name }}-$VERSION"
 
-          mkdir -p "$PACKAGE_NAME/bin"
-          mkdir -p "$PACKAGE_NAME/lib"
-          mkdir -p "$PACKAGE_NAME/include"
-          mkdir -p "$PACKAGE_NAME/config"
-          mkdir -p "$PACKAGE_NAME/docs"
+          mkdir -p "$PACKAGE_NAME"/{bin,lib,include,config,docs}
 
           # Copy binaries
-          cp build/apps/ipb-gate/ipb-gate "$PACKAGE_NAME/bin/" 2>/dev/null || true
-          cp build/apps/ipb-bridge/ipb-bridge "$PACKAGE_NAME/bin/" 2>/dev/null || true
+          find build -maxdepth 3 -type f -perm -111 ! -name "*.so*" ! -name "CMake*" \
+            -exec cp {} "$PACKAGE_NAME/bin/" \; 2>/dev/null || true
 
           # Copy libraries
           find build -name "*.so" -o -name "*.dylib" -o -name "*.a" | \
             xargs -I{} cp {} "$PACKAGE_NAME/lib/" 2>/dev/null || true
 
           # Copy headers
-          cp -r core/common/include/ipb "$PACKAGE_NAME/include/"
+          cp -r core/common/include/ipb "$PACKAGE_NAME/include/" 2>/dev/null || true
           cp -r core/components/include/ipb/core "$PACKAGE_NAME/include/ipb/" 2>/dev/null || true
 
-          # Copy config examples
+          # Copy examples and docs
           cp examples/*.yaml "$PACKAGE_NAME/config/" 2>/dev/null || true
-
-          # Copy documentation
-          cp README.md ARCHITECTURE.md CHANGELOG.md "$PACKAGE_NAME/docs/"
-          cp docs/*.md "$PACKAGE_NAME/docs/" 2>/dev/null || true
+          cp README.md CHANGELOG.md "$PACKAGE_NAME/docs/" 2>/dev/null || true
 
           # Create archive
-          if [ "${{ matrix.archive_type }}" == "tar.gz" ]; then
-            tar -czvf "$PACKAGE_NAME.tar.gz" "$PACKAGE_NAME"
-          else
-            zip -r "$PACKAGE_NAME.zip" "$PACKAGE_NAME"
-          fi
+          tar -czvf "$PACKAGE_NAME.tar.gz" "$PACKAGE_NAME"
+
+          # Generate checksum
+          sha256sum "$PACKAGE_NAME.tar.gz" > "$PACKAGE_NAME.tar.gz.sha256"
+
+      - name: Create Package (Windows)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $VERSION = "${{ needs.version.outputs.version }}"
+          $PACKAGE_NAME = "${{ matrix.artifact_name }}-$VERSION"
+
+          New-Item -ItemType Directory -Force -Path "$PACKAGE_NAME/bin"
+          New-Item -ItemType Directory -Force -Path "$PACKAGE_NAME/lib"
+          New-Item -ItemType Directory -Force -Path "$PACKAGE_NAME/include"
+          New-Item -ItemType Directory -Force -Path "$PACKAGE_NAME/config"
+          New-Item -ItemType Directory -Force -Path "$PACKAGE_NAME/docs"
+
+          # Copy binaries
+          Get-ChildItem -Path build -Recurse -Filter "*.exe" | Copy-Item -Destination "$PACKAGE_NAME/bin/" -ErrorAction SilentlyContinue
+
+          # Copy libraries
+          Get-ChildItem -Path build -Recurse -Include "*.lib","*.dll" | Copy-Item -Destination "$PACKAGE_NAME/lib/" -ErrorAction SilentlyContinue
+
+          # Copy docs
+          Copy-Item -Path README.md,CHANGELOG.md -Destination "$PACKAGE_NAME/docs/" -ErrorAction SilentlyContinue
+
+          # Create archive
+          Compress-Archive -Path "$PACKAGE_NAME" -DestinationPath "$PACKAGE_NAME.zip"
+
+          # Generate checksum
+          Get-FileHash "$PACKAGE_NAME.zip" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $PACKAGE_NAME.zip" } | Out-File "$PACKAGE_NAME.zip.sha256"
 
       - name: Upload Artifact
+        if: steps.filter.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
             *.tar.gz
             *.zip
+            *.sha256
           retention-days: 5
+
+      - name: Skip Notice
+        if: steps.filter.outputs.skip == 'true'
+        run: echo "Skipped build for ${{ matrix.artifact_name }} (platform/mode filter)"
+
+  # ===========================================================================
+  # Create Tag (if manual dispatch)
+  # ===========================================================================
+  tag:
+    name: Create Tag
+    runs-on: ubuntu-24.04
+    needs: [version, build]
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Version in CMakeLists.txt
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          # Remove prerelease suffix for CMake version
+          CMAKE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+
+          sed -i "s/project(IPB VERSION [0-9]*\.[0-9]*\.[0-9]*/project(IPB VERSION $CMAKE_VERSION/" CMakeLists.txt
+
+          if git diff --quiet CMakeLists.txt; then
+            echo "No version change needed"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add CMakeLists.txt
+            git commit -m "chore: bump version to $VERSION"
+            git push
+          fi
+
+      - name: Create and Push Tag
+        run: |
+          VERSION_TAG="${{ needs.version.outputs.version_tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION_TAG" -m "Release $VERSION_TAG"
+          git push origin "$VERSION_TAG"
 
   # ===========================================================================
   # Create GitHub Release
   # ===========================================================================
   release:
     name: Create Release
-    runs-on: ubuntu-22.04
-    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    needs: [version, build, tag]
+    if: |
+      always() &&
+      needs.version.result == 'success' &&
+      needs.build.result == 'success' &&
+      (needs.tag.result == 'success' || needs.tag.result == 'skipped') &&
+      github.event.inputs.dry_run != 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Artifacts
+      - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -200,48 +561,44 @@ jobs:
       - name: Prepare Release Assets
         run: |
           mkdir -p release-assets
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) \
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) \
             -exec cp {} release-assets/ \;
-          ls -la release-assets/
 
-      - name: Generate Checksums
-        run: |
+          # Create combined checksums file
           cd release-assets
-          sha256sum * > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          cat *.sha256 > SHA256SUMS.txt 2>/dev/null || true
+          rm -f *.sha256
 
-      - name: Extract Changelog
-        id: changelog
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          # Extract changelog for this version
-          awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | head -n -1 > release-notes.md
-          if [ ! -s release-notes.md ]; then
-            echo "## Release $VERSION" > release-notes.md
-            echo "" >> release-notes.md
-            echo "See CHANGELOG.md for details." >> release-notes.md
-          fi
-          cat release-notes.md
+          ls -la
+
+      - name: Download Changelog
+        uses: actions/download-artifact@v4
+        with:
+          name: changelog
+          path: .
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          name: IPB v${{ needs.prepare.outputs.version }}
-          tag_name: v${{ needs.prepare.outputs.version }}
-          body_path: release-notes.md
+          name: IPB ${{ needs.version.outputs.version_tag }}
+          tag_name: ${{ needs.version.outputs.version_tag }}
+          body_path: changelog.md
           draft: false
-          prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
-          files: |
-            release-assets/*
-          generate_release_notes: true
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          files: release-assets/*
+          generate_release_notes: false
 
   # ===========================================================================
   # Docker Image
   # ===========================================================================
   docker:
     name: Build Docker Image
-    runs-on: ubuntu-22.04
-    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    needs: [version, build, release]
+    if: |
+      always() &&
+      needs.release.result == 'success' &&
+      (github.event.inputs.create_docker != 'false')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -251,6 +608,7 @@ jobs:
         with:
           name: ipb-linux-x64
           path: docker-build
+        continue-on-error: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -265,22 +623,22 @@ jobs:
       - name: Create Dockerfile
         run: |
           cat > Dockerfile << 'EOF'
-          FROM ubuntu:22.04
+          FROM ubuntu:24.04
 
-          RUN apt-get update && apt-get install -y \
+          RUN apt-get update && apt-get install -y --no-install-recommends \
               libjsoncpp25 \
-              libyaml-cpp0.7 \
-              libpaho-mqtt3as1 \
-              libpaho-mqttpp3-1 \
+              libyaml-cpp0.8 \
               libcurl4 \
               libssl3 \
+              ca-certificates \
               && rm -rf /var/lib/apt/lists/*
 
           WORKDIR /opt/ipb
 
           COPY docker-build/*.tar.gz /tmp/
           RUN tar -xzf /tmp/*.tar.gz -C /opt/ipb --strip-components=1 \
-              && rm /tmp/*.tar.gz
+              && rm /tmp/*.tar.gz \
+              && chmod +x /opt/ipb/bin/* 2>/dev/null || true
 
           ENV PATH="/opt/ipb/bin:$PATH"
 
@@ -296,28 +654,38 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ needs.prepare.outputs.version }}
+            ghcr.io/${{ github.repository }}:${{ needs.version.outputs.version }}
             ghcr.io/${{ github.repository }}:latest
           labels: |
             org.opencontainers.image.title=IPB
             org.opencontainers.image.description=Industrial Protocol Bridge
-            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
   # ===========================================================================
-  # Notify
+  # Summary
   # ===========================================================================
-  notify:
-    name: Notify
-    runs-on: ubuntu-22.04
-    needs: [prepare, release, docker]
+  summary:
+    name: Release Summary
+    runs-on: ubuntu-24.04
+    needs: [version, build, release, docker]
     if: always()
     steps:
-      - name: Release Status
+      - name: Summary
         run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ needs.version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | ${{ needs.version.outputs.version_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ needs.version.outputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release | ${{ needs.release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker | ${{ needs.docker.result }} |" >> $GITHUB_STEP_SUMMARY
+
           if [ "${{ needs.release.result }}" == "success" ]; then
-            echo "Release v${{ needs.prepare.outputs.version }} created successfully!"
-          else
-            echo "Release failed"
-            exit 1
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Release created successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.version_tag }}" >> $GITHUB_STEP_SUMMARY
           fi
