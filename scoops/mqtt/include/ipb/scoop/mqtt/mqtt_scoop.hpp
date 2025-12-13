@@ -107,7 +107,7 @@ struct ProcessingConfig {
     bool use_payload_timestamp = true;   ///< Extract timestamp from payload if possible
 
     // Quality
-    common::Quality default_quality = common::Quality::Good;
+    common::Quality default_quality = common::Quality::GOOD;
 
     // Buffering
     bool enable_buffering = true;
@@ -163,6 +163,32 @@ struct MQTTScoopStatistics {
     std::atomic<uint64_t> bytes_received{0};
 
     std::atomic<uint64_t> subscriptions_active{0};
+
+    MQTTScoopStatistics() = default;
+
+    // Copy constructor for atomic members
+    MQTTScoopStatistics(const MQTTScoopStatistics& other) noexcept
+        : messages_received(other.messages_received.load())
+        , messages_processed(other.messages_processed.load())
+        , messages_dropped(other.messages_dropped.load())
+        , parse_errors(other.parse_errors.load())
+        , data_points_produced(other.data_points_produced.load())
+        , bytes_received(other.bytes_received.load())
+        , subscriptions_active(other.subscriptions_active.load()) {}
+
+    // Copy assignment for atomic members
+    MQTTScoopStatistics& operator=(const MQTTScoopStatistics& other) noexcept {
+        if (this != &other) {
+            messages_received    = other.messages_received.load();
+            messages_processed   = other.messages_processed.load();
+            messages_dropped     = other.messages_dropped.load();
+            parse_errors         = other.parse_errors.load();
+            data_points_produced = other.data_points_produced.load();
+            bytes_received       = other.bytes_received.load();
+            subscriptions_active = other.subscriptions_active.load();
+        }
+        return *this;
+    }
 
     void reset() {
         messages_received    = 0;

@@ -16,7 +16,7 @@ namespace ipb::scoop::mqtt {
 using namespace common::debug;
 
 namespace {
-constexpr const char* LOG_CAT = category::PROTOCOL;
+constexpr std::string_view LOG_CAT = category::PROTOCOL;
 }  // namespace
 
 //=============================================================================
@@ -170,7 +170,7 @@ public:
 
         if (IPB_UNLIKELY(running_.load())) {
             IPB_LOG_WARN(LOG_CAT, "MQTTScoop already running");
-            return common::Result<>::success();
+            return common::ok();
         }
 
         IPB_LOG_INFO(LOG_CAT, "Starting MQTTScoop...");
@@ -181,7 +181,7 @@ public:
 
         if (IPB_UNLIKELY(!connection_)) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to create MQTT connection");
-            return common::Result<>::failure("Failed to create MQTT connection");
+            return common::err(common::ErrorCode::CONNECTION_FAILED,"Failed to create MQTT connection");
         }
 
         // Setup message callback
@@ -198,7 +198,7 @@ public:
         // Connect
         if (IPB_UNLIKELY(!connection_->connect())) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to connect to MQTT broker");
-            return common::Result<>::failure("Failed to connect to MQTT broker");
+            return common::err(common::ErrorCode::CONNECTION_FAILED,"Failed to connect to MQTT broker");
         }
 
         IPB_LOG_DEBUG(LOG_CAT, "Connected to MQTT broker");
@@ -213,7 +213,7 @@ public:
         subscribe_all();
 
         IPB_LOG_INFO(LOG_CAT, "MQTTScoop started successfully");
-        return common::Result<>::success();
+        return common::ok();
     }
 
     common::Result<> stop() {
@@ -221,7 +221,7 @@ public:
 
         if (!running_.load()) {
             IPB_LOG_DEBUG(LOG_CAT, "MQTTScoop already stopped");
-            return common::Result<>::success();
+            return common::ok();
         }
 
         IPB_LOG_INFO(LOG_CAT, "Stopping MQTTScoop...");
@@ -251,7 +251,7 @@ public:
 
         connected_.store(false);
         IPB_LOG_INFO(LOG_CAT, "MQTTScoop stopped successfully");
-        return common::Result<>::success();
+        return common::ok();
     }
 
     bool is_running() const noexcept { return running_.load(); }
@@ -264,25 +264,25 @@ public:
 
         common::DataSet result;
         while (!data_buffer_.empty()) {
-            result.add(data_buffer_.front());
+            result.push_back(data_buffer_.front());
             data_buffer_.pop();
         }
 
-        return common::Result<common::DataSet>::success(std::move(result));
+        return common::ok(std::move(result));
     }
 
     common::Result<> subscribe(DataCallback data_cb, ErrorCallback error_cb) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
         data_callback_  = std::move(data_cb);
         error_callback_ = std::move(error_cb);
-        return common::Result<>::success();
+        return common::ok();
     }
 
     common::Result<> unsubscribe() {
         std::lock_guard<std::mutex> lock(callback_mutex_);
         data_callback_  = nullptr;
         error_callback_ = nullptr;
-        return common::Result<>::success();
+        return common::ok();
     }
 
     common::Result<> add_topic_mapping(const TopicMapping& mapping) {
@@ -296,7 +296,7 @@ public:
             stats_.subscriptions_active++;
         }
 
-        return common::Result<>::success();
+        return common::ok();
     }
 
     common::Result<> remove_topic_mapping(const std::string& topic_pattern) {
@@ -315,7 +315,7 @@ public:
             stats_.subscriptions_active--;
         }
 
-        return common::Result<>::success();
+        return common::ok();
     }
 
     std::vector<TopicMapping> get_topic_mappings() const {
@@ -552,15 +552,20 @@ private:
         return result;
     }
 
+    template <typename T>
     common::DataPoint create_datapoint(const std::string& address,
-                                       const common::DataPoint::ValueType& value,
+                                       T value,
                                        uint16_t protocol_id) {
         common::DataPoint dp;
         dp.set_address(address);
-        dp.set_value(value);
+        if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
+            dp.value().set_string_view(value);
+        } else {
+            dp.set_value(value);
+        }
         dp.set_protocol_id(protocol_id);
         dp.set_quality(config_.processing.default_quality);
-        dp.set_timestamp(std::chrono::system_clock::now());
+        dp.set_timestamp(common::Timestamp::from_system_time());
         return dp;
     }
 
@@ -571,7 +576,7 @@ private:
         dp.set_address(address);
         dp.set_protocol_id(protocol_id);
         dp.set_quality(config_.processing.default_quality);
-        dp.set_timestamp(std::chrono::system_clock::now());
+        dp.set_timestamp(common::Timestamp::from_system_time());
 
         if (value.isBool()) {
             dp.set_value(value.asBool());
@@ -580,7 +585,7 @@ private:
         } else if (value.isDouble()) {
             dp.set_value(value.asDouble());
         } else if (value.isString()) {
-            dp.set_value(value.asString());
+            dp.value().set_string_view(value.asString());
         } else {
             return std::nullopt;
         }
@@ -612,7 +617,7 @@ private:
                 if (data_callback_) {
                     common::DataSet ds;
                     for (auto& dp : batch) {
-                        ds.add(std::move(dp));
+                        ds.push_back(std::move(dp));
                     }
                     data_callback_(std::move(ds));
                 }
@@ -712,7 +717,7 @@ bool MQTTScoop::is_running() const noexcept {
 
 common::Result<> MQTTScoop::configure(const common::ConfigurationBase& config) {
     // Configuration should be done via constructor
-    return common::Result<>::success();
+    return common::ok();
 }
 
 std::unique_ptr<common::ConfigurationBase> MQTTScoop::get_configuration() const {
@@ -722,10 +727,9 @@ std::unique_ptr<common::ConfigurationBase> MQTTScoop::get_configuration() const 
 common::Statistics MQTTScoop::get_statistics() const noexcept {
     auto mqtt_stats = impl_->get_mqtt_statistics();
     common::Statistics stats;
-    stats.messages_received  = mqtt_stats.messages_received.load();
-    stats.messages_processed = mqtt_stats.messages_processed.load();
-    stats.messages_dropped   = mqtt_stats.messages_dropped.load();
-    stats.errors             = mqtt_stats.parse_errors.load();
+    stats.total_messages      = mqtt_stats.messages_received.load();
+    stats.successful_messages = mqtt_stats.messages_processed.load();
+    stats.failed_messages     = mqtt_stats.messages_dropped.load() + mqtt_stats.parse_errors.load();
     return stats;
 }
 

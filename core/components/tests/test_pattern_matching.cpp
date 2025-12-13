@@ -99,7 +99,7 @@ TEST_F(CompiledPatternCacheTest, CacheHit) {
     auto result1 = cache_->get_or_compile("sensors/.*");
     ASSERT_TRUE(result1);
 
-    auto stats_before = cache_->stats();
+    const auto& stats_before = cache_->stats();
 
     // Second access should be cache hit
     auto result2 = cache_->get_or_compile("sensors/.*");
@@ -108,7 +108,7 @@ TEST_F(CompiledPatternCacheTest, CacheHit) {
     // Same pointer (cached)
     EXPECT_EQ(result1.value(), result2.value());
 
-    auto stats_after = cache_->stats();
+    const auto& stats_after = cache_->stats();
     EXPECT_GT(stats_after.cache_hits, stats_before.cache_hits);
 }
 
@@ -122,7 +122,7 @@ TEST_F(CompiledPatternCacheTest, DangerousPatternRejected) {
     auto result = cache_->get_or_compile("(a+)+");
     EXPECT_FALSE(result);
 
-    auto stats = cache_->stats();
+    const auto& stats = cache_->stats();
     EXPECT_GT(stats.validation_rejections, 0u);
 }
 

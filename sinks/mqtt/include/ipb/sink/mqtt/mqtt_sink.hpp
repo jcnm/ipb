@@ -201,7 +201,7 @@ public:
                                          QoS qos = QoS::AT_LEAST_ONCE, bool retain = false);
 
     // Statistics and monitoring
-    MQTTSinkStatistics get_statistics() const;
+    const MQTTSinkStatistics& get_statistics() const;
     void reset_statistics();
     void print_statistics() const;
 

@@ -582,34 +582,24 @@ jobs:
           max-size: 500M
 
       # ===========================================
-      # Dependencies
+      # Dependencies - Using install scripts for consistency
       # ===========================================
-      - name: Install Dependencies (Linux - SERVER/EDGE)
-        if: steps.filter.outputs.skip != 'true' && runner.os == 'Linux' && matrix.build_mode != 'EMBEDDED'
+      - name: Install Dependencies (Linux)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build pkg-config \
-            libjsoncpp-dev libyaml-cpp-dev \
-            libpaho-mqtt-dev libpaho-mqttpp-dev \
-            libcurl4-openssl-dev libssl-dev \
-            libmodbus-dev \
-            libgtest-dev libgmock-dev lcov
-
-      - name: Install Dependencies (Linux - EMBEDDED)
-        if: steps.filter.outputs.skip != 'true' && runner.os == 'Linux' && matrix.build_mode == 'EMBEDDED'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build pkg-config \
-            libcjson-dev libssl-dev \
-            libgtest-dev libgmock-dev
+          # Use the install script with appropriate mode
+          chmod +x ./scripts/install-deps-linux.sh
+          if [ "${{ matrix.build_mode }}" = "EMBEDDED" ]; then
+            ./scripts/install-deps-linux.sh --system --minimal
+          else
+            ./scripts/install-deps-linux.sh --system --full
+          fi
 
       - name: Install Dependencies (macOS)
         if: steps.filter.outputs.skip != 'true' && runner.os == 'macOS'
         run: |
-          brew install cmake ninja jsoncpp yaml-cpp \
-            paho-mqtt-c paho-mqtt-cpp curl openssl@3 googletest lcov
+          chmod +x ./scripts/install-deps-macos.sh
+          ./scripts/install-deps-macos.sh --skip-brew-update --full
 
       - name: Setup vcpkg (Windows)
         if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
@@ -617,15 +607,30 @@ jobs:
         with:
           vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55ef6'
 
-      - name: Install Dependencies (Windows - SERVER/EDGE)
-        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows' && matrix.build_mode != 'EMBEDDED'
+      - name: Install Dependencies (Windows)
+        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'
+        shell: pwsh
         run: |
-          vcpkg install jsoncpp:x64-windows yaml-cpp:x64-windows openssl:x64-windows gtest:x64-windows
+          # Install packages based on build mode
+          $packages = @(
+            "jsoncpp:x64-windows",
+            "yaml-cpp:x64-windows",
+            "openssl:x64-windows",
+            "zlib:x64-windows",
+            "gtest:x64-windows"
+          )
 
-      - name: Install Dependencies (Windows - EMBEDDED)
-        if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows' && matrix.build_mode == 'EMBEDDED'
-        run: |
-          vcpkg install cjson:x64-windows openssl:x64-windows gtest:x64-windows
+          if ("${{ matrix.build_mode }}" -ne "EMBEDDED") {
+            $packages += @(
+              "paho-mqtt:x64-windows",
+              "curl:x64-windows"
+            )
+          }
+
+          foreach ($pkg in $packages) {
+            Write-Host "Installing $pkg..."
+            vcpkg install $pkg
+          }
 
       # ===========================================
       # Configure
@@ -906,13 +911,10 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build \
-            clang-18 clang-tidy-18 \
-            libjsoncpp-dev libyaml-cpp-dev \
-            libpaho-mqtt-dev libpaho-mqttpp-dev \
-            libcurl4-openssl-dev libssl-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --full
+          # Additional clang tools for static analysis
+          sudo apt-get install -y clang-18 clang-tidy-18
 
       - name: Configure
         env:
@@ -965,14 +967,10 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build \
-            clang-18 \
-            libjsoncpp-dev libyaml-cpp-dev \
-            libpaho-mqtt-dev libpaho-mqttpp-dev \
-            libcurl4-openssl-dev libssl-dev \
-            libgtest-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --full
+          # Ensure clang-18 is available for sanitizers
+          sudo apt-get install -y clang-18
 
       - name: Configure
         env:
@@ -1041,13 +1039,10 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build \
-            libjsoncpp-dev libyaml-cpp-dev \
-            libpaho-mqtt-dev libpaho-mqttpp-dev \
-            libcurl4-openssl-dev libssl-dev \
-            libbenchmark-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --full
+          # Additional benchmark library
+          sudo apt-get install -y libbenchmark-dev
 
       - name: Configure
         run: |
@@ -1110,13 +1105,10 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build \
-            libjsoncpp-dev libyaml-cpp-dev \
-            libpaho-mqtt-dev libpaho-mqttpp-dev \
-            libcurl4-openssl-dev libssl-dev \
-            mosquitto-clients
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --full
+          # MQTT client tools for integration testing
+          sudo apt-get install -y mosquitto-clients
 
       - name: Configure
         run: |
