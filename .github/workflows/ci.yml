@@ -589,10 +589,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake ninja-build pkg-config \
+            cmake ninja-build pkg-config ccache \
             libjsoncpp-dev libyaml-cpp-dev \
             libpaho-mqtt-dev libpaho-mqttpp-dev \
-            libcurl4-openssl-dev libssl-dev \
+            libcurl4-openssl-dev libssl-dev zlib1g-dev \
             libmodbus-dev \
             libgtest-dev libgmock-dev lcov
 
@@ -601,15 +601,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake ninja-build pkg-config \
+            cmake ninja-build pkg-config ccache \
             libcjson-dev libssl-dev \
             libgtest-dev libgmock-dev
 
       - name: Install Dependencies (macOS)
         if: steps.filter.outputs.skip != 'true' && runner.os == 'macOS'
         run: |
+          brew update
           brew install cmake ninja jsoncpp yaml-cpp \
-            paho-mqtt-c paho-mqtt-cpp curl openssl@3 googletest lcov
+            paho-mqtt-c paho-mqtt-cpp curl openssl@3 googletest lcov ccache pkg-config
 
       - name: Setup vcpkg (Windows)
         if: steps.filter.outputs.skip != 'true' && runner.os == 'Windows'

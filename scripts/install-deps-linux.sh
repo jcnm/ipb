@@ -2,6 +2,9 @@
 
 # IPB Dependencies Installation Script for Linux
 # Supports Ubuntu 20.04+, Debian 11+, CentOS 8+, Fedora 35+
+#
+# This script tries to install as much as possible without root,
+# then prompts for root access only when needed.
 
 set -e
 
@@ -11,6 +14,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Configuration
+INSTALL_DIR="${IPB_INSTALL_DIR:-$HOME/.local}"
+USE_SUDO=""
+DISTRO=""
+VERSION=""
+PKG_MGR=""
 
 # Logging functions
 log_info() {
@@ -29,6 +39,34 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Print usage
+print_usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS]
+
+IPB Dependencies Installation Script for Linux
+
+Options:
+  -h, --help          Show this help message
+  -l, --local         Install to user directory (~/.local) without root
+  -s, --system        Install system-wide (requires root/sudo)
+  -a, --auto          Auto-detect: try local first, then ask for root
+  -m, --minimal       Install only essential dependencies
+  -f, --full          Install all optional dependencies
+  --no-confirm        Skip confirmation prompts
+  --dry-run           Show what would be installed without installing
+
+Environment Variables:
+  IPB_INSTALL_DIR     Custom installation directory (default: ~/.local)
+
+Examples:
+  $(basename "$0")                  # Auto-detect mode
+  $(basename "$0") --local          # Install without root
+  $(basename "$0") --system         # System-wide installation
+  $(basename "$0") --minimal        # Essential deps only
+EOF
+}
+
 # Detect Linux distribution
 detect_distro() {
     if [ -f /etc/os-release ]; then
@@ -39,214 +77,345 @@ detect_distro() {
         log_error "Cannot detect Linux distribution"
         exit 1
     fi
-    
+
     log_info "Detected distribution: $DISTRO $VERSION"
+
+    # Determine package manager
+    if command -v apt-get &> /dev/null; then
+        PKG_MGR="apt"
+    elif command -v dnf &> /dev/null; then
+        PKG_MGR="dnf"
+    elif command -v yum &> /dev/null; then
+        PKG_MGR="yum"
+    elif command -v pacman &> /dev/null; then
+        PKG_MGR="pacman"
+    else
+        log_warning "No supported package manager found"
+        PKG_MGR=""
+    fi
+}
+
+# Check if a command exists
+command_exists() {
+    command -v "$1" &> /dev/null
+}
+
+# Check if a library is available via pkg-config
+lib_exists() {
+    pkg-config --exists "$1" 2>/dev/null
+}
+
+# Try to get sudo access
+request_sudo() {
+    if [ "$USE_SUDO" = "never" ]; then
+        return 1
+    fi
+
+    if [ "$(id -u)" -eq 0 ]; then
+        USE_SUDO=""
+        return 0
+    fi
+
+    if sudo -n true 2>/dev/null; then
+        USE_SUDO="sudo"
+        return 0
+    fi
+
+    echo ""
+    log_info "Root access is required to install system packages."
+    echo "You can:"
+    echo "  1. Enter your password for sudo access"
+    echo "  2. Press Ctrl+C to cancel and use --local mode instead"
+    echo ""
+
+    if sudo -v; then
+        USE_SUDO="sudo"
+        return 0
+    else
+        log_warning "Could not obtain root access"
+        return 1
+    fi
+}
+
+# Check what's already installed
+check_existing_deps() {
+    log_info "Checking existing dependencies..."
+
+    MISSING_ESSENTIAL=()
+    MISSING_OPTIONAL=()
+
+    # Essential build tools
+    command_exists cmake || MISSING_ESSENTIAL+=("cmake")
+    command_exists ninja || command_exists ninja-build || MISSING_ESSENTIAL+=("ninja")
+    command_exists pkg-config || MISSING_ESSENTIAL+=("pkg-config")
+    command_exists g++ || command_exists clang++ || MISSING_ESSENTIAL+=("c++ compiler")
+
+    # Essential libraries
+    lib_exists jsoncpp || MISSING_ESSENTIAL+=("jsoncpp")
+    lib_exists yaml-cpp || MISSING_ESSENTIAL+=("yaml-cpp")
+    lib_exists openssl || MISSING_ESSENTIAL+=("openssl")
+    lib_exists libcurl || MISSING_ESSENTIAL+=("curl")
+    lib_exists gtest || MISSING_ESSENTIAL+=("gtest")
+
+    # Optional libraries (transport/protocol specific)
+    lib_exists paho-mqtt3as || MISSING_OPTIONAL+=("paho-mqtt-c")
+    lib_exists paho-mqttpp3 || MISSING_OPTIONAL+=("paho-mqtt-cpp")
+    lib_exists libzmq || MISSING_OPTIONAL+=("zeromq")
+    lib_exists libmodbus || MISSING_OPTIONAL+=("libmodbus")
+    lib_exists rdkafka || MISSING_OPTIONAL+=("librdkafka")
+
+    if [ ${#MISSING_ESSENTIAL[@]} -eq 0 ]; then
+        log_success "All essential dependencies are installed"
+    else
+        log_warning "Missing essential dependencies: ${MISSING_ESSENTIAL[*]}"
+    fi
+
+    if [ ${#MISSING_OPTIONAL[@]} -gt 0 ]; then
+        log_info "Missing optional dependencies: ${MISSING_OPTIONAL[*]}"
+    fi
+}
+
+# Install packages using system package manager
+install_system_packages() {
+    local packages=("$@")
+
+    if [ -z "$PKG_MGR" ]; then
+        log_warning "No package manager available for system installation"
+        return 1
+    fi
+
+    case "$PKG_MGR" in
+        apt)
+            $USE_SUDO apt-get update
+            $USE_SUDO apt-get install -y "${packages[@]}"
+            ;;
+        dnf|yum)
+            $USE_SUDO $PKG_MGR install -y "${packages[@]}"
+            ;;
+        pacman)
+            $USE_SUDO pacman -Sy --noconfirm "${packages[@]}"
+            ;;
+    esac
 }
 
 # Install dependencies for Ubuntu/Debian
 install_ubuntu_debian() {
     log_info "Installing dependencies for Ubuntu/Debian..."
-    
-    # Update package list
-    sudo apt update
-    
+
     # Essential build tools
-    sudo apt install -y \
-        build-essential \
-        cmake \
-        git \
-        pkg-config \
-        ninja-build \
+    local essential_pkgs=(
+        build-essential
+        cmake
+        ninja-build
+        pkg-config
         ccache
-    
-    # C++ libraries
-    sudo apt install -y \
-        libjsoncpp-dev \
-        libyaml-cpp-dev \
-        libgtest-dev \
-        libgmock-dev \
-        libfmt-dev \
-        libspdlog-dev
-    
+        git
+    )
+
+    # Essential libraries
+    local lib_pkgs=(
+        libjsoncpp-dev
+        libyaml-cpp-dev
+        libssl-dev
+        libcurl4-openssl-dev
+        zlib1g-dev
+        libgtest-dev
+        libgmock-dev
+    )
+
     # MQTT dependencies
-    sudo apt install -y \
-        libpaho-mqtt-dev \
+    local mqtt_pkgs=(
+        libpaho-mqtt-dev
         libpaho-mqttpp-dev
-    
-    # ZeroMQ dependencies
-    sudo apt install -y \
-        libzmq3-dev \
+    )
+
+    # Optional dependencies
+    local optional_pkgs=(
+        libzmq3-dev
         libczmq-dev
-    
-    # Kafka dependencies (librdkafka)
-    sudo apt install -y \
         librdkafka-dev
-    
-    # Modbus dependencies
-    sudo apt install -y \
         libmodbus-dev
-    
-    # OPC UA dependencies (open62541)
-    if ! pkg-config --exists open62541; then
-        log_warning "open62541 not available in package manager. Installing from source..."
-        install_open62541_from_source
+        valgrind
+        clang
+        clang-tidy
+        clang-format
+        lcov
+    )
+
+    if [ "$INSTALL_MODE" = "minimal" ]; then
+        install_system_packages "${essential_pkgs[@]}" "${lib_pkgs[@]}"
     else
-        sudo apt install -y libopen62541-dev
+        install_system_packages "${essential_pkgs[@]}" "${lib_pkgs[@]}" "${mqtt_pkgs[@]}" "${optional_pkgs[@]}"
     fi
-    
-    # InfluxDB client (optional)
-    if ! pkg-config --exists influxdb-cxx; then
-        log_warning "InfluxDB C++ client not available in package manager"
-        log_info "You may need to install it manually if using InfluxDB sink"
-    fi
-    
+
     log_success "Ubuntu/Debian dependencies installed successfully"
 }
 
 # Install dependencies for CentOS/RHEL/Fedora
 install_redhat_fedora() {
     log_info "Installing dependencies for RedHat/Fedora..."
-    
-    # Determine package manager
-    if command -v dnf &> /dev/null; then
-        PKG_MGR="dnf"
-    elif command -v yum &> /dev/null; then
-        PKG_MGR="yum"
-    else
-        log_error "No suitable package manager found"
-        exit 1
-    fi
-    
-    # Enable EPEL repository for CentOS/RHEL
+
+    # Enable EPEL for CentOS/RHEL
     if [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" ]]; then
-        sudo $PKG_MGR install -y epel-release
+        $USE_SUDO $PKG_MGR install -y epel-release
     fi
-    
-    # Essential build tools
-    sudo $PKG_MGR groupinstall -y "Development Tools"
-    sudo $PKG_MGR install -y \
-        cmake \
-        git \
-        pkgconfig \
-        ninja-build \
+
+    local essential_pkgs=(
+        gcc-c++
+        cmake
+        ninja-build
+        pkgconfig
         ccache
-    
-    # C++ libraries
-    sudo $PKG_MGR install -y \
-        jsoncpp-devel \
-        yaml-cpp-devel \
-        gtest-devel \
-        gmock-devel \
-        fmt-devel \
-        spdlog-devel
-    
-    # MQTT dependencies
-    sudo $PKG_MGR install -y \
-        paho-c-devel \
+        git
+    )
+
+    local lib_pkgs=(
+        jsoncpp-devel
+        yaml-cpp-devel
+        openssl-devel
+        libcurl-devel
+        zlib-devel
+        gtest-devel
+        gmock-devel
+    )
+
+    local mqtt_pkgs=(
+        paho-c-devel
         paho-cpp-devel
-    
-    # ZeroMQ dependencies
-    sudo $PKG_MGR install -y \
-        zeromq-devel \
+    )
+
+    local optional_pkgs=(
+        zeromq-devel
         czmq-devel
-    
-    # Kafka dependencies
-    sudo $PKG_MGR install -y \
         librdkafka-devel
-    
-    # Modbus dependencies
-    sudo $PKG_MGR install -y \
         libmodbus-devel
-    
-    # OPC UA dependencies
-    log_warning "open62541 may need to be installed from source on RedHat/Fedora"
-    
+        valgrind
+        clang
+        clang-tools-extra
+    )
+
+    if [ "$INSTALL_MODE" = "minimal" ]; then
+        install_system_packages "${essential_pkgs[@]}" "${lib_pkgs[@]}"
+    else
+        install_system_packages "${essential_pkgs[@]}" "${lib_pkgs[@]}" "${mqtt_pkgs[@]}" "${optional_pkgs[@]}"
+    fi
+
     log_success "RedHat/Fedora dependencies installed successfully"
 }
 
-# Install open62541 from source
-install_open62541_from_source() {
-    log_info "Installing open62541 from source..."
-    
-    TEMP_DIR=$(mktemp -d)
-    cd "$TEMP_DIR"
-    
-    git clone https://github.com/open62541/open62541.git
-    cd open62541
-    git checkout v1.3.8  # Use stable version
-    
-    mkdir build && cd build
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_SHARED_LIBS=ON \
-        -DUA_ENABLE_AMALGAMATION=ON \
-        -DUA_ENABLE_ENCRYPTION=ON
-    
-    make -j$(nproc)
-    sudo make install
-    sudo ldconfig
-    
-    cd /
-    rm -rf "$TEMP_DIR"
-    
-    log_success "open62541 installed from source"
+# Install to local directory without root
+install_local() {
+    log_info "Installing dependencies to $INSTALL_DIR (no root required)..."
+
+    mkdir -p "$INSTALL_DIR"/{bin,lib,include,share}
+
+    # Add to PATH if not already there
+    if [[ ":$PATH:" != *":$INSTALL_DIR/bin:"* ]]; then
+        log_info "Adding $INSTALL_DIR/bin to PATH"
+        export PATH="$INSTALL_DIR/bin:$PATH"
+        echo "export PATH=\"$INSTALL_DIR/bin:\$PATH\"" >> ~/.bashrc
+        echo "export LD_LIBRARY_PATH=\"$INSTALL_DIR/lib:\$LD_LIBRARY_PATH\"" >> ~/.bashrc
+        echo "export PKG_CONFIG_PATH=\"$INSTALL_DIR/lib/pkgconfig:\$PKG_CONFIG_PATH\"" >> ~/.bashrc
+    fi
+
+    # Install CMake if not present
+    if ! command_exists cmake; then
+        log_info "Installing CMake..."
+        install_cmake_local
+    fi
+
+    # Install Ninja if not present
+    if ! command_exists ninja; then
+        log_info "Installing Ninja..."
+        install_ninja_local
+    fi
+
+    log_warning "Some libraries may still need system installation."
+    log_info "Consider using a package manager or building from source."
+
+    log_success "Local installation completed"
 }
 
-# Install additional tools
-install_additional_tools() {
-    log_info "Installing additional development tools..."
-    
-    # Valgrind for memory debugging
-    if [[ "$DISTRO" == "ubuntu" || "$DISTRO" == "debian" ]]; then
-        sudo apt install -y valgrind
-    elif [[ "$DISTRO" == "centos" || "$DISTRO" == "rhel" || "$DISTRO" == "fedora" ]]; then
-        sudo $PKG_MGR install -y valgrind
-    fi
-    
-    # Clang tools (optional)
-    if [[ "$DISTRO" == "ubuntu" || "$DISTRO" == "debian" ]]; then
-        sudo apt install -y clang clang-tools clang-tidy clang-format
-    elif [[ "$DISTRO" == "fedora" ]]; then
-        sudo dnf install -y clang clang-tools-extra
-    fi
-    
-    log_success "Additional tools installed"
+# Install CMake locally
+install_cmake_local() {
+    local cmake_version="3.28.1"
+    local cmake_url="https://github.com/Kitware/CMake/releases/download/v${cmake_version}/cmake-${cmake_version}-linux-x86_64.tar.gz"
+
+    TEMP_DIR=$(mktemp -d)
+    cd "$TEMP_DIR"
+
+    curl -LO "$cmake_url"
+    tar -xzf "cmake-${cmake_version}-linux-x86_64.tar.gz"
+    cp -r "cmake-${cmake_version}-linux-x86_64"/* "$INSTALL_DIR/"
+
+    cd /
+    rm -rf "$TEMP_DIR"
+
+    log_success "CMake ${cmake_version} installed to $INSTALL_DIR"
+}
+
+# Install Ninja locally
+install_ninja_local() {
+    local ninja_version="1.11.1"
+    local ninja_url="https://github.com/ninja-build/ninja/releases/download/v${ninja_version}/ninja-linux.zip"
+
+    TEMP_DIR=$(mktemp -d)
+    cd "$TEMP_DIR"
+
+    curl -LO "$ninja_url"
+    unzip ninja-linux.zip
+    cp ninja "$INSTALL_DIR/bin/"
+    chmod +x "$INSTALL_DIR/bin/ninja"
+
+    cd /
+    rm -rf "$TEMP_DIR"
+
+    log_success "Ninja ${ninja_version} installed to $INSTALL_DIR"
 }
 
 # Verify installation
 verify_installation() {
     log_info "Verifying installation..."
-    
-    # Check CMake version
-    CMAKE_VERSION=$(cmake --version | head -n1 | cut -d' ' -f3)
-    log_info "CMake version: $CMAKE_VERSION"
-    
+
+    local status=0
+
+    # Check CMake
+    if command_exists cmake; then
+        CMAKE_VERSION=$(cmake --version | head -n1 | cut -d' ' -f3)
+        log_success "CMake version: $CMAKE_VERSION"
+    else
+        log_error "CMake not found"
+        status=1
+    fi
+
+    # Check Ninja
+    if command_exists ninja || command_exists ninja-build; then
+        log_success "Ninja found"
+    else
+        log_warning "Ninja not found (will use Make instead)"
+    fi
+
     # Check required libraries
-    REQUIRED_LIBS=("jsoncpp" "yaml-cpp")
-    
-    for lib in "${REQUIRED_LIBS[@]}"; do
-        if pkg-config --exists "$lib"; then
-            VERSION=$(pkg-config --modversion "$lib")
+    local required_libs=("jsoncpp" "yaml-cpp" "openssl")
+    for lib in "${required_libs[@]}"; do
+        if lib_exists "$lib"; then
+            VERSION=$(pkg-config --modversion "$lib" 2>/dev/null || echo "unknown")
             log_success "$lib found (version: $VERSION)"
         else
             log_warning "$lib not found via pkg-config"
         fi
     done
-    
+
     # Check MQTT libraries
-    if [ -f /usr/lib/libpaho-mqtt3as.so ] || [ -f /usr/local/lib/libpaho-mqtt3as.so ]; then
+    if [ -f /usr/lib/libpaho-mqtt3as.so ] || [ -f /usr/local/lib/libpaho-mqtt3as.so ] || \
+       [ -f /usr/lib/x86_64-linux-gnu/libpaho-mqtt3as.so ]; then
         log_success "Paho MQTT C library found"
     else
         log_warning "Paho MQTT C library not found"
     fi
-    
-    if [ -f /usr/lib/libpaho-mqttpp3.so ] || [ -f /usr/local/lib/libpaho-mqttpp3.so ]; then
-        log_success "Paho MQTT C++ library found"
-    else
-        log_warning "Paho MQTT C++ library not found"
-    fi
-    
+
     log_success "Installation verification completed"
+    return $status
 }
 
 # Print build instructions
@@ -257,92 +426,133 @@ ${GREEN}=== IPB Build Instructions ===${NC}
 
 Now you can build IPB with the following commands:
 
-${BLUE}# Extract the archive${NC}
-tar -xzf ipb-monorepo-v*.tar.gz
-cd ipb
-
-${BLUE}# Create build directory${NC}
-mkdir build && cd build
-
-${BLUE}# Configure with CMake (all components)${NC}
-cmake .. -DCMAKE_BUILD_TYPE=Release \\
-         -DENABLE_CONSOLE_SINK=ON \\
-         -DENABLE_SYSLOG_SINK=ON \\
-         -DENABLE_MQTT_SINK=ON \\
-         -DBUILD_EXAMPLES=ON \\
-         -DBUILD_TESTING=ON
+${BLUE}# Configure with CMake${NC}
+cmake -B build -G Ninja \\
+    -DCMAKE_BUILD_TYPE=Release \\
+    -DBUILD_TESTING=ON \\
+    -DIPB_SINK_CONSOLE=ON \\
+    -DIPB_SINK_MQTT=ON
 
 ${BLUE}# Build the project${NC}
-make -j\$(nproc)
-
-${BLUE}# Install (optional)${NC}
-sudo make install
+cmake --build build --parallel \$(nproc)
 
 ${BLUE}# Run tests${NC}
-ctest
+cd build && ctest --output-on-failure
 
-${BLUE}# Run examples${NC}
-./examples/mock_data_flow_test
-
-${GREEN}=== Individual Component Build ===${NC}
-
-You can also build individual components:
-
-${BLUE}# Build only libipb-common${NC}
-cd libipb-common && mkdir build && cd build
-cmake .. && make
-
-${BLUE}# Build only MQTT sink${NC}
-cd libipb-sink-mqtt && mkdir build && cd build
-cmake .. && make
-
-For more information, see the README.md file.
+${GREEN}=== Quick Build Script ===${NC}
+You can also use: ./scripts/build.sh
 
 EOF
 }
 
-# Main installation function
+# Main function
 main() {
+    local INSTALL_MODE="full"
+    local AUTO_MODE="true"
+    local NO_CONFIRM=""
+    local DRY_RUN=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                print_usage
+                exit 0
+                ;;
+            -l|--local)
+                USE_SUDO="never"
+                AUTO_MODE="false"
+                shift
+                ;;
+            -s|--system)
+                AUTO_MODE="false"
+                shift
+                ;;
+            -a|--auto)
+                AUTO_MODE="true"
+                shift
+                ;;
+            -m|--minimal)
+                INSTALL_MODE="minimal"
+                shift
+                ;;
+            -f|--full)
+                INSTALL_MODE="full"
+                shift
+                ;;
+            --no-confirm)
+                NO_CONFIRM="true"
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN="true"
+                shift
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                print_usage
+                exit 1
+                ;;
+        esac
+    done
+
     echo "=== IPB Dependencies Installation Script for Linux ==="
-    echo "This script will install all required dependencies for building IPB"
     echo ""
-    
-    # Check if running as root
-    if [[ $EUID -eq 0 ]]; then
-        log_error "This script should not be run as root"
-        log_info "Please run as a regular user with sudo privileges"
-        exit 1
-    fi
-    
-    # Check sudo access
-    if ! sudo -n true 2>/dev/null; then
-        log_info "This script requires sudo privileges"
-        sudo -v
-    fi
-    
+
     detect_distro
-    
-    case "$DISTRO" in
-        ubuntu|debian)
-            install_ubuntu_debian
-            ;;
-        centos|rhel|fedora)
-            install_redhat_fedora
-            ;;
-        *)
-            log_error "Unsupported distribution: $DISTRO"
-            log_info "Supported distributions: Ubuntu, Debian, CentOS, RHEL, Fedora"
-            exit 1
-            ;;
-    esac
-    
-    install_additional_tools
+    check_existing_deps
+
+    # In auto mode, try to detect what's needed
+    if [ "$AUTO_MODE" = "true" ]; then
+        if [ ${#MISSING_ESSENTIAL[@]} -gt 0 ]; then
+            log_info "Essential dependencies are missing. Requesting root access..."
+            if ! request_sudo; then
+                log_warning "Cannot install system packages without root."
+                log_info "Installing what we can locally..."
+                install_local
+            fi
+        fi
+    elif [ "$USE_SUDO" != "never" ]; then
+        request_sudo
+    fi
+
+    # Skip actual installation in dry-run mode
+    if [ "$DRY_RUN" = "true" ]; then
+        log_info "Dry run mode - no changes will be made"
+        exit 0
+    fi
+
+    # Install based on distribution
+    if [ "$USE_SUDO" != "never" ] && [ -n "$PKG_MGR" ]; then
+        case "$DISTRO" in
+            ubuntu|debian|pop|linuxmint)
+                install_ubuntu_debian
+                ;;
+            centos|rhel|fedora|rocky|almalinux)
+                install_redhat_fedora
+                ;;
+            arch|manjaro)
+                log_info "Installing for Arch Linux..."
+                $USE_SUDO pacman -Sy --noconfirm \
+                    base-devel cmake ninja pkgconf ccache \
+                    jsoncpp yaml-cpp openssl curl zlib gtest \
+                    paho-mqtt-c zeromq czmq librdkafka libmodbus
+                ;;
+            *)
+                log_warning "Unsupported distribution: $DISTRO"
+                log_info "Attempting local installation..."
+                install_local
+                ;;
+        esac
+    else
+        install_local
+    fi
+
     verify_installation
     print_build_instructions
-    
-    log_success "IPB dependencies installation completed successfully!"
+
+    log_success "IPB dependencies installation completed!"
 }
 
 # Run main function
 main "$@"
-
