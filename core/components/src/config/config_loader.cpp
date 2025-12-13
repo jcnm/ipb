@@ -70,6 +70,12 @@ ConfigFormat ConfigLoader::detect_format_from_content(std::string_view content) 
 
 namespace {
 
+// Forward declarations for circular dependencies
+MetricsConfig parse_metrics_config(const YAML::Node& node);
+HealthCheckConfig parse_health_check_config(const YAML::Node& node);
+PrometheusConfig parse_prometheus_config(const YAML::Node& node);
+SecurityConfig parse_security_config(const YAML::Node& node);
+
 template<typename T>
 T yaml_get(const YAML::Node& node, const std::string& key, T default_value) {
     if (node[key]) {
@@ -484,6 +490,49 @@ FilterConfig parse_filter_config(const YAML::Node& node) {
     return config;
 }
 
+// Parse Route filter configuration
+RouteFilterConfig parse_route_filter_config(const YAML::Node& node) {
+    RouteFilterConfig config;
+    if (!node) return config;
+
+    config.address_pattern = yaml_get<std::string>(node, "address_pattern", "");
+    config.enable_value_filter = yaml_get(node, "enable_value_filter", false);
+    config.value_condition = yaml_get<std::string>(node, "value_condition", "");
+
+    if (node["protocol_ids"]) {
+        for (const auto& id : node["protocol_ids"]) {
+            config.protocol_ids.push_back(id.as<std::string>());
+        }
+    }
+
+    if (node["quality_levels"]) {
+        for (const auto& level : node["quality_levels"]) {
+            config.quality_levels.push_back(level.as<std::string>());
+        }
+    }
+
+    if (node["tags"]) {
+        for (const auto& tag : node["tags"]) {
+            config.tags.push_back(tag.as<std::string>());
+        }
+    }
+
+    return config;
+}
+
+// Parse Route destination configuration
+RouteDestinationConfig parse_route_destination_config(const YAML::Node& node) {
+    RouteDestinationConfig config;
+    if (!node) return config;
+
+    config.sink_id = yaml_get<std::string>(node, "sink_id", "");
+    config.priority = yaml_get<uint32_t>(node, "priority", 0);
+    config.weight = yaml_get<uint32_t>(node, "weight", 100);
+    config.failover_only = yaml_get(node, "failover_only", false);
+
+    return config;
+}
+
 // Parse Route configuration
 RouteConfig parse_route_config(const YAML::Node& node) {
     RouteConfig config;
@@ -495,7 +544,21 @@ RouteConfig parse_route_config(const YAML::Node& node) {
     config.enabled = yaml_get(node, "enabled", true);
     config.priority = yaml_get<uint32_t>(node, "priority", 0);
     config.transform_script = yaml_get<std::string>(node, "transform_script", "");
+    config.stop_on_match = yaml_get(node, "stop_on_match", false);
 
+    // Parse filter (enhanced routing)
+    if (node["filter"]) {
+        config.filter = parse_route_filter_config(node["filter"]);
+    }
+
+    // Parse destinations (enhanced routing)
+    if (node["destinations"]) {
+        for (const auto& dest_node : node["destinations"]) {
+            config.destinations.push_back(parse_route_destination_config(dest_node));
+        }
+    }
+
+    // Legacy sink_ids support
     if (node["sink_ids"]) {
         for (const auto& id : node["sink_ids"]) {
             config.sink_ids.push_back(id.as<std::string>());
@@ -507,6 +570,112 @@ RouteConfig parse_route_config(const YAML::Node& node) {
             config.field_mappings[kv.first.as<std::string>()] = kv.second.as<std::string>();
         }
     }
+
+    return config;
+}
+
+// Parse Scheduler configuration
+SchedulerConfig parse_scheduler_config(const YAML::Node& node) {
+    SchedulerConfig config;
+    if (!node) return config;
+
+    config.enabled = yaml_get(node, "enabled", true);
+    config.enable_realtime_priority = yaml_get(node, "enable_realtime_priority", false);
+    config.realtime_priority = yaml_get<int>(node, "realtime_priority", 50);
+    config.enable_cpu_affinity = yaml_get(node, "enable_cpu_affinity", false);
+    config.default_deadline = std::chrono::microseconds(
+        yaml_get<int64_t>(node, "default_deadline_us", 1000));
+    config.max_tasks = yaml_get<size_t>(node, "max_tasks", 10000);
+    config.worker_threads = yaml_get<size_t>(node, "worker_threads", 0);
+    config.preemptive = yaml_get(node, "preemptive", true);
+    config.watchdog_timeout = yaml_get_ms(node, "watchdog_timeout", std::chrono::milliseconds{5000});
+
+    if (node["cpu_cores"]) {
+        for (const auto& core : node["cpu_cores"]) {
+            config.cpu_cores.push_back(core.as<int>());
+        }
+    }
+
+    return config;
+}
+
+// Parse Command interface configuration
+CommandInterfaceConfig parse_command_interface_config(const YAML::Node& node) {
+    CommandInterfaceConfig config;
+    if (!node) return config;
+
+    config.enabled = yaml_get(node, "enabled", false);
+    config.broker_url = yaml_get<std::string>(node, "broker_url", "mqtt://localhost:1883");
+    config.client_id = yaml_get<std::string>(node, "client_id", "ipb-gateway-cmd");
+    config.command_topic = yaml_get<std::string>(node, "command_topic", "ipb/gateway/commands");
+    config.response_topic = yaml_get<std::string>(node, "response_topic", "ipb/gateway/responses");
+    config.status_topic = yaml_get<std::string>(node, "status_topic", "ipb/gateway/status");
+    config.status_interval = yaml_get_sec(node, "status_interval", std::chrono::seconds{30});
+    config.qos = yaml_get<uint8_t>(node, "qos", 1);
+
+    if (node["security"]) {
+        config.security = parse_security_config(node["security"]);
+    }
+
+    return config;
+}
+
+// Parse Health check configuration
+HealthCheckConfig parse_health_check_config(const YAML::Node& node) {
+    HealthCheckConfig config;
+    if (!node) return config;
+
+    config.enabled = yaml_get(node, "enabled", true);
+    config.interval = yaml_get_sec(node, "interval", std::chrono::seconds{10});
+    config.timeout = yaml_get_sec(node, "timeout", std::chrono::seconds{5});
+    config.unhealthy_threshold = yaml_get<uint32_t>(node, "unhealthy_threshold", 3);
+    config.healthy_threshold = yaml_get<uint32_t>(node, "healthy_threshold", 2);
+
+    if (node["check_endpoints"]) {
+        for (const auto& endpoint : node["check_endpoints"]) {
+            config.check_endpoints.push_back(endpoint.as<std::string>());
+        }
+    }
+
+    return config;
+}
+
+// Parse Prometheus configuration
+PrometheusConfig parse_prometheus_config(const YAML::Node& node) {
+    PrometheusConfig config;
+    if (!node) return config;
+
+    config.enabled = yaml_get(node, "enabled", false);
+    config.port = yaml_get<uint16_t>(node, "port", 9090);
+    config.path = yaml_get<std::string>(node, "path", "/metrics");
+    config.bind_address = yaml_get<std::string>(node, "bind_address", "0.0.0.0");
+
+    return config;
+}
+
+// Parse Monitoring configuration
+MonitoringConfig parse_monitoring_config(const YAML::Node& node) {
+    MonitoringConfig config;
+    if (!node) return config;
+
+    config.metrics = parse_metrics_config(node["metrics"]);
+    config.health_check = parse_health_check_config(node["health_check"]);
+    config.prometheus = parse_prometheus_config(node["prometheus"]);
+
+    return config;
+}
+
+// Parse Hot reload configuration
+HotReloadConfig parse_hot_reload_config(const YAML::Node& node) {
+    HotReloadConfig config;
+    if (!node) return config;
+
+    config.enabled = yaml_get(node, "enabled", true);
+    config.check_interval = yaml_get_sec(node, "check_interval", std::chrono::seconds{10});
+    config.reload_scoops = yaml_get(node, "reload_scoops", true);
+    config.reload_sinks = yaml_get(node, "reload_sinks", true);
+    config.reload_routes = yaml_get(node, "reload_routes", true);
+    config.graceful_restart = yaml_get(node, "graceful_restart", true);
 
     return config;
 }
@@ -619,6 +788,9 @@ RouterConfig parse_router_from_yaml(const YAML::Node& node) {
     config.enable_zero_copy = yaml_get(node, "enable_zero_copy", true);
     config.enable_lock_free = yaml_get(node, "enable_lock_free", true);
     config.batch_size = yaml_get<uint32_t>(node, "batch_size", 100);
+    config.routing_table_size = yaml_get<size_t>(node, "routing_table_size", 1000);
+    config.routing_timeout = std::chrono::microseconds(
+        yaml_get<int64_t>(node, "routing_timeout_us", 500));
     config.default_sink_id = yaml_get<std::string>(node, "default_sink_id", "");
     config.drop_unrouted = yaml_get(node, "drop_unrouted", false);
 
@@ -658,11 +830,31 @@ ApplicationConfig parse_application_from_yaml(const YAML::Node& root) {
         config.router = parse_router_from_yaml(root["router"]);
     }
 
+    // Parse scheduler
+    if (root["scheduler"]) {
+        config.scheduler = parse_scheduler_config(root["scheduler"]);
+    }
+
     // Parse logging
     config.logging = parse_logging_config(root["logging"]);
 
-    // Parse metrics
-    config.metrics = parse_metrics_config(root["metrics"]);
+    // Parse monitoring (combines metrics, health_check, prometheus)
+    if (root["monitoring"]) {
+        config.monitoring = parse_monitoring_config(root["monitoring"]);
+    } else {
+        // Legacy support: parse metrics at root level
+        config.monitoring.metrics = parse_metrics_config(root["metrics"]);
+    }
+
+    // Parse hot reload
+    if (root["hot_reload"]) {
+        config.hot_reload = parse_hot_reload_config(root["hot_reload"]);
+    }
+
+    // Parse command interface
+    if (root["command_interface"]) {
+        config.command_interface = parse_command_interface_config(root["command_interface"]);
+    }
 
     // Daemon settings
     config.daemon = yaml_get(root, "daemon", false);
@@ -1110,7 +1302,9 @@ ApplicationConfig parse_application_from_json(const Json::Value& root) {
     }
 
     config.logging = parse_logging_config_json(root["logging"]);
-    config.metrics = parse_metrics_config_json(root["metrics"]);
+
+    // Legacy support: parse metrics at root level into monitoring.metrics
+    config.monitoring.metrics = parse_metrics_config_json(root["metrics"]);
 
     config.daemon = json_get<bool>(root, "daemon", false);
     config.pid_file = json_get<std::string>(root, "pid_file", "");
