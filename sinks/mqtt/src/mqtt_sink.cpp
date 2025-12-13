@@ -168,14 +168,15 @@ MQTTSink::~MQTTSink() {
     shutdown();
 }
 
-common::Result<void> MQTTSink::initialize(const std::string& config_path) {
+common::Result<void> MQTTSink::initialize(const std::string& /*config_path*/) {
     try {
         // Get or create shared MQTT connection from MQTTConnectionManager
         auto& manager = transport::mqtt::MQTTConnectionManager::instance();
         connection_   = manager.get_or_create(config_.connection_id, config_.connection);
 
         if (!connection_) {
-            return common::Result<void>::failure("Failed to create MQTT connection");
+            return common::err<void>(common::ErrorCode::CONNECTION_FAILED,
+                                     "Failed to create MQTT connection");
         }
 
         // Setup callbacks
@@ -189,17 +190,17 @@ common::Result<void> MQTTSink::initialize(const std::string& config_path) {
                 handle_delivery_complete(token, success, error);
             });
 
-        return common::Result<void>::success();
+        return common::ok();
 
     } catch (const std::exception& e) {
-        return common::Result<void>::failure("Failed to initialize MQTT sink: " +
-                                             std::string(e.what()));
+        return common::err<void>(common::ErrorCode::UNKNOWN_ERROR,
+                                 "Failed to initialize MQTT sink: " + std::string(e.what()));
     }
 }
 
 common::Result<void> MQTTSink::start() {
     if (running_.load()) {
-        return common::Result<void>::failure("MQTT sink is already running");
+        return common::err<void>(common::ErrorCode::ALREADY_EXISTS, "MQTT sink is already running");
     }
 
     try {
@@ -234,17 +235,18 @@ common::Result<void> MQTTSink::start() {
         statistics_.reset();
         statistics_.last_connection_time.store(std::chrono::system_clock::now());
 
-        return common::Result<void>::success();
+        return common::ok();
 
     } catch (const std::exception& e) {
         running_.store(false);
-        return common::Result<void>::failure("Failed to start MQTT sink: " + std::string(e.what()));
+        return common::err<void>(common::ErrorCode::UNKNOWN_ERROR,
+                                 "Failed to start MQTT sink: " + std::string(e.what()));
     }
 }
 
 common::Result<void> MQTTSink::stop() {
     if (!running_.load()) {
-        return common::Result<void>::success();
+        return common::ok();
     }
 
     try {
@@ -280,10 +282,11 @@ common::Result<void> MQTTSink::stop() {
             return disconnect_result;
         }
 
-        return common::Result<void>::success();
+        return common::ok();
 
     } catch (const std::exception& e) {
-        return common::Result<void>::failure("Failed to stop MQTT sink: " + std::string(e.what()));
+        return common::err<void>(common::ErrorCode::UNKNOWN_ERROR,
+                                 "Failed to stop MQTT sink: " + std::string(e.what()));
     }
 }
 
@@ -300,11 +303,11 @@ common::Result<void> MQTTSink::shutdown() {
         // The MQTTConnectionManager handles cleanup when all references are released
         connection_.reset();
 
-        return common::Result<void>::success();
+        return common::ok();
 
     } catch (const std::exception& e) {
-        return common::Result<void>::failure("Failed to shutdown MQTT sink: " +
-                                             std::string(e.what()));
+        return common::err<void>(common::ErrorCode::UNKNOWN_ERROR,
+                                 "Failed to shutdown MQTT sink: " + std::string(e.what()));
     }
 }
 
@@ -335,7 +338,7 @@ bool MQTTSink::is_healthy() const {
 
 common::Result<void> MQTTSink::send_data_point(const common::DataPoint& data_point) {
     if (!running_.load()) {
-        return common::Result<void>::failure("MQTT sink is not running");
+        return common::err<void>(common::ErrorCode::INVALID_STATE, "MQTT sink is not running");
     }
 
     try {
@@ -345,7 +348,8 @@ common::Result<void> MQTTSink::send_data_point(const common::DataPoint& data_poi
                 std::lock_guard<std::mutex> lock(queue_mutex_);
                 if (message_queue_.size() >= config_.performance.queue_size) {
                     if (config_.performance.enable_backpressure) {
-                        return common::Result<void>::failure("Message queue is full");
+                        return common::err<void>(common::ErrorCode::QUEUE_FULL,
+                                                 "Message queue is full");
                     } else {
                         // Drop oldest message
                         message_queue_.pop();
@@ -355,7 +359,7 @@ common::Result<void> MQTTSink::send_data_point(const common::DataPoint& data_poi
             }
             queue_cv_.notify_one();
 
-            return common::Result<void>::success();
+            return common::ok();
         } else {
             // Synchronous processing
             return publish_data_point_internal(data_point);
@@ -363,13 +367,14 @@ common::Result<void> MQTTSink::send_data_point(const common::DataPoint& data_poi
 
     } catch (const std::exception& e) {
         statistics_.messages_failed.fetch_add(1);
-        return common::Result<void>::failure("Failed to send data point: " + std::string(e.what()));
+        return common::err<void>(common::ErrorCode::WRITE_ERROR,
+                                 "Failed to send data point: " + std::string(e.what()));
     }
 }
 
 common::Result<void> MQTTSink::send_data_set(const common::DataSet& data_set) {
     if (!running_.load()) {
-        return common::Result<void>::failure("MQTT sink is not running");
+        return common::err<void>(common::ErrorCode::INVALID_STATE, "MQTT sink is not running");
     }
 
     try {
@@ -388,12 +393,13 @@ common::Result<void> MQTTSink::send_data_set(const common::DataSet& data_set) {
                     return result;
                 }
             }
-            return common::Result<void>::success();
+            return common::ok();
         }
 
     } catch (const std::exception& e) {
         statistics_.messages_failed.fetch_add(1);
-        return common::Result<void>::failure("Failed to send data set: " + std::string(e.what()));
+        return common::err<void>(common::ErrorCode::WRITE_ERROR,
+                                 "Failed to send data set: " + std::string(e.what()));
     }
 }
 
@@ -431,13 +437,15 @@ common::Result<void> MQTTSink::connect_to_broker() {
 
         if (!connection_) {
             statistics_.connection_failures.fetch_add(1);
-            return common::Result<void>::failure("MQTT connection not initialized");
+            return common::err<void>(common::ErrorCode::INVALID_STATE,
+                                     "MQTT connection not initialized");
         }
 
         // Connect using shared transport
         if (!connection_->connect()) {
             statistics_.connection_failures.fetch_add(1);
-            return common::Result<void>::failure("Failed to connect to MQTT broker");
+            return common::err<void>(common::ErrorCode::CONNECTION_FAILED,
+                                     "Failed to connect to MQTT broker");
         }
 
         // Wait a bit for connection to establish
@@ -445,20 +453,21 @@ common::Result<void> MQTTSink::connect_to_broker() {
 
         if (!connection_->is_connected()) {
             statistics_.connection_failures.fetch_add(1);
-            return common::Result<void>::failure("MQTT connection not established");
+            return common::err<void>(common::ErrorCode::CONNECTION_FAILED,
+                                     "MQTT connection not established");
         }
 
         connected_.store(true);
         statistics_.is_connected.store(true);
         statistics_.last_connection_time.store(std::chrono::system_clock::now());
 
-        return common::Result<void>::success();
+        return common::ok();
 
     } catch (const std::exception& e) {
         statistics_.connection_failures.fetch_add(1);
         connected_.store(false);
-        return common::Result<void>::failure("Exception during MQTT connection: " +
-                                             std::string(e.what()));
+        return common::err<void>(common::ErrorCode::CONNECTION_FAILED,
+                                 "Exception during MQTT connection: " + std::string(e.what()));
     }
 }
 
@@ -469,11 +478,11 @@ common::Result<void> MQTTSink::disconnect_from_broker() {
         connected_.store(false);
         statistics_.is_connected.store(false);
 
-        return common::Result<void>::success();
+        return common::ok();
 
     } catch (const std::exception& e) {
-        return common::Result<void>::failure("Exception during MQTT disconnection: " +
-                                             std::string(e.what()));
+        return common::err<void>(common::ErrorCode::UNKNOWN_ERROR,
+                                 "Exception during MQTT disconnection: " + std::string(e.what()));
     }
 }
 
@@ -572,14 +581,15 @@ common::Result<void> MQTTSink::publish_data_point_internal(const common::DataPoi
 
     } catch (const std::exception& e) {
         statistics_.messages_failed.fetch_add(1);
-        return common::Result<void>::failure("Exception during publish: " + std::string(e.what()));
+        return common::err<void>(common::ErrorCode::WRITE_ERROR,
+                                 "Exception during publish: " + std::string(e.what()));
     }
 }
 
 common::Result<void> MQTTSink::publish_message(const std::string& topic, const std::string& payload,
                                                QoS qos, bool retain) {
     if (!is_connected()) {
-        return common::Result<void>::failure("MQTT client is not connected");
+        return common::err<void>(common::ErrorCode::NOT_CONNECTED, "MQTT client is not connected");
     }
 
     try {
@@ -588,22 +598,24 @@ common::Result<void> MQTTSink::publish_message(const std::string& topic, const s
             // Fire and forget
             int token = connection_->publish(topic, payload, qos, retain);
             if (token < 0) {
-                return common::Result<void>::failure("Failed to publish message");
+                return common::err<void>(common::ErrorCode::WRITE_ERROR,
+                                         "Failed to publish message");
             }
         } else {
             // Wait for delivery confirmation for QoS 1 and 2
             bool success = connection_->publish_sync(topic, payload, qos, retain,
                                                      config_.performance.publish_timeout);
             if (!success) {
-                return common::Result<void>::failure("Failed to publish message with confirmation");
+                return common::err<void>(common::ErrorCode::WRITE_ERROR,
+                                         "Failed to publish message with confirmation");
             }
         }
 
-        return common::Result<void>::success();
+        return common::ok();
 
     } catch (const std::exception& e) {
-        return common::Result<void>::failure("Failed to publish MQTT message: " +
-                                             std::string(e.what()));
+        return common::err<void>(common::ErrorCode::WRITE_ERROR,
+                                 "Failed to publish MQTT message: " + std::string(e.what()));
     }
 }
 
