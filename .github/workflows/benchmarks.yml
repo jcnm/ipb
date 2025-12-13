@@ -1,0 +1,147 @@
+# IPB Benchmark CI Workflow
+# Runs benchmarks and stores results as artifacts
+# Compares with baseline and posts results to PR
+
+name: Benchmarks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: 'Git ref to compare against'
+        required: false
+        default: 'main'
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for baseline comparison
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential cmake ninja-build \
+          libssl-dev libcurl4-openssl-dev \
+          libjsoncpp-dev libprotobuf-dev protobuf-compiler
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DBUILD_BENCHMARKS=ON
+
+    - name: Build
+      run: cmake --build build --target ipb-benchmarks
+
+    - name: Run benchmarks
+      run: |
+        mkdir -p benchmark-results
+        ./build/benchmarks/ipb-benchmarks \
+          --category=all \
+          --output=benchmark-results/current.json \
+          --format=json
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ github.sha }}
+        path: benchmark-results/
+        retention-days: 90
+
+    - name: Download baseline (if exists)
+      if: github.event_name == 'pull_request'
+      continue-on-error: true
+      uses: dawidd6/action-download-artifact@v3
+      with:
+        workflow: benchmarks.yml
+        branch: ${{ github.base_ref }}
+        name: benchmark-results-*
+        path: benchmark-baseline/
+
+    - name: Compare with baseline
+      if: github.event_name == 'pull_request'
+      id: compare
+      run: |
+        if [ -f benchmark-baseline/current.json ]; then
+          python3 scripts/compare-benchmarks.py \
+            --baseline benchmark-baseline/current.json \
+            --current benchmark-results/current.json \
+            --output comparison.md \
+            --threshold 10
+
+          echo "has_comparison=true" >> $GITHUB_OUTPUT
+        else
+          echo "No baseline found for comparison"
+          echo "has_comparison=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Post comparison to PR
+      if: github.event_name == 'pull_request' && steps.compare.outputs.has_comparison == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const comparison = fs.readFileSync('comparison.md', 'utf8');
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '## 📊 Benchmark Results\n\n' + comparison
+          });
+
+    - name: Check for regressions
+      if: github.event_name == 'pull_request'
+      run: |
+        if [ -f comparison.md ] && grep -q "🔴 REGRESSION" comparison.md; then
+          echo "::warning::Performance regression detected!"
+          # Optionally fail the build:
+          # exit 1
+        fi
+
+  # Store historical results for trending
+  store-results:
+    needs: benchmark
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Download results
+      uses: actions/download-artifact@v4
+      with:
+        name: benchmark-results-${{ github.sha }}
+        path: results/
+
+    - name: Push to metrics branch
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Create or checkout metrics branch
+        git fetch origin metrics:metrics 2>/dev/null || git checkout --orphan metrics
+        git checkout metrics
+
+        # Add timestamped results
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        mkdir -p history
+        cp results/current.json "history/${TIMESTAMP}_${{ github.sha }}.json"
+
+        # Keep only last 100 results
+        ls -t history/*.json | tail -n +101 | xargs -r rm
+
+        git add history/
+        git commit -m "Add benchmark results for ${{ github.sha }}"
+        git push origin metrics
