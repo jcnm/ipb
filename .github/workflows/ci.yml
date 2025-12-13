@@ -31,7 +31,7 @@ jobs:
   # ===========================================================================
   lint:
     name: Code Quality
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,13 +41,13 @@ jobs:
       - name: Install Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format-15 cppcheck
+          sudo apt-get install -y clang-format-18 cppcheck
 
       - name: Check Formatting
         run: |
           find core sinks scoops apps transport \
             -name '*.cpp' -o -name '*.hpp' | \
-            xargs clang-format-15 --dry-run --Werror
+            xargs clang-format-18 --dry-run --Werror
 
       - name: Run cppcheck
         run: |
@@ -76,40 +76,40 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux GCC - All modes
-        os: [ubuntu-22.04]
+        # Linux GCC-13 - All modes
+        os: [ubuntu-24.04]
         build_mode: [SERVER, EDGE, EMBEDDED]
         build_type: [Release, Debug]
-        compiler: [gcc-12]
-        cc: [gcc-12]
-        cxx: [g++-12]
+        compiler: [gcc-13]
+        cc: [gcc-13]
+        cxx: [g++-13]
         coverage: [false]
         include:
           # ===========================================
           # Linux - Additional compilers
           # ===========================================
           # Coverage build (SERVER mode only)
-          - os: ubuntu-22.04
-            compiler: gcc-12
-            cc: gcc-12
-            cxx: g++-12
+          - os: ubuntu-24.04
+            compiler: gcc-13
+            cc: gcc-13
+            cxx: g++-13
             build_mode: SERVER
             build_type: Debug
             coverage: true
 
-          # Clang builds (SERVER mode)
-          - os: ubuntu-22.04
-            compiler: clang-15
-            cc: clang-15
-            cxx: clang++-15
+          # Clang-18 builds (SERVER mode)
+          - os: ubuntu-24.04
+            compiler: clang-18
+            cc: clang-18
+            cxx: clang++-18
             build_mode: SERVER
             build_type: Release
             coverage: false
 
-          - os: ubuntu-22.04
-            compiler: clang-15
-            cc: clang-15
-            cxx: clang++-15
+          - os: ubuntu-24.04
+            compiler: clang-18
+            cc: clang-18
+            cxx: clang++-18
             build_mode: SERVER
             build_type: Debug
             coverage: false
@@ -439,7 +439,7 @@ jobs:
   # ===========================================================================
   static-analysis:
     name: Static Analysis
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: lint
     steps:
       - name: Checkout
@@ -451,8 +451,8 @@ jobs:
           sudo apt-get install -y \
             cmake \
             ninja-build \
-            clang-15 \
-            clang-tidy-15 \
+            clang-18 \
+            clang-tidy-18 \
             libjsoncpp-dev \
             libyaml-cpp-dev \
             libpaho-mqtt-dev \
@@ -462,8 +462,8 @@ jobs:
 
       - name: Configure
         env:
-          CC: clang-15
-          CXX: clang++-15
+          CC: clang-18
+          CXX: clang++-18
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
@@ -476,7 +476,7 @@ jobs:
           find core sinks scoops apps transport \
             -name '*.cpp' | head -50 | \
             xargs -P $(nproc) -I{} \
-            clang-tidy-15 -p build {} 2>&1 | tee clang-tidy-report.txt
+            clang-tidy-18 -p build {} 2>&1 | tee clang-tidy-report.txt
         continue-on-error: true
 
       - name: Upload clang-tidy Report
@@ -490,7 +490,7 @@ jobs:
   # ===========================================================================
   sanitizers:
     name: Sanitizer (${{ matrix.sanitizer }})
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: build
     strategy:
       fail-fast: false
@@ -506,7 +506,7 @@ jobs:
           sudo apt-get install -y \
             cmake \
             ninja-build \
-            clang-15 \
+            clang-18 \
             libjsoncpp-dev \
             libyaml-cpp-dev \
             libpaho-mqtt-dev \
@@ -517,8 +517,8 @@ jobs:
 
       - name: Configure
         env:
-          CC: clang-15
-          CXX: clang++-15
+          CC: clang-18
+          CXX: clang++-18
         run: |
           SANITIZER_FLAGS=""
           case "${{ matrix.sanitizer }}" in
@@ -559,7 +559,7 @@ jobs:
   # ===========================================================================
   docs:
     name: Documentation
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -593,7 +593,7 @@ jobs:
   # ===========================================================================
   integration:
     name: Integration Tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: build
     services:
       mosquitto:
@@ -651,7 +651,7 @@ jobs:
   # ===========================================================================
   benchmark:
     name: Performance Benchmarks
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -694,7 +694,7 @@ jobs:
   # ===========================================================================
   ci-status:
     name: CI Status
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [build, static-analysis, sanitizers, docs, integration]
     if: always()
     steps:
