@@ -67,36 +67,38 @@ jobs:
           path: cppcheck-report.txt
 
   # ===========================================================================
-  # Build Matrix
+  # Build Matrix - Tests all build modes (SERVER, EDGE, EMBEDDED)
   # ===========================================================================
   build:
-    name: Build (${{ matrix.os }}, ${{ matrix.compiler }}, ${{ matrix.build_type }})
+    name: Build (${{ matrix.os }}, ${{ matrix.compiler }}, ${{ matrix.build_mode }}, ${{ matrix.build_type }})
     runs-on: ${{ matrix.os }}
     needs: lint
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-22.04]
+        build_mode: [SERVER, EDGE, EMBEDDED]
+        build_type: [Release, Debug]
+        compiler: [gcc-12]
+        cc: [gcc-12]
+        cxx: [g++-12]
+        coverage: [false]
         include:
-          # Linux GCC
+          # Coverage build (SERVER mode only)
           - os: ubuntu-22.04
             compiler: gcc-12
             cc: gcc-12
             cxx: g++-12
-            build_type: Release
-            coverage: false
-
-          - os: ubuntu-22.04
-            compiler: gcc-12
-            cc: gcc-12
-            cxx: g++-12
+            build_mode: SERVER
             build_type: Debug
             coverage: true
 
-          # Linux Clang
+          # Clang builds (SERVER mode)
           - os: ubuntu-22.04
             compiler: clang-15
             cc: clang-15
             cxx: clang++-15
+            build_mode: SERVER
             build_type: Release
             coverage: false
 
@@ -104,14 +106,16 @@ jobs:
             compiler: clang-15
             cc: clang-15
             cxx: clang++-15
+            build_mode: SERVER
             build_type: Debug
             coverage: false
 
-          # macOS
+          # macOS builds (SERVER mode)
           - os: macos-13
             compiler: clang
             cc: clang
             cxx: clang++
+            build_mode: SERVER
             build_type: Release
             coverage: false
 
@@ -119,6 +123,7 @@ jobs:
             compiler: clang
             cc: clang
             cxx: clang++
+            build_mode: SERVER
             build_type: Debug
             coverage: false
 
@@ -129,11 +134,11 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
+          key: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_mode }}-${{ matrix.build_type }}
           max-size: 500M
 
-      - name: Install Dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Install Dependencies (Linux - SERVER/EDGE)
+        if: runner.os == 'Linux' && matrix.build_mode != 'EMBEDDED'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -149,6 +154,20 @@ jobs:
             libgtest-dev \
             libgmock-dev \
             lcov
+
+      - name: Install Dependencies (Linux - EMBEDDED)
+        if: runner.os == 'Linux' && matrix.build_mode == 'EMBEDDED'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libcjson-dev \
+            libssl-dev \
+            libgtest-dev \
+            libgmock-dev
+          # Note: rapidyaml (ryml) may need to be built from source or skipped
 
       - name: Install Dependencies (macOS)
         if: runner.os == 'macOS'
@@ -170,14 +189,20 @@ jobs:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
         run: |
+          # Set IPB_FULL only for SERVER mode (EDGE/EMBEDDED use mode defaults)
+          FULL_FLAG=""
+          if [ "${{ matrix.build_mode }}" = "SERVER" ]; then
+            FULL_FLAG="-DIPB_FULL=ON"
+          fi
+
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DIPB_BUILD_MODE=SERVER \
+            -DIPB_BUILD_MODE=${{ matrix.build_mode }} \
             -DBUILD_TESTING=ON \
             -DBUILD_EXAMPLES=ON \
-            -DIPB_FULL=ON \
+            $FULL_FLAG \
             -DENABLE_COVERAGE=${{ matrix.coverage && 'ON' || 'OFF' }}
 
       - name: Build
@@ -234,10 +259,10 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload Build Artifacts
-        if: matrix.build_type == 'Release'
+        if: matrix.build_type == 'Release' && matrix.build_mode == 'SERVER'
         uses: actions/upload-artifact@v4
         with:
-          name: ipb-${{ matrix.os }}-${{ matrix.compiler }}
+          name: ipb-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_mode }}
           path: |
             build/apps/ipb-gate/ipb-gate
             build/apps/ipb-bridge/ipb-bridge
