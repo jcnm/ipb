@@ -80,7 +80,7 @@ jobs:
           --benchmark_report_aggregates_only=true
 
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: benchmark-results-${{ github.sha }}
         path: benchmark-results/
@@ -258,7 +258,7 @@ jobs:
         echo '```' >> memory-results/SUMMARY.md
 
     - name: Upload Memory Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: memory-benchmark-results-${{ github.sha }}
         path: memory-results/
@@ -349,7 +349,7 @@ jobs:
       continue-on-error: true
 
     - name: Upload Scalability Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: scalability-results-${{ github.sha }}
         path: scalability-results/
