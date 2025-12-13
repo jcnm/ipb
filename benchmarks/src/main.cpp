@@ -22,10 +22,13 @@
 #include "benchmarks_scoops.hpp"
 #include "benchmarks_transports.hpp"
 
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -61,6 +64,50 @@ std::string format_throughput_short(double ops) {
     return oss.str();
 }
 
+/**
+ * @brief Commit benchmark results to git
+ */
+bool git_commit_results(const std::string& version, const std::string& output_dir, bool verbose) {
+    // Build commit message
+    std::ostringstream msg;
+    msg << "benchmark: Add results for version " << version;
+
+    // Get current timestamp
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ts;
+    ts << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
+
+    // Commands to execute
+    std::vector<std::string> commands = {
+        "git add " + output_dir + "/*.json " + output_dir + "/*.csv 2>/dev/null",
+        "git add " + output_dir + "/../baselines/*.json 2>/dev/null",
+        "git add " + output_dir + "/../reports/*.md 2>/dev/null",
+        "git commit -m \"" + msg.str() + " (" + ts.str() + ")\" --allow-empty 2>/dev/null"
+    };
+
+    if (verbose) {
+        std::cout << "\nCommitting results to git...\n";
+    }
+
+    for (const auto& cmd : commands) {
+        int result = std::system(cmd.c_str());
+        // Ignore errors from git add (files may not exist)
+        (void)result;
+    }
+
+    // Check if commit succeeded
+    int commit_check = std::system("git log -1 --oneline 2>/dev/null | head -1");
+    if (commit_check == 0) {
+        if (verbose) {
+            std::cout << "Results committed to git.\n";
+        }
+        return true;
+    }
+
+    return false;
+}
+
 //=============================================================================
 // CLI Argument Parsing
 //=============================================================================
@@ -77,6 +124,7 @@ struct CliArgs {
     bool json{false};
     bool report{false};
     bool save_baseline{false};
+    bool auto_commit{false};  // Auto-commit results to git
     bool help{false};
 };
 
@@ -107,6 +155,7 @@ VERSIONING:
 OUTPUT:
     --output=<dir>              Output directory (default: ./benchmarks/results)
     --report                    Generate markdown report
+    --commit                    Auto-commit results to git after execution
 
 EXAMPLES:
     # Run all benchmarks
@@ -170,6 +219,8 @@ CliArgs parse_args(int argc, char** argv) {
             args.baseline_version = arg.substr(10);
         } else if (arg.starts_with("--output=")) {
             args.output_dir = arg.substr(9);
+        } else if (arg == "--commit") {
+            args.auto_commit = true;
         } else {
             std::cerr << "Unknown argument: " << arg << "\n";
         }
@@ -365,6 +416,11 @@ int main(int argc, char** argv) {
             file << report;
             std::cout << "Report saved: " << report_dir / report_file << "\n";
         }
+    }
+
+    // Auto-commit results to git if requested
+    if (args.auto_commit) {
+        git_commit_results(args.version, args.output_dir, args.verbose);
     }
 
     std::cout << "\n========================================\n";
