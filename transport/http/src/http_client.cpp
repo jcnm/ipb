@@ -4,12 +4,13 @@
  */
 
 #include "ipb/transport/http/http_client.hpp"
-#include "ipb/transport/http/backends/curl_backend.hpp"
 
-#include <sstream>
-#include <iomanip>
 #include <algorithm>
 #include <cctype>
+#include <iomanip>
+#include <sstream>
+
+#include "ipb/transport/http/backends/curl_backend.hpp"
 
 namespace ipb::transport::http {
 
@@ -20,9 +21,7 @@ namespace ipb::transport::http {
 class HTTPClient::Impl {
 public:
     explicit Impl(const HTTPConfig& config)
-        : config_(config)
-        , backend_(create_backend(config.backend))
-    {
+        : config_(config), backend_(create_backend(config.backend)) {
         if (!backend_) {
             // Fallback to default backend
             backend_ = create_backend(default_backend_type());
@@ -31,7 +30,8 @@ public:
 
     Response execute(const Request& req) {
         Request full_req = prepare_request(req);
-        return backend_ ? backend_->execute(full_req) : Response{.status_code = 0, .error_message = "No backend"};
+        return backend_ ? backend_->execute(full_req)
+                        : Response{.status_code = 0, .error_message = "No backend"};
     }
 
     void execute_async(const Request& req, ResponseCallback callback) {
@@ -84,7 +84,7 @@ public:
         }
 
         full_req.verify_ssl = config_.verify_ssl;
-        full_req.use_http2 = config_.use_http2;
+        full_req.use_http2  = config_.use_http2;
 
         return full_req;
     }
@@ -95,12 +95,11 @@ public:
 
 HTTPClient::HTTPClient() : HTTPClient(HTTPConfig::default_config()) {}
 
-HTTPClient::HTTPClient(const HTTPConfig& config)
-    : impl_(std::make_unique<Impl>(config)) {}
+HTTPClient::HTTPClient(const HTTPConfig& config) : impl_(std::make_unique<Impl>(config)) {}
 
 HTTPClient::~HTTPClient() = default;
 
-HTTPClient::HTTPClient(HTTPClient&&) noexcept = default;
+HTTPClient::HTTPClient(HTTPClient&&) noexcept            = default;
 HTTPClient& HTTPClient::operator=(HTTPClient&&) noexcept = default;
 
 const HTTPConfig& HTTPClient::config() const noexcept {
@@ -120,7 +119,7 @@ void HTTPClient::set_bearer_token(const std::string& token) {
 }
 
 void HTTPClient::set_basic_auth(const std::string& username, const std::string& password) {
-    impl_->config_.basic_auth_user = username;
+    impl_->config_.basic_auth_user     = username;
     impl_->config_.basic_auth_password = password;
     // Add Basic auth header
     std::string credentials = username + ":" + password;
@@ -138,8 +137,8 @@ Response HTTPClient::get(const std::string& url) {
 
 Response HTTPClient::get(const std::string& url, const Headers& headers) {
     Request req;
-    req.method = Method::GET;
-    req.url = url;
+    req.method  = Method::GET;
+    req.url     = url;
     req.headers = headers;
     return execute(req);
 }
@@ -147,7 +146,7 @@ Response HTTPClient::get(const std::string& url, const Headers& headers) {
 Response HTTPClient::post(const std::string& url, std::string_view body) {
     Request req;
     req.method = Method::POST;
-    req.url = url;
+    req.url    = url;
     req.set_body(body);
     return execute(req);
 }
@@ -155,7 +154,7 @@ Response HTTPClient::post(const std::string& url, std::string_view body) {
 Response HTTPClient::post_json(const std::string& url, std::string_view json) {
     Request req;
     req.method = Method::POST;
-    req.url = url;
+    req.url    = url;
     req.set_json_content();
     req.set_body(json);
     return execute(req);
@@ -165,7 +164,7 @@ Response HTTPClient::post_form(const std::string& url,
                                const std::map<std::string, std::string>& form_data) {
     Request req;
     req.method = Method::POST;
-    req.url = url;
+    req.url    = url;
     req.set_form_content();
     req.set_body(build_query_string(form_data));
     return execute(req);
@@ -174,7 +173,7 @@ Response HTTPClient::post_form(const std::string& url,
 Response HTTPClient::put(const std::string& url, std::string_view body) {
     Request req;
     req.method = Method::PUT;
-    req.url = url;
+    req.url    = url;
     req.set_body(body);
     return execute(req);
 }
@@ -182,7 +181,7 @@ Response HTTPClient::put(const std::string& url, std::string_view body) {
 Response HTTPClient::put_json(const std::string& url, std::string_view json) {
     Request req;
     req.method = Method::PUT;
-    req.url = url;
+    req.url    = url;
     req.set_json_content();
     req.set_body(json);
     return execute(req);
@@ -191,7 +190,7 @@ Response HTTPClient::put_json(const std::string& url, std::string_view json) {
 Response HTTPClient::patch(const std::string& url, std::string_view body) {
     Request req;
     req.method = Method::PATCH;
-    req.url = url;
+    req.url    = url;
     req.set_body(body);
     return execute(req);
 }
@@ -199,14 +198,14 @@ Response HTTPClient::patch(const std::string& url, std::string_view body) {
 Response HTTPClient::delete_(const std::string& url) {
     Request req;
     req.method = Method::DELETE_;
-    req.url = url;
+    req.url    = url;
     return execute(req);
 }
 
 Response HTTPClient::head(const std::string& url) {
     Request req;
     req.method = Method::HEAD;
-    req.url = url;
+    req.url    = url;
     return execute(req);
 }
 
@@ -245,12 +244,11 @@ std::string url_encode(std::string_view str) {
     encoded << std::hex;
 
     for (char c : str) {
-        if (std::isalnum(static_cast<unsigned char>(c)) ||
-            c == '-' || c == '_' || c == '.' || c == '~') {
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == '.' ||
+            c == '~') {
             encoded << c;
         } else {
-            encoded << '%' << std::setw(2)
-                    << static_cast<int>(static_cast<unsigned char>(c));
+            encoded << '%' << std::setw(2) << static_cast<int>(static_cast<unsigned char>(c));
         }
     }
 
@@ -310,7 +308,7 @@ std::optional<URLComponents> parse_url(const std::string& url) {
     // Find host and port
     auto host_start = scheme_end + 3;
     auto path_start = url.find('/', host_start);
-    auto host_end = (path_start != std::string::npos) ? path_start : url.size();
+    auto host_end   = (path_start != std::string::npos) ? path_start : url.size();
 
     std::string host_port = url.substr(host_start, host_end - host_start);
 
@@ -333,7 +331,7 @@ std::optional<URLComponents> parse_url(const std::string& url) {
     if (path_start != std::string::npos) {
         auto query_start = url.find('?', path_start);
         if (query_start != std::string::npos) {
-            components.path = url.substr(path_start, query_start - path_start);
+            components.path  = url.substr(path_start, query_start - path_start);
             components.query = url.substr(query_start + 1);
         } else {
             components.path = url.substr(path_start);
@@ -345,4 +343,4 @@ std::optional<URLComponents> parse_url(const std::string& url) {
     return components;
 }
 
-} // namespace ipb::transport::http
+}  // namespace ipb::transport::http

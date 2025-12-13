@@ -51,25 +51,24 @@ namespace ipb::common::metrics {
 // Types and Constants
 //=============================================================================
 
-using Labels = std::map<std::string, std::string>;
+using Labels    = std::map<std::string, std::string>;
 using Timestamp = std::chrono::system_clock::time_point;
 
 /**
  * @brief Metric type enumeration
  */
-enum class MetricType {
-    COUNTER,
-    GAUGE,
-    HISTOGRAM,
-    SUMMARY
-};
+enum class MetricType { COUNTER, GAUGE, HISTOGRAM, SUMMARY };
 
 inline std::string metric_type_string(MetricType type) {
     switch (type) {
-        case MetricType::COUNTER: return "counter";
-        case MetricType::GAUGE: return "gauge";
-        case MetricType::HISTOGRAM: return "histogram";
-        case MetricType::SUMMARY: return "summary";
+        case MetricType::COUNTER:
+            return "counter";
+        case MetricType::GAUGE:
+            return "gauge";
+        case MetricType::HISTOGRAM:
+            return "histogram";
+        case MetricType::SUMMARY:
+            return "summary";
     }
     return "unknown";
 }
@@ -85,10 +84,10 @@ class Metric {
 public:
     virtual ~Metric() = default;
 
-    virtual MetricType type() const = 0;
+    virtual MetricType type() const  = 0;
     virtual std::string name() const = 0;
     virtual std::string help() const = 0;
-    virtual Labels labels() const = 0;
+    virtual Labels labels() const    = 0;
 
     /**
      * @brief Export metric in Prometheus format
@@ -114,11 +113,7 @@ public:
 class alignas(IPB_CACHE_LINE_SIZE) Counter : public Metric {
 public:
     Counter(std::string name, std::string help = "", Labels labels = {})
-        : name_(std::move(name))
-        , help_(std::move(help))
-        , labels_(std::move(labels))
-        , value_(0)
-    {}
+        : name_(std::move(name)), help_(std::move(help)), labels_(std::move(labels)), value_(0) {}
 
     MetricType type() const override { return MetricType::COUNTER; }
     std::string name() const override { return name_; }
@@ -128,15 +123,14 @@ public:
     /**
      * @brief Increment counter by 1
      */
-    void inc() noexcept {
-        value_.fetch_add(1, std::memory_order_relaxed);
-    }
+    void inc() noexcept { value_.fetch_add(1, std::memory_order_relaxed); }
 
     /**
      * @brief Increment counter by delta
      */
     void inc(double delta) noexcept {
-        if (delta < 0) return;  // Counters can't decrease
+        if (delta < 0)
+            return;  // Counters can't decrease
         uint64_t int_delta = static_cast<uint64_t>(delta * PRECISION);
         value_.fetch_add(int_delta, std::memory_order_relaxed);
     }
@@ -148,16 +142,14 @@ public:
         return static_cast<double>(value_.load(std::memory_order_relaxed)) / PRECISION;
     }
 
-    void reset() override {
-        value_.store(0, std::memory_order_relaxed);
-    }
+    void reset() override { value_.store(0, std::memory_order_relaxed); }
 
     std::string prometheus_format() const override {
         std::ostringstream oss;
         oss << "# HELP " << name_ << " " << help_ << "\n";
         oss << "# TYPE " << name_ << " counter\n";
-        oss << name_ << format_labels(labels_) << " " << std::fixed
-            << std::setprecision(6) << value() << "\n";
+        oss << name_ << format_labels(labels_) << " " << std::fixed << std::setprecision(6)
+            << value() << "\n";
         return oss.str();
     }
 
@@ -170,12 +162,14 @@ private:
     std::atomic<uint64_t> value_;
 
     static std::string format_labels(const Labels& labels) {
-        if (labels.empty()) return "";
+        if (labels.empty())
+            return "";
         std::ostringstream oss;
         oss << "{";
         bool first = true;
         for (const auto& [k, v] : labels) {
-            if (!first) oss << ",";
+            if (!first)
+                oss << ",";
             first = false;
             oss << k << "=\"" << v << "\"";
         }
@@ -196,10 +190,7 @@ private:
 class alignas(IPB_CACHE_LINE_SIZE) Gauge : public Metric {
 public:
     Gauge(std::string name, std::string help = "", Labels labels = {})
-        : name_(std::move(name))
-        , help_(std::move(help))
-        , labels_(std::move(labels))
-    {
+        : name_(std::move(name)), help_(std::move(help)), labels_(std::move(labels)) {
         value_.store(0, std::memory_order_relaxed);
     }
 
@@ -219,9 +210,7 @@ public:
     /**
      * @brief Increment gauge by 1
      */
-    void inc() noexcept {
-        value_.fetch_add(PRECISION, std::memory_order_relaxed);
-    }
+    void inc() noexcept { value_.fetch_add(PRECISION, std::memory_order_relaxed); }
 
     /**
      * @brief Increment gauge by delta
@@ -234,9 +223,7 @@ public:
     /**
      * @brief Decrement gauge by 1
      */
-    void dec() noexcept {
-        value_.fetch_sub(PRECISION, std::memory_order_relaxed);
-    }
+    void dec() noexcept { value_.fetch_sub(PRECISION, std::memory_order_relaxed); }
 
     /**
      * @brief Decrement gauge by delta
@@ -253,16 +240,14 @@ public:
         return static_cast<double>(value_.load(std::memory_order_relaxed)) / PRECISION;
     }
 
-    void reset() override {
-        value_.store(0, std::memory_order_relaxed);
-    }
+    void reset() override { value_.store(0, std::memory_order_relaxed); }
 
     std::string prometheus_format() const override {
         std::ostringstream oss;
         oss << "# HELP " << name_ << " " << help_ << "\n";
         oss << "# TYPE " << name_ << " gauge\n";
-        oss << name_ << format_labels(labels_) << " " << std::fixed
-            << std::setprecision(6) << value() << "\n";
+        oss << name_ << format_labels(labels_) << " " << std::fixed << std::setprecision(6)
+            << value() << "\n";
         return oss.str();
     }
 
@@ -275,12 +260,14 @@ private:
     std::atomic<int64_t> value_;
 
     static std::string format_labels(const Labels& labels) {
-        if (labels.empty()) return "";
+        if (labels.empty())
+            return "";
         std::ostringstream oss;
         oss << "{";
         bool first = true;
         for (const auto& [k, v] : labels) {
-            if (!first) oss << ",";
+            if (!first)
+                oss << ",";
             first = false;
             oss << k << "=\"" << v << "\"";
         }
@@ -303,15 +290,10 @@ class Histogram : public Metric {
 public:
     static const std::vector<double> DEFAULT_BUCKETS;
 
-    Histogram(std::string name,
-              std::vector<double> buckets = DEFAULT_BUCKETS,
-              std::string help = "",
-              Labels labels = {})
-        : name_(std::move(name))
-        , help_(std::move(help))
-        , labels_(std::move(labels))
-        , buckets_(std::move(buckets))
-    {
+    Histogram(std::string name, std::vector<double> buckets = DEFAULT_BUCKETS,
+              std::string help = "", Labels labels = {})
+        : name_(std::move(name)), help_(std::move(help)), labels_(std::move(labels)),
+          buckets_(std::move(buckets)) {
         std::sort(buckets_.begin(), buckets_.end());
 
         // Initialize bucket counters
@@ -356,9 +338,7 @@ public:
     /**
      * @brief Get observation count
      */
-    uint64_t count() const noexcept {
-        return count_.load(std::memory_order_relaxed);
-    }
+    uint64_t count() const noexcept { return count_.load(std::memory_order_relaxed); }
 
     /**
      * @brief Get sum of all observations
@@ -370,15 +350,14 @@ public:
     /**
      * @brief Get bucket boundaries
      */
-    const std::vector<double>& buckets() const noexcept {
-        return buckets_;
-    }
+    const std::vector<double>& buckets() const noexcept { return buckets_; }
 
     /**
      * @brief Get count for specific bucket
      */
     uint64_t bucket_count(size_t idx) const noexcept {
-        if (idx >= bucket_counts_.size()) return 0;
+        if (idx >= bucket_counts_.size())
+            return 0;
         return bucket_counts_[idx].load(std::memory_order_relaxed);
     }
 
@@ -399,17 +378,18 @@ public:
 
         // Output bucket counts
         for (size_t i = 0; i < buckets_.size(); ++i) {
-            oss << name_ << "_bucket" << format_labels_with_le(labels_, buckets_[i])
-                << " " << bucket_counts_[i].load(std::memory_order_relaxed) << "\n";
+            oss << name_ << "_bucket" << format_labels_with_le(labels_, buckets_[i]) << " "
+                << bucket_counts_[i].load(std::memory_order_relaxed) << "\n";
         }
 
         // +Inf bucket
-        oss << name_ << "_bucket" << format_labels_with_le(labels_, std::numeric_limits<double>::infinity())
-            << " " << bucket_counts_.back().load(std::memory_order_relaxed) << "\n";
+        oss << name_ << "_bucket"
+            << format_labels_with_le(labels_, std::numeric_limits<double>::infinity()) << " "
+            << bucket_counts_.back().load(std::memory_order_relaxed) << "\n";
 
         // Sum and count
-        oss << name_ << "_sum" << label_str << " " << std::fixed
-            << std::setprecision(6) << sum() << "\n";
+        oss << name_ << "_sum" << label_str << " " << std::fixed << std::setprecision(6) << sum()
+            << "\n";
         oss << name_ << "_count" << label_str << " " << count() << "\n";
 
         return oss.str();
@@ -427,12 +407,14 @@ private:
     std::atomic<uint64_t> count_;
 
     static std::string format_labels(const Labels& labels) {
-        if (labels.empty()) return "";
+        if (labels.empty())
+            return "";
         std::ostringstream oss;
         oss << "{";
         bool first = true;
         for (const auto& [k, v] : labels) {
-            if (!first) oss << ",";
+            if (!first)
+                oss << ",";
             first = false;
             oss << k << "=\"" << v << "\"";
         }
@@ -460,9 +442,8 @@ private:
 };
 
 // Default histogram buckets (similar to Prometheus defaults)
-inline const std::vector<double> Histogram::DEFAULT_BUCKETS = {
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0
-};
+inline const std::vector<double> Histogram::DEFAULT_BUCKETS = {0.005, 0.01, 0.025, 0.05, 0.1, 0.25,
+                                                               0.5,   1.0,  2.5,   5.0,  10.0};
 
 //=============================================================================
 // Summary
@@ -483,17 +464,11 @@ public:
 
     static const std::vector<Quantile> DEFAULT_QUANTILES;
 
-    Summary(std::string name,
-            std::vector<Quantile> quantiles = DEFAULT_QUANTILES,
-            std::string help = "",
-            Labels labels = {},
+    Summary(std::string name, std::vector<Quantile> quantiles = DEFAULT_QUANTILES,
+            std::string help = "", Labels labels = {},
             std::chrono::seconds max_age = std::chrono::seconds(60))
-        : name_(std::move(name))
-        , help_(std::move(help))
-        , labels_(std::move(labels))
-        , quantiles_(std::move(quantiles))
-        , max_age_(max_age)
-    {
+        : name_(std::move(name)), help_(std::move(help)), labels_(std::move(labels)),
+          quantiles_(std::move(quantiles)), max_age_(max_age) {
         sum_.store(0, std::memory_order_relaxed);
         count_.store(0, std::memory_order_relaxed);
     }
@@ -531,7 +506,8 @@ public:
     double quantile_value(double q) const {
         std::lock_guard lock(mutex_);
 
-        if (observations_.empty()) return 0;
+        if (observations_.empty())
+            return 0;
 
         std::vector<double> values;
         values.reserve(observations_.size());
@@ -541,19 +517,18 @@ public:
 
         std::sort(values.begin(), values.end());
 
-        double idx = q * (values.size() - 1);
+        double idx   = q * (values.size() - 1);
         size_t lower = static_cast<size_t>(idx);
         size_t upper = lower + 1;
 
-        if (upper >= values.size()) return values.back();
+        if (upper >= values.size())
+            return values.back();
 
         double frac = idx - lower;
         return values[lower] * (1 - frac) + values[upper] * frac;
     }
 
-    uint64_t count() const noexcept {
-        return count_.load(std::memory_order_relaxed);
-    }
+    uint64_t count() const noexcept { return count_.load(std::memory_order_relaxed); }
 
     double sum() const noexcept {
         return static_cast<double>(sum_.load(std::memory_order_relaxed)) / PRECISION;
@@ -576,13 +551,13 @@ public:
         // Output quantiles
         for (const auto& q : quantiles_) {
             double val = quantile_value(q.quantile);
-            oss << name_ << format_labels_with_quantile(labels_, q.quantile)
-                << " " << std::fixed << std::setprecision(6) << val << "\n";
+            oss << name_ << format_labels_with_quantile(labels_, q.quantile) << " " << std::fixed
+                << std::setprecision(6) << val << "\n";
         }
 
         // Sum and count
-        oss << name_ << "_sum" << label_str << " " << std::fixed
-            << std::setprecision(6) << sum() << "\n";
+        oss << name_ << "_sum" << label_str << " " << std::fixed << std::setprecision(6) << sum()
+            << "\n";
         oss << name_ << "_count" << label_str << " " << count() << "\n";
 
         return oss.str();
@@ -608,12 +583,14 @@ private:
     std::atomic<uint64_t> count_;
 
     static std::string format_labels(const Labels& labels) {
-        if (labels.empty()) return "";
+        if (labels.empty())
+            return "";
         std::ostringstream oss;
         oss << "{";
         bool first = true;
         for (const auto& [k, v] : labels) {
-            if (!first) oss << ",";
+            if (!first)
+                oss << ",";
             first = false;
             oss << k << "=\"" << v << "\"";
         }
@@ -637,7 +614,9 @@ private:
 
 // Default summary quantiles
 inline const std::vector<Summary::Quantile> Summary::DEFAULT_QUANTILES = {
-    {0.5, 0.05}, {0.9, 0.01}, {0.99, 0.001}
+    {0.5,  0.05 },
+    {0.9,  0.01 },
+    {0.99, 0.001}
 };
 
 //=============================================================================
@@ -650,18 +629,16 @@ inline const std::vector<Summary::Quantile> Summary::DEFAULT_QUANTILES = {
 class Timer {
 public:
     explicit Timer(Histogram& histogram)
-        : histogram_(histogram)
-        , start_(std::chrono::high_resolution_clock::now())
-    {}
+        : histogram_(histogram), start_(std::chrono::high_resolution_clock::now()) {}
 
     ~Timer() {
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end       = std::chrono::high_resolution_clock::now();
         double seconds = std::chrono::duration<double>(end - start_).count();
         histogram_.observe(seconds);
     }
 
     // Disable copy/move
-    Timer(const Timer&) = delete;
+    Timer(const Timer&)            = delete;
     Timer& operator=(const Timer&) = delete;
 
 private:
@@ -688,8 +665,7 @@ public:
     /**
      * @brief Get or create counter
      */
-    Counter& counter(const std::string& name,
-                     const Labels& labels = {},
+    Counter& counter(const std::string& name, const Labels& labels = {},
                      const std::string& help = "") {
         std::string key = make_key(name, labels);
 
@@ -707,8 +683,8 @@ public:
             return *it->second;
         }
 
-        auto counter = std::make_unique<Counter>(name, help, labels);
-        auto& ref = *counter;
+        auto counter   = std::make_unique<Counter>(name, help, labels);
+        auto& ref      = *counter;
         counters_[key] = std::move(counter);
         return ref;
     }
@@ -716,9 +692,7 @@ public:
     /**
      * @brief Get or create gauge
      */
-    Gauge& gauge(const std::string& name,
-                 const Labels& labels = {},
-                 const std::string& help = "") {
+    Gauge& gauge(const std::string& name, const Labels& labels = {}, const std::string& help = "") {
         std::string key = make_key(name, labels);
 
         std::shared_lock read_lock(mutex_);
@@ -734,8 +708,8 @@ public:
             return *it->second;
         }
 
-        auto gauge = std::make_unique<Gauge>(name, help, labels);
-        auto& ref = *gauge;
+        auto gauge   = std::make_unique<Gauge>(name, help, labels);
+        auto& ref    = *gauge;
         gauges_[key] = std::move(gauge);
         return ref;
     }
@@ -745,8 +719,7 @@ public:
      */
     Histogram& histogram(const std::string& name,
                          const std::vector<double>& buckets = Histogram::DEFAULT_BUCKETS,
-                         const Labels& labels = {},
-                         const std::string& help = "") {
+                         const Labels& labels = {}, const std::string& help = "") {
         std::string key = make_key(name, labels);
 
         std::shared_lock read_lock(mutex_);
@@ -762,8 +735,8 @@ public:
             return *it->second;
         }
 
-        auto histogram = std::make_unique<Histogram>(name, buckets, help, labels);
-        auto& ref = *histogram;
+        auto histogram   = std::make_unique<Histogram>(name, buckets, help, labels);
+        auto& ref        = *histogram;
         histograms_[key] = std::move(histogram);
         return ref;
     }
@@ -773,8 +746,7 @@ public:
      */
     Summary& summary(const std::string& name,
                      const std::vector<Summary::Quantile>& quantiles = Summary::DEFAULT_QUANTILES,
-                     const Labels& labels = {},
-                     const std::string& help = "") {
+                     const Labels& labels = {}, const std::string& help = "") {
         std::string key = make_key(name, labels);
 
         std::shared_lock read_lock(mutex_);
@@ -790,8 +762,8 @@ public:
             return *it->second;
         }
 
-        auto summary = std::make_unique<Summary>(name, quantiles, help, labels);
-        auto& ref = *summary;
+        auto summary    = std::make_unique<Summary>(name, quantiles, help, labels);
+        auto& ref       = *summary;
         summaries_[key] = std::move(summary);
         return ref;
     }
@@ -848,8 +820,7 @@ public:
      */
     size_t metric_count() const {
         std::shared_lock lock(mutex_);
-        return counters_.size() + gauges_.size() +
-               histograms_.size() + summaries_.size();
+        return counters_.size() + gauges_.size() + histograms_.size() + summaries_.size();
     }
 
 private:
@@ -884,7 +855,6 @@ private:
 #define IPB_HISTOGRAM(name, ...) \
     ipb::common::metrics::MetricRegistry::instance().histogram(name, ##__VA_ARGS__)
 
-#define IPB_TIMER(histogram) \
-    ipb::common::metrics::Timer _timer_##__LINE__(histogram)
+#define IPB_TIMER(histogram) ipb::common::metrics::Timer _timer_##__LINE__(histogram)
 
-} // namespace ipb::common::metrics
+}  // namespace ipb::common::metrics

@@ -97,7 +97,7 @@ public:
     /**
      * @brief Generate random integer in range
      */
-    template<typename T>
+    template <typename T>
     static T integer(T min, T max) {
         std::random_device rd;
         std::uniform_int_distribution<T> dist(min, max);
@@ -162,8 +162,10 @@ private:
 
         for (size_t i = 0; i < len; i += 3) {
             uint32_t triple = static_cast<uint32_t>(data[i]) << 16;
-            if (i + 1 < len) triple |= static_cast<uint32_t>(data[i + 1]) << 8;
-            if (i + 2 < len) triple |= static_cast<uint32_t>(data[i + 2]);
+            if (i + 1 < len)
+                triple |= static_cast<uint32_t>(data[i + 1]) << 8;
+            if (i + 2 < len)
+                triple |= static_cast<uint32_t>(data[i + 2]);
 
             result += base64_chars[(triple >> 18) & 0x3F];
             result += base64_chars[(triple >> 12) & 0x3F];
@@ -190,9 +192,9 @@ public:
      */
     static uint64_t fnv1a(const void* data, size_t len) {
         const uint64_t FNV_OFFSET = 14695981039346656037ULL;
-        const uint64_t FNV_PRIME = 1099511628211ULL;
+        const uint64_t FNV_PRIME  = 1099511628211ULL;
 
-        auto* bytes = static_cast<const uint8_t*>(data);
+        auto* bytes   = static_cast<const uint8_t*>(data);
         uint64_t hash = FNV_OFFSET;
 
         for (size_t i = 0; i < len; ++i) {
@@ -203,21 +205,19 @@ public:
         return hash;
     }
 
-    static uint64_t fnv1a(std::string_view s) {
-        return fnv1a(s.data(), s.size());
-    }
+    static uint64_t fnv1a(std::string_view s) { return fnv1a(s.data(), s.size()); }
 
     /**
      * @brief MurmurHash3 (for hash tables)
      */
     static uint64_t murmur3(const void* key, size_t len, uint64_t seed = 0) {
         const uint64_t m = 0xc6a4a7935bd1e995ULL;
-        const int r = 47;
+        const int r      = 47;
 
         uint64_t h = seed ^ (len * m);
 
         const auto* data = static_cast<const uint64_t*>(key);
-        const auto* end = data + (len / 8);
+        const auto* end  = data + (len / 8);
 
         while (data != end) {
             uint64_t k = *data++;
@@ -233,14 +233,27 @@ public:
         const auto* data2 = reinterpret_cast<const uint8_t*>(data);
 
         switch (len & 7) {
-            case 7: h ^= uint64_t(data2[6]) << 48; [[fallthrough]];
-            case 6: h ^= uint64_t(data2[5]) << 40; [[fallthrough]];
-            case 5: h ^= uint64_t(data2[4]) << 32; [[fallthrough]];
-            case 4: h ^= uint64_t(data2[3]) << 24; [[fallthrough]];
-            case 3: h ^= uint64_t(data2[2]) << 16; [[fallthrough]];
-            case 2: h ^= uint64_t(data2[1]) << 8; [[fallthrough]];
-            case 1: h ^= uint64_t(data2[0]);
-                    h *= m;
+            case 7:
+                h ^= uint64_t(data2[6]) << 48;
+                [[fallthrough]];
+            case 6:
+                h ^= uint64_t(data2[5]) << 40;
+                [[fallthrough]];
+            case 5:
+                h ^= uint64_t(data2[4]) << 32;
+                [[fallthrough]];
+            case 4:
+                h ^= uint64_t(data2[3]) << 24;
+                [[fallthrough]];
+            case 3:
+                h ^= uint64_t(data2[2]) << 16;
+                [[fallthrough]];
+            case 2:
+                h ^= uint64_t(data2[1]) << 8;
+                [[fallthrough]];
+            case 1:
+                h ^= uint64_t(data2[0]);
+                h *= m;
         }
 
         h ^= h >> r;
@@ -259,7 +272,7 @@ public:
         std::array<uint8_t, 64> outer_pad{};
 
         for (size_t i = 0; i < 64; ++i) {
-            uint8_t k = (i < key.size()) ? static_cast<uint8_t>(key[i]) : 0;
+            uint8_t k    = (i < key.size()) ? static_cast<uint8_t>(key[i]) : 0;
             inner_pad[i] = k ^ 0x36;
             outer_pad[i] = k ^ 0x5c;
         }
@@ -294,16 +307,20 @@ public:
      * @brief Validate email format
      */
     static bool is_valid_email(std::string_view email) {
-        if (email.empty() || email.length() > 254) return false;
+        if (email.empty() || email.length() > 254)
+            return false;
 
         auto at = email.find('@');
-        if (at == std::string_view::npos) return false;
+        if (at == std::string_view::npos)
+            return false;
 
-        auto local = email.substr(0, at);
+        auto local  = email.substr(0, at);
         auto domain = email.substr(at + 1);
 
-        if (local.empty() || local.length() > 64) return false;
-        if (domain.empty() || domain.length() > 253) return false;
+        if (local.empty() || local.length() > 64)
+            return false;
+        if (domain.empty() || domain.length() > 253)
+            return false;
 
         // Check for valid characters
         for (char c : local) {
@@ -313,7 +330,8 @@ public:
         }
 
         // Domain must have at least one dot
-        if (domain.find('.') == std::string_view::npos) return false;
+        if (domain.find('.') == std::string_view::npos)
+            return false;
 
         for (char c : domain) {
             if (!std::isalnum(c) && c != '.' && c != '-') {
@@ -328,13 +346,16 @@ public:
      * @brief Validate UUID format
      */
     static bool is_valid_uuid(std::string_view uuid) {
-        if (uuid.length() != 36) return false;
+        if (uuid.length() != 36)
+            return false;
 
         for (size_t i = 0; i < 36; ++i) {
             if (i == 8 || i == 13 || i == 18 || i == 23) {
-                if (uuid[i] != '-') return false;
+                if (uuid[i] != '-')
+                    return false;
             } else {
-                if (!std::isxdigit(uuid[i])) return false;
+                if (!std::isxdigit(uuid[i]))
+                    return false;
             }
         }
         return true;
@@ -344,20 +365,22 @@ public:
      * @brief Validate IP address (v4)
      */
     static bool is_valid_ipv4(std::string_view ip) {
-        int parts = 0;
-        int value = 0;
+        int parts  = 0;
+        int value  = 0;
         int digits = 0;
 
         for (char c : ip) {
             if (c == '.') {
-                if (digits == 0 || value > 255) return false;
+                if (digits == 0 || value > 255)
+                    return false;
                 parts++;
-                value = 0;
+                value  = 0;
                 digits = 0;
             } else if (std::isdigit(c)) {
                 value = value * 10 + (c - '0');
                 digits++;
-                if (digits > 3 || value > 255) return false;
+                if (digits > 3 || value > 255)
+                    return false;
             } else {
                 return false;
             }
@@ -370,17 +393,21 @@ public:
      * @brief Validate hostname
      */
     static bool is_valid_hostname(std::string_view host) {
-        if (host.empty() || host.length() > 253) return false;
+        if (host.empty() || host.length() > 253)
+            return false;
 
         size_t label_start = 0;
         for (size_t i = 0; i <= host.length(); ++i) {
             if (i == host.length() || host[i] == '.') {
                 size_t label_len = i - label_start;
-                if (label_len == 0 || label_len > 63) return false;
+                if (label_len == 0 || label_len > 63)
+                    return false;
 
                 // First and last char must be alphanumeric
-                if (!std::isalnum(host[label_start])) return false;
-                if (i > 0 && !std::isalnum(host[i - 1])) return false;
+                if (!std::isalnum(host[label_start]))
+                    return false;
+                if (i > 0 && !std::isalnum(host[i - 1]))
+                    return false;
 
                 label_start = i + 1;
             } else if (!std::isalnum(host[i]) && host[i] != '-') {
@@ -399,18 +426,15 @@ public:
         std::vector<std::string> issues;
     };
 
-    static PasswordStrength check_password(std::string_view password,
-                                           size_t min_length = 8,
-                                           bool require_upper = true,
-                                           bool require_lower = true,
-                                           bool require_digit = true,
-                                           bool require_special = true) {
+    static PasswordStrength check_password(std::string_view password, size_t min_length = 8,
+                                           bool require_upper = true, bool require_lower = true,
+                                           bool require_digit = true, bool require_special = true) {
         PasswordStrength result;
         result.score = 0;
 
         if (password.length() < min_length) {
-            result.issues.push_back("Password too short (minimum " +
-                                    std::to_string(min_length) + " characters)");
+            result.issues.push_back("Password too short (minimum " + std::to_string(min_length) +
+                                    " characters)");
         } else {
             result.score += 20;
         }
@@ -418,10 +442,14 @@ public:
         bool has_upper = false, has_lower = false, has_digit = false, has_special = false;
 
         for (char c : password) {
-            if (std::isupper(c)) has_upper = true;
-            else if (std::islower(c)) has_lower = true;
-            else if (std::isdigit(c)) has_digit = true;
-            else has_special = true;
+            if (std::isupper(c))
+                has_upper = true;
+            else if (std::islower(c))
+                has_lower = true;
+            else if (std::isdigit(c))
+                has_digit = true;
+            else
+                has_special = true;
         }
 
         if (require_upper && !has_upper) {
@@ -456,8 +484,10 @@ public:
      * @brief Validate alphanumeric identifier
      */
     static bool is_valid_identifier(std::string_view id, size_t max_length = 64) {
-        if (id.empty() || id.length() > max_length) return false;
-        if (!std::isalpha(id[0]) && id[0] != '_') return false;
+        if (id.empty() || id.length() > max_length)
+            return false;
+        if (!std::isalpha(id[0]) && id[0] != '_')
+            return false;
 
         for (char c : id) {
             if (!std::isalnum(c) && c != '_' && c != '-') {
@@ -499,12 +529,23 @@ public:
         result.reserve(input.size() * 1.1);
         for (char c : input) {
             switch (c) {
-                case '&': result += "&amp;"; break;
-                case '<': result += "&lt;"; break;
-                case '>': result += "&gt;"; break;
-                case '"': result += "&quot;"; break;
-                case '\'': result += "&#x27;"; break;
-                default: result += c;
+                case '&':
+                    result += "&amp;";
+                    break;
+                case '<':
+                    result += "&lt;";
+                    break;
+                case '>':
+                    result += "&gt;";
+                    break;
+                case '"':
+                    result += "&quot;";
+                    break;
+                case '\'':
+                    result += "&#x27;";
+                    break;
+                default:
+                    result += c;
             }
         }
         return result;
@@ -518,13 +559,26 @@ public:
         result.reserve(input.size() * 1.1);
         for (char c : input) {
             switch (c) {
-                case '\'': result += "''"; break;
-                case '\\': result += "\\\\"; break;
-                case '\0': result += "\\0"; break;
-                case '\n': result += "\\n"; break;
-                case '\r': result += "\\r"; break;
-                case '\x1a': result += "\\Z"; break;
-                default: result += c;
+                case '\'':
+                    result += "''";
+                    break;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '\0':
+                    result += "\\0";
+                    break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                case '\x1a':
+                    result += "\\Z";
+                    break;
+                default:
+                    result += c;
             }
         }
         return result;
@@ -554,7 +608,8 @@ public:
         result.reserve(std::min(input.size(), max_length));
 
         for (char c : input) {
-            if (result.size() >= max_length) break;
+            if (result.size() >= max_length)
+                break;
 
             // Allow alphanumeric, dots, hyphens, underscores
             if (std::isalnum(c) || c == '.' || c == '-' || c == '_') {
@@ -607,9 +662,7 @@ public:
 
     explicit SecureString(std::string_view s) : data_(s) {}
 
-    ~SecureString() {
-        secure_erase();
-    }
+    ~SecureString() { secure_erase(); }
 
     SecureString(const SecureString& other) : data_(other.data_) {}
 
@@ -667,9 +720,7 @@ public:
     /**
      * @brief Generate key from IP address
      */
-    static std::string from_ip(std::string_view ip) {
-        return "rl:ip:" + std::string(ip);
-    }
+    static std::string from_ip(std::string_view ip) { return "rl:ip:" + std::string(ip); }
 
     /**
      * @brief Generate key from user ID
@@ -692,8 +743,7 @@ public:
     /**
      * @brief Generate composite key
      */
-    static std::string composite(std::string_view prefix,
-                                 std::string_view id1,
+    static std::string composite(std::string_view prefix, std::string_view id1,
                                  std::string_view id2 = "") {
         std::string key = "rl:" + std::string(prefix) + ":" + std::string(id1);
         if (!id2.empty()) {
@@ -715,9 +765,7 @@ public:
     /**
      * @brief Generate opaque token
      */
-    static std::string generate_token(size_t bytes = 32) {
-        return SecureRandom::base64(bytes);
-    }
+    static std::string generate_token(size_t bytes = 32) { return SecureRandom::base64(bytes); }
 
     /**
      * @brief Generate API key with prefix
@@ -752,12 +800,11 @@ public:
     /**
      * @brief Generate TOTP-compatible code
      */
-    static std::string generate_totp(std::string_view secret,
-                                     uint64_t time_step = 30,
+    static std::string generate_totp(std::string_view secret, uint64_t time_step = 30,
                                      size_t digits = 6) {
-        auto now = std::chrono::system_clock::now();
-        auto epoch = now.time_since_epoch();
-        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(epoch).count();
+        auto now         = std::chrono::system_clock::now();
+        auto epoch       = now.time_since_epoch();
+        auto seconds     = std::chrono::duration_cast<std::chrono::seconds>(epoch).count();
         uint64_t counter = seconds / time_step;
 
         // HMAC-based OTP
@@ -767,12 +814,12 @@ public:
             counter >>= 8;
         }
 
-        auto hmac = Hash::hmac(secret,
-            std::string_view(reinterpret_cast<char*>(counter_bytes.data()), 8));
+        auto hmac =
+            Hash::hmac(secret, std::string_view(reinterpret_cast<char*>(counter_bytes.data()), 8));
 
         // Dynamic truncation (simplified)
         uint64_t hash_val = std::stoull(hmac, nullptr, 16);
-        uint32_t code = hash_val % static_cast<uint32_t>(std::pow(10, digits));
+        uint32_t code     = hash_val % static_cast<uint32_t>(std::pow(10, digits));
 
         std::ostringstream oss;
         oss << std::setfill('0') << std::setw(static_cast<int>(digits)) << code;
@@ -792,21 +839,19 @@ public:
     /**
      * @brief Add jitter to operations
      */
-    static void add_jitter(std::chrono::microseconds base,
-                           std::chrono::microseconds variance) {
-        auto jitter = std::chrono::microseconds(
-            SecureRandom::integer<int64_t>(0, variance.count())
-        );
+    static void add_jitter(std::chrono::microseconds base, std::chrono::microseconds variance) {
+        auto jitter =
+            std::chrono::microseconds(SecureRandom::integer<int64_t>(0, variance.count()));
         std::this_thread::sleep_for(base + jitter);
     }
 
     /**
      * @brief Ensure minimum execution time
      */
-    template<typename Func>
+    template <typename Func>
     static auto with_minimum_time(std::chrono::microseconds min_time, Func&& func) {
-        auto start = std::chrono::high_resolution_clock::now();
-        auto result = std::forward<Func>(func)();
+        auto start   = std::chrono::high_resolution_clock::now();
+        auto result  = std::forward<Func>(func)();
         auto elapsed = std::chrono::high_resolution_clock::now() - start;
 
         if (elapsed < min_time) {
@@ -817,4 +862,4 @@ public:
     }
 };
 
-} // namespace ipb::security
+}  // namespace ipb::security

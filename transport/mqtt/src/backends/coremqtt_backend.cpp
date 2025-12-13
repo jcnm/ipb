@@ -1,4 +1,5 @@
 #include "ipb/transport/mqtt/backends/coremqtt_backend.hpp"
+
 #include "ipb/transport/mqtt/mqtt_connection.hpp"
 
 #ifdef IPB_HAS_COREMQTT
@@ -14,15 +15,16 @@ extern "C" {
 #include <ipb/security/tls_context.hpp>
 #endif
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <cstring>
 #include <chrono>
+#include <cstring>
 #include <iostream>
+
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace ipb::transport::mqtt {
 
@@ -31,7 +33,7 @@ namespace ipb::transport::mqtt {
 //=============================================================================
 
 struct NetworkContext {
-    int socket_fd = -1;
+    int socket_fd  = -1;
     bool connected = false;
     std::string hostname;
     uint16_t port = 1883;
@@ -46,7 +48,8 @@ struct NetworkContext {
 
 // Transport send function for coreMQTT
 static int32_t transport_send(NetworkContext* ctx, const void* data, size_t len) {
-    if (!ctx || ctx->socket_fd < 0) return -1;
+    if (!ctx || ctx->socket_fd < 0)
+        return -1;
 
 #ifdef IPB_HAS_SECURITY
     // Use TLS socket if available
@@ -62,22 +65,27 @@ static int32_t transport_send(NetworkContext* ctx, const void* data, size_t len)
 
 // Transport receive function for coreMQTT
 static int32_t transport_recv(NetworkContext* ctx, void* data, size_t len) {
-    if (!ctx || ctx->socket_fd < 0) return -1;
+    if (!ctx || ctx->socket_fd < 0)
+        return -1;
 
 #ifdef IPB_HAS_SECURITY
     // Use TLS socket if available
     if (ctx->use_tls && ctx->tls_socket) {
         ssize_t received = ctx->tls_socket->read(data, len);
-        if (received == 0) return -1;  // Connection closed
-        if (received < 0) return 0;    // Would block or error
+        if (received == 0)
+            return -1;  // Connection closed
+        if (received < 0)
+            return 0;  // Would block or error
         return static_cast<int32_t>(received);
     }
 #endif
 
     ssize_t received = ::recv(ctx->socket_fd, data, len, 0);
-    if (received == 0) return -1;  // Connection closed
+    if (received == 0)
+        return -1;  // Connection closed
     if (received < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
         return -1;
     }
     return static_cast<int32_t>(received);
@@ -86,9 +94,7 @@ static int32_t transport_recv(NetworkContext* ctx, void* data, size_t len) {
 // Get current time in milliseconds
 static uint32_t get_time_ms() {
     auto now = std::chrono::steady_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch()
-    );
+    auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
     return static_cast<uint32_t>(ms.count());
 }
 
@@ -99,25 +105,22 @@ static uint32_t get_time_ms() {
 class CoreMQTTBackend::Impl {
 public:
     explicit Impl(size_t network_buffer_size, size_t max_subscriptions)
-        : network_buffer_(network_buffer_size)
-        , fixed_buffer_(network_buffer_size)
-    {
+        : network_buffer_(network_buffer_size), fixed_buffer_(network_buffer_size) {
         (void)max_subscriptions;  // Used for subscription tracking
         std::memset(&mqtt_context_, 0, sizeof(mqtt_context_));
         std::memset(&network_context_, 0, sizeof(network_context_));
     }
 
-    ~Impl() {
-        close_socket();
-    }
+    ~Impl() { close_socket(); }
 
     bool connect_socket(const std::string& hostname, uint16_t port) {
         network_context_.hostname = hostname;
-        network_context_.port = port;
+        network_context_.port     = port;
 
         // Resolve hostname
-        struct addrinfo hints{}, *result = nullptr;
-        hints.ai_family = AF_UNSPEC;
+        struct addrinfo hints {
+        }, *result = nullptr;
+        hints.ai_family   = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
 
         std::string port_str = std::to_string(port);
@@ -129,7 +132,8 @@ public:
         int sockfd = -1;
         for (auto* rp = result; rp != nullptr; rp = rp->ai_next) {
             sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-            if (sockfd < 0) continue;
+            if (sockfd < 0)
+                continue;
 
             if (::connect(sockfd, rp->ai_addr, rp->ai_addrlen) == 0) {
                 break;
@@ -163,26 +167,20 @@ public:
         network_context_.connected = false;
     }
 
-    bool initialize_mqtt(const std::string& client_id,
-                         uint16_t keep_alive_seconds,
+    bool initialize_mqtt(const std::string& client_id, uint16_t keep_alive_seconds,
                          CoreMQTTBackend* backend) {
         // Transport interface
         transport_interface_.pNetworkContext = &network_context_;
-        transport_interface_.send = reinterpret_cast<TransportSend_t>(transport_send);
-        transport_interface_.recv = reinterpret_cast<TransportRecv_t>(transport_recv);
+        transport_interface_.send            = reinterpret_cast<TransportSend_t>(transport_send);
+        transport_interface_.recv            = reinterpret_cast<TransportRecv_t>(transport_recv);
 
         // Fixed buffer for coreMQTT
         fixed_buffer_struct_.pBuffer = fixed_buffer_.data();
-        fixed_buffer_struct_.size = fixed_buffer_.size();
+        fixed_buffer_struct_.size    = fixed_buffer_.size();
 
         // Initialize MQTT context
-        MQTTStatus_t status = MQTT_Init(
-            &mqtt_context_,
-            &transport_interface_,
-            get_time_ms,
-            event_callback,
-            &fixed_buffer_struct_
-        );
+        MQTTStatus_t status = MQTT_Init(&mqtt_context_, &transport_interface_, get_time_ms,
+                                        event_callback, &fixed_buffer_struct_);
 
         if (status != MQTTSuccess) {
             return false;
@@ -192,7 +190,7 @@ public:
         mqtt_context_.appCallbackContext = backend;
 
         // Store connection info
-        client_id_ = client_id;
+        client_id_          = client_id;
         keep_alive_seconds_ = keep_alive_seconds;
 
         return true;
@@ -200,10 +198,10 @@ public:
 
     MQTTStatus_t mqtt_connect(bool clean_session) {
         MQTTConnectInfo_t connect_info{};
-        connect_info.cleanSession = clean_session;
-        connect_info.pClientIdentifier = client_id_.c_str();
+        connect_info.cleanSession           = clean_session;
+        connect_info.pClientIdentifier      = client_id_.c_str();
         connect_info.clientIdentifierLength = static_cast<uint16_t>(client_id_.size());
-        connect_info.keepAliveSeconds = keep_alive_seconds_;
+        connect_info.keepAliveSeconds       = keep_alive_seconds_;
 
         // TODO: Add username/password, will message support
 
@@ -211,38 +209,35 @@ public:
         return MQTT_Connect(&mqtt_context_, &connect_info, nullptr, 5000, &session_present);
     }
 
-    MQTTStatus_t mqtt_disconnect() {
-        return MQTT_Disconnect(&mqtt_context_);
-    }
+    MQTTStatus_t mqtt_disconnect() { return MQTT_Disconnect(&mqtt_context_); }
 
     MQTTStatus_t mqtt_subscribe(const char* topic, size_t topic_len, uint8_t qos) {
         MQTTSubscribeInfo_t sub_info{};
-        sub_info.pTopicFilter = topic;
+        sub_info.pTopicFilter      = topic;
         sub_info.topicFilterLength = static_cast<uint16_t>(topic_len);
-        sub_info.qos = static_cast<MQTTQoS_t>(qos);
+        sub_info.qos               = static_cast<MQTTQoS_t>(qos);
 
         return MQTT_Subscribe(&mqtt_context_, &sub_info, 1, MQTT_GetPacketId(&mqtt_context_));
     }
 
     MQTTStatus_t mqtt_unsubscribe(const char* topic, size_t topic_len) {
         MQTTSubscribeInfo_t unsub_info{};
-        unsub_info.pTopicFilter = topic;
+        unsub_info.pTopicFilter      = topic;
         unsub_info.topicFilterLength = static_cast<uint16_t>(topic_len);
 
         return MQTT_Unsubscribe(&mqtt_context_, &unsub_info, 1, MQTT_GetPacketId(&mqtt_context_));
     }
 
-    MQTTStatus_t mqtt_publish(const char* topic, size_t topic_len,
-                              const uint8_t* payload, size_t payload_len,
-                              uint8_t qos, bool retained,
+    MQTTStatus_t mqtt_publish(const char* topic, size_t topic_len, const uint8_t* payload,
+                              size_t payload_len, uint8_t qos, bool retained,
                               uint16_t& packet_id_out) {
         MQTTPublishInfo_t pub_info{};
-        pub_info.pTopicName = topic;
+        pub_info.pTopicName      = topic;
         pub_info.topicNameLength = static_cast<uint16_t>(topic_len);
-        pub_info.pPayload = payload;
-        pub_info.payloadLength = payload_len;
-        pub_info.qos = static_cast<MQTTQoS_t>(qos);
-        pub_info.retain = retained;
+        pub_info.pPayload        = payload;
+        pub_info.payloadLength   = payload_len;
+        pub_info.qos             = static_cast<MQTTQoS_t>(qos);
+        pub_info.retain          = retained;
 
         packet_id_out = (qos > 0) ? MQTT_GetPacketId(&mqtt_context_) : 0;
 
@@ -253,41 +248,31 @@ public:
         return MQTT_ProcessLoop(&mqtt_context_, timeout_ms);
     }
 
-    MQTTStatus_t mqtt_ping() {
-        return MQTT_Ping(&mqtt_context_);
-    }
+    MQTTStatus_t mqtt_ping() { return MQTT_Ping(&mqtt_context_); }
 
     bool is_socket_connected() const {
         return network_context_.connected && network_context_.socket_fd >= 0;
     }
 
-    size_t buffer_size() const {
-        return network_buffer_.size() + fixed_buffer_.size();
-    }
+    size_t buffer_size() const { return network_buffer_.size() + fixed_buffer_.size(); }
 
-    NetworkContext& get_network_context() {
-        return network_context_;
-    }
+    NetworkContext& get_network_context() { return network_context_; }
 
 private:
     // Event callback for coreMQTT
-    static void event_callback(MQTTContext_t* mqtt_ctx,
-                               MQTTPacketInfo_t* packet_info,
+    static void event_callback(MQTTContext_t* mqtt_ctx, MQTTPacketInfo_t* packet_info,
                                MQTTDeserializedInfo_t* deserialized_info) {
         auto* backend = static_cast<CoreMQTTBackend*>(mqtt_ctx->appCallbackContext);
-        if (!backend) return;
+        if (!backend)
+            return;
 
         if (packet_info->type == MQTT_PACKET_TYPE_PUBLISH) {
             auto* pub_info = deserialized_info->pPublishInfo;
             if (pub_info) {
-                backend->on_incoming_publish(
-                    pub_info->pTopicName,
-                    pub_info->topicNameLength,
-                    static_cast<const uint8_t*>(pub_info->pPayload),
-                    pub_info->payloadLength,
-                    static_cast<uint8_t>(pub_info->qos),
-                    pub_info->retain
-                );
+                backend->on_incoming_publish(pub_info->pTopicName, pub_info->topicNameLength,
+                                             static_cast<const uint8_t*>(pub_info->pPayload),
+                                             pub_info->payloadLength,
+                                             static_cast<uint8_t>(pub_info->qos), pub_info->retain);
             }
         } else if (packet_info->type == MQTT_PACKET_TYPE_PUBACK ||
                    packet_info->type == MQTT_PACKET_TYPE_PUBCOMP) {
@@ -328,17 +313,17 @@ bool CoreMQTTBackend::initialize(const ConnectionConfig& config) {
     client_id_ = config.client_id;
 
     // Parse broker URL for hostname and port
-    std::string url = config.broker_url;
+    std::string url      = config.broker_url;
     std::string hostname = "localhost";
-    uint16_t port = 1883;
+    uint16_t port        = 1883;
 
     // Simple URL parsing (tcp://hostname:port)
     bool use_tls = false;
     if (url.find("tcp://") == 0) {
         url = url.substr(6);
     } else if (url.find("ssl://") == 0 || url.find("tls://") == 0) {
-        url = url.substr(6);
-        port = 8883;
+        url     = url.substr(6);
+        port    = 8883;
         use_tls = true;
     }
 
@@ -350,7 +335,7 @@ bool CoreMQTTBackend::initialize(const ConnectionConfig& config) {
     auto colon_pos = url.find(':');
     if (colon_pos != std::string::npos) {
         hostname = url.substr(0, colon_pos);
-        port = static_cast<uint16_t>(std::stoi(url.substr(colon_pos + 1)));
+        port     = static_cast<uint16_t>(std::stoi(url.substr(colon_pos + 1)));
     } else {
         hostname = url;
     }
@@ -434,26 +419,18 @@ std::string_view CoreMQTTBackend::client_id() const noexcept {
     return client_id_;
 }
 
-uint16_t CoreMQTTBackend::publish(
-    std::string_view topic,
-    std::span<const uint8_t> payload,
-    QoS qos,
-    bool retained)
-{
-    if (!is_connected()) return 0;
+uint16_t CoreMQTTBackend::publish(std::string_view topic, std::span<const uint8_t> payload, QoS qos,
+                                  bool retained) {
+    if (!is_connected())
+        return 0;
 
     auto start = std::chrono::high_resolution_clock::now();
 
     uint16_t packet_id = 0;
-    auto status = impl_->mqtt_publish(
-        topic.data(), topic.size(),
-        payload.data(), payload.size(),
-        static_cast<uint8_t>(qos),
-        retained,
-        packet_id
-    );
+    auto status = impl_->mqtt_publish(topic.data(), topic.size(), payload.data(), payload.size(),
+                                      static_cast<uint8_t>(qos), retained, packet_id);
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
     if (status == MQTTSuccess) {
@@ -468,18 +445,15 @@ uint16_t CoreMQTTBackend::publish(
     return 0;
 }
 
-bool CoreMQTTBackend::publish_sync(
-    std::string_view topic,
-    std::span<const uint8_t> payload,
-    QoS qos,
-    bool retained,
-    uint32_t timeout_ms)
-{
+bool CoreMQTTBackend::publish_sync(std::string_view topic, std::span<const uint8_t> payload,
+                                   QoS qos, bool retained, uint32_t timeout_ms) {
     uint16_t token = publish(topic, payload, qos, retained);
-    if (token == 0) return false;
+    if (token == 0)
+        return false;
 
     // For QoS 0, no acknowledgment needed
-    if (qos == QoS::AT_MOST_ONCE) return true;
+    if (qos == QoS::AT_MOST_ONCE)
+        return true;
 
     // Process events until we get ack or timeout
     auto start = std::chrono::steady_clock::now();
@@ -487,8 +461,7 @@ bool CoreMQTTBackend::publish_sync(
         process_events(10);
 
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start
-        );
+            std::chrono::steady_clock::now() - start);
         if (elapsed.count() >= timeout_ms) {
             return false;
         }
@@ -502,18 +475,17 @@ bool CoreMQTTBackend::publish_sync(
 }
 
 bool CoreMQTTBackend::subscribe(std::string_view topic, QoS qos) {
-    if (!is_connected()) return false;
+    if (!is_connected())
+        return false;
 
-    auto status = impl_->mqtt_subscribe(
-        topic.data(), topic.size(),
-        static_cast<uint8_t>(qos)
-    );
+    auto status = impl_->mqtt_subscribe(topic.data(), topic.size(), static_cast<uint8_t>(qos));
 
     return status == MQTTSuccess;
 }
 
 bool CoreMQTTBackend::unsubscribe(std::string_view topic) {
-    if (!is_connected()) return false;
+    if (!is_connected())
+        return false;
 
     auto status = impl_->mqtt_unsubscribe(topic.data(), topic.size());
     return status == MQTTSuccess;
@@ -535,7 +507,8 @@ void CoreMQTTBackend::set_delivery_callback(DeliveryCallback cb) {
 }
 
 int CoreMQTTBackend::process_events(uint32_t timeout_ms) {
-    if (!is_connected()) return 0;
+    if (!is_connected())
+        return 0;
 
     auto status = impl_->mqtt_process_loop(timeout_ms);
 
@@ -566,7 +539,8 @@ bool CoreMQTTBackend::needs_ping() const noexcept {
 }
 
 bool CoreMQTTBackend::send_ping() {
-    if (!is_connected()) return false;
+    if (!is_connected())
+        return false;
     return impl_->mqtt_ping() == MQTTSuccess;
 }
 
@@ -579,22 +553,17 @@ void CoreMQTTBackend::notify_connection_state(ConnectionState new_state, std::st
     }
 }
 
-void CoreMQTTBackend::on_incoming_publish(
-    const char* topic, size_t topic_len,
-    const uint8_t* payload, size_t payload_len,
-    uint8_t qos, bool retained)
-{
+void CoreMQTTBackend::on_incoming_publish(const char* topic, size_t topic_len,
+                                          const uint8_t* payload, size_t payload_len, uint8_t qos,
+                                          bool retained) {
     stats_.messages_received++;
     stats_.bytes_received += payload_len;
 
     std::lock_guard<std::mutex> lock(callback_mutex_);
     if (message_cb_) {
-        message_cb_(
-            std::string_view(topic, topic_len),
-            std::span<const uint8_t>(payload, payload_len),
-            static_cast<QoS>(qos),
-            retained
-        );
+        message_cb_(std::string_view(topic, topic_len),
+                    std::span<const uint8_t>(payload, payload_len), static_cast<QoS>(qos),
+                    retained);
     }
 }
 
@@ -637,13 +606,13 @@ bool CoreMQTTBackend::setup_tls(const ConnectionConfig& config) {
     // Create TLS context
     auto ctx_result = ipb::security::TLSContext::create(tls_config);
     if (!ctx_result.is_success()) {
-        std::cerr << "CoreMQTTBackend: Failed to create TLS context: "
-                  << ctx_result.error_message() << "\n";
+        std::cerr << "CoreMQTTBackend: Failed to create TLS context: " << ctx_result.error_message()
+                  << "\n";
         return false;
     }
 
     // Get the network context from impl
-    auto& net_ctx = impl_->get_network_context();
+    auto& net_ctx       = impl_->get_network_context();
     net_ctx.tls_context = std::move(ctx_result.value());
 
     // Wrap the socket with TLS
@@ -657,8 +626,7 @@ bool CoreMQTTBackend::setup_tls(const ConnectionConfig& config) {
     net_ctx.tls_socket = std::move(socket_result.value());
 
     // Perform TLS handshake
-    auto handshake_status = net_ctx.tls_socket->do_handshake(
-        std::chrono::milliseconds{10000});
+    auto handshake_status = net_ctx.tls_socket->do_handshake(std::chrono::milliseconds{10000});
 
     if (handshake_status != ipb::security::HandshakeStatus::SUCCESS) {
         std::cerr << "CoreMQTTBackend: TLS handshake failed\n";
@@ -672,9 +640,9 @@ bool CoreMQTTBackend::setup_tls(const ConnectionConfig& config) {
 }
 #endif
 
-} // namespace ipb::transport::mqtt
+}  // namespace ipb::transport::mqtt
 
-#else // !IPB_HAS_COREMQTT
+#else  // !IPB_HAS_COREMQTT
 
 // Stub implementation when coreMQTT is not available
 namespace ipb::transport::mqtt {
@@ -693,31 +661,59 @@ bool CoreMQTTBackend::initialize(const ConnectionConfig&) {
     return false;
 }
 
-bool CoreMQTTBackend::connect() { return false; }
+bool CoreMQTTBackend::connect() {
+    return false;
+}
 void CoreMQTTBackend::disconnect(uint32_t) {}
-bool CoreMQTTBackend::is_connected() const noexcept { return false; }
-ConnectionState CoreMQTTBackend::state() const noexcept { return ConnectionState::FAILED; }
-std::string_view CoreMQTTBackend::client_id() const noexcept { return ""; }
+bool CoreMQTTBackend::is_connected() const noexcept {
+    return false;
+}
+ConnectionState CoreMQTTBackend::state() const noexcept {
+    return ConnectionState::FAILED;
+}
+std::string_view CoreMQTTBackend::client_id() const noexcept {
+    return "";
+}
 
-uint16_t CoreMQTTBackend::publish(std::string_view, std::span<const uint8_t>, QoS, bool) { return 0; }
-bool CoreMQTTBackend::publish_sync(std::string_view, std::span<const uint8_t>, QoS, bool, uint32_t) { return false; }
-bool CoreMQTTBackend::subscribe(std::string_view, QoS) { return false; }
-bool CoreMQTTBackend::unsubscribe(std::string_view) { return false; }
+uint16_t CoreMQTTBackend::publish(std::string_view, std::span<const uint8_t>, QoS, bool) {
+    return 0;
+}
+bool CoreMQTTBackend::publish_sync(std::string_view, std::span<const uint8_t>, QoS, bool,
+                                   uint32_t) {
+    return false;
+}
+bool CoreMQTTBackend::subscribe(std::string_view, QoS) {
+    return false;
+}
+bool CoreMQTTBackend::unsubscribe(std::string_view) {
+    return false;
+}
 
 void CoreMQTTBackend::set_connection_callback(ConnectionCallback) {}
 void CoreMQTTBackend::set_message_callback(MessageCallback) {}
 void CoreMQTTBackend::set_delivery_callback(DeliveryCallback) {}
 
-int CoreMQTTBackend::process_events(uint32_t) { return -1; }
-size_t CoreMQTTBackend::static_memory_usage() const noexcept { return 0; }
-std::chrono::milliseconds CoreMQTTBackend::time_since_last_activity() const noexcept { return {}; }
-bool CoreMQTTBackend::needs_ping() const noexcept { return false; }
-bool CoreMQTTBackend::send_ping() { return false; }
+int CoreMQTTBackend::process_events(uint32_t) {
+    return -1;
+}
+size_t CoreMQTTBackend::static_memory_usage() const noexcept {
+    return 0;
+}
+std::chrono::milliseconds CoreMQTTBackend::time_since_last_activity() const noexcept {
+    return {};
+}
+bool CoreMQTTBackend::needs_ping() const noexcept {
+    return false;
+}
+bool CoreMQTTBackend::send_ping() {
+    return false;
+}
 
 void CoreMQTTBackend::notify_connection_state(ConnectionState, std::string_view) {}
-void CoreMQTTBackend::on_incoming_publish(const char*, size_t, const uint8_t*, size_t, uint8_t, bool) {}
+void CoreMQTTBackend::on_incoming_publish(const char*, size_t, const uint8_t*, size_t, uint8_t,
+                                          bool) {}
 void CoreMQTTBackend::on_ack_received(uint16_t, bool) {}
 
-} // namespace ipb::transport::mqtt
+}  // namespace ipb::transport::mqtt
 
-#endif // IPB_HAS_COREMQTT
+#endif  // IPB_HAS_COREMQTT

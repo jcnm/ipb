@@ -73,9 +73,8 @@ public:
     };
 
     /// Create a matcher for the given pattern
-    static std::unique_ptr<IPatternMatcher> create(
-        std::string_view pattern,
-        MatcherType type = MatcherType::AUTO);
+    static std::unique_ptr<IPatternMatcher> create(std::string_view pattern,
+                                                   MatcherType type = MatcherType::AUTO);
 
     /// Check if CTRE is available
     static constexpr bool has_ctre() noexcept {
@@ -208,18 +207,18 @@ class FastPatternMatcher {
 public:
     /// Pattern types for optimization hints
     enum class PatternType {
-        AUTO,    ///< Auto-detect best strategy
-        EXACT,   ///< Exact string match (uses Trie)
-        PREFIX,  ///< Prefix match (uses Trie)
-        WILDCARD,///< Simple wildcard (* and ?)
-        REGEX    ///< Full regex (uses CompiledPatternCache)
+        AUTO,      ///< Auto-detect best strategy
+        EXACT,     ///< Exact string match (uses Trie)
+        PREFIX,    ///< Prefix match (uses Trie)
+        WILDCARD,  ///< Simple wildcard (* and ?)
+        REGEX      ///< Full regex (uses CompiledPatternCache)
     };
 
     FastPatternMatcher();
     ~FastPatternMatcher();
 
     // Non-copyable but movable
-    FastPatternMatcher(const FastPatternMatcher&) = delete;
+    FastPatternMatcher(const FastPatternMatcher&)            = delete;
     FastPatternMatcher& operator=(const FastPatternMatcher&) = delete;
     FastPatternMatcher(FastPatternMatcher&&) noexcept;
     FastPatternMatcher& operator=(FastPatternMatcher&&) noexcept;
@@ -232,7 +231,7 @@ public:
      * @return true if pattern was added successfully
      */
     bool add_pattern(std::string_view pattern, uint32_t rule_id,
-                    PatternType type = PatternType::AUTO);
+                     PatternType type = PatternType::AUTO);
 
     /**
      * @brief Remove a pattern
@@ -266,12 +265,12 @@ public:
      * @brief Get statistics
      */
     struct Stats {
-        size_t exact_patterns = 0;
-        size_t prefix_patterns = 0;
+        size_t exact_patterns    = 0;
+        size_t prefix_patterns   = 0;
         size_t wildcard_patterns = 0;
-        size_t regex_patterns = 0;
-        size_t trie_nodes = 0;
-        size_t memory_bytes = 0;
+        size_t regex_patterns    = 0;
+        size_t trie_nodes        = 0;
+        size_t memory_bytes      = 0;
     };
     Stats stats() const noexcept;
 
@@ -291,7 +290,7 @@ public:
     ~TrieMatcher();
 
     // Non-copyable but movable
-    TrieMatcher(const TrieMatcher&) = delete;
+    TrieMatcher(const TrieMatcher&)            = delete;
     TrieMatcher& operator=(const TrieMatcher&) = delete;
     TrieMatcher(TrieMatcher&&) noexcept;
     TrieMatcher& operator=(TrieMatcher&&) noexcept;
@@ -364,8 +363,8 @@ public:
      */
     struct Stats {
         size_t pattern_count = 0;
-        size_t node_count = 0;
-        size_t memory_bytes = 0;
+        size_t node_count    = 0;
+        size_t memory_bytes  = 0;
     };
     Stats stats() const noexcept;
 
@@ -420,36 +419,36 @@ inline constexpr auto SENSOR_ADDRESS = ctll::fixed_string{R"(sensors/(\w+)/(\w+)
 inline constexpr auto ALARM_ADDRESS = ctll::fixed_string{R"(alarms/(critical|warning|info)/(\w+))"};
 
 /// Check OPC UA node ID
-template<typename Input>
+template <typename Input>
 constexpr auto match_opcua(Input&& input) noexcept {
     return ctre::match<OPC_UA_NODE_ID>(std::forward<Input>(input));
 }
 
 /// Check Modbus address
-template<typename Input>
+template <typename Input>
 constexpr auto match_modbus(Input&& input) noexcept {
     return ctre::match<MODBUS_ADDRESS>(std::forward<Input>(input));
 }
 
 /// Check Sparkplug topic
-template<typename Input>
+template <typename Input>
 constexpr auto match_sparkplug(Input&& input) noexcept {
     return ctre::match<SPARKPLUG_TOPIC>(std::forward<Input>(input));
 }
 
 /// Check sensor address
-template<typename Input>
+template <typename Input>
 constexpr auto match_sensor(Input&& input) noexcept {
     return ctre::match<SENSOR_ADDRESS>(std::forward<Input>(input));
 }
 
 /// Check alarm address
-template<typename Input>
+template <typename Input>
 constexpr auto match_alarm(Input&& input) noexcept {
     return ctre::match<ALARM_ADDRESS>(std::forward<Input>(input));
 }
 
-} // namespace patterns
-#endif // IPB_HAS_CTRE
+}  // namespace patterns
+#endif  // IPB_HAS_CTRE
 
-} // namespace ipb::core
+}  // namespace ipb::core

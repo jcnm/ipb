@@ -40,7 +40,7 @@ namespace ipb::common {
  *
  * @tparam T Value type to wrap
  */
-template<typename T>
+template <typename T>
 struct alignas(IPB_CACHE_LINE_SIZE) CacheAligned {
     T value;
 
@@ -48,8 +48,14 @@ struct alignas(IPB_CACHE_LINE_SIZE) CacheAligned {
     explicit CacheAligned(const T& v) : value(v) {}
     explicit CacheAligned(T&& v) : value(std::move(v)) {}
 
-    CacheAligned& operator=(const T& v) { value = v; return *this; }
-    CacheAligned& operator=(T&& v) { value = std::move(v); return *this; }
+    CacheAligned& operator=(const T& v) {
+        value = v;
+        return *this;
+    }
+    CacheAligned& operator=(T&& v) {
+        value = std::move(v);
+        return *this;
+    }
 
     operator T&() noexcept { return value; }
     operator const T&() const noexcept { return value; }
@@ -59,9 +65,7 @@ struct alignas(IPB_CACHE_LINE_SIZE) CacheAligned {
 
 private:
     // Padding to fill cache line
-    char padding_[IPB_CACHE_LINE_SIZE - sizeof(T) > 0
-                  ? IPB_CACHE_LINE_SIZE - sizeof(T)
-                  : 1];
+    char padding_[IPB_CACHE_LINE_SIZE - sizeof(T) > 0 ? IPB_CACHE_LINE_SIZE - sizeof(T) : 1];
 };
 
 /**
@@ -70,7 +74,7 @@ private:
  * Some architectures prefetch two cache lines at once. This wrapper
  * ensures values don't share prefetch units with neighbors.
  */
-template<typename T>
+template <typename T>
 struct alignas(2 * IPB_CACHE_LINE_SIZE) DoubleCacheAligned {
     T value;
 
@@ -82,9 +86,8 @@ struct alignas(2 * IPB_CACHE_LINE_SIZE) DoubleCacheAligned {
     operator const T&() const noexcept { return value; }
 
 private:
-    char padding_[2 * IPB_CACHE_LINE_SIZE - sizeof(T) > 0
-                  ? 2 * IPB_CACHE_LINE_SIZE - sizeof(T)
-                  : 1];
+    char
+        padding_[2 * IPB_CACHE_LINE_SIZE - sizeof(T) > 0 ? 2 * IPB_CACHE_LINE_SIZE - sizeof(T) : 1];
 };
 
 /**
@@ -96,7 +99,7 @@ private:
  * @tparam HotData Frequently accessed data type
  * @tparam ColdData Rarely accessed data type
  */
-template<typename HotData, typename ColdData>
+template <typename HotData, typename ColdData>
 struct alignas(IPB_CACHE_LINE_SIZE) HotColdSplit {
     // Hot data in first cache line(s)
     HotData hot;
@@ -117,14 +120,14 @@ struct alignas(IPB_CACHE_LINE_SIZE) HotColdSplit {
  * @tparam T Element type
  * @tparam Capacity Buffer capacity (must be power of 2)
  */
-template<typename T, size_t Capacity>
+template <typename T, size_t Capacity>
 class alignas(IPB_CACHE_LINE_SIZE) PrefetchBuffer {
     static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
     static_assert(Capacity > 0, "Capacity must be positive");
 
 public:
     static constexpr size_t capacity = Capacity;
-    static constexpr size_t mask = Capacity - 1;
+    static constexpr size_t mask     = Capacity - 1;
 
     // Prefetch distance in elements (tune based on latency)
     static constexpr size_t prefetch_distance = 8;
@@ -140,7 +143,7 @@ public:
         size_t next = (tail + 1) & mask;
 
         if (next == head_.load(std::memory_order_acquire)) {
-            return false; // Full
+            return false;  // Full
         }
 
         // Prefetch next write location
@@ -162,7 +165,7 @@ public:
         size_t head = head_.load(std::memory_order_relaxed);
 
         if (head == tail_.load(std::memory_order_acquire)) {
-            return false; // Empty
+            return false;  // Empty
         }
 
         // Prefetch next read location
@@ -180,8 +183,7 @@ public:
      * @brief Check if buffer is empty
      */
     bool empty() const noexcept {
-        return head_.load(std::memory_order_acquire) ==
-               tail_.load(std::memory_order_acquire);
+        return head_.load(std::memory_order_acquire) == tail_.load(std::memory_order_acquire);
     }
 
     /**
@@ -210,10 +212,10 @@ private:
  * @tparam Capacity Fixed capacity
  * @tparam Fields Field types
  */
-template<size_t Capacity, typename... Fields>
+template <size_t Capacity, typename... Fields>
 class SoAContainer {
 public:
-    static constexpr size_t capacity = Capacity;
+    static constexpr size_t capacity    = Capacity;
     static constexpr size_t field_count = sizeof...(Fields);
 
     SoAContainer() : size_(0) {}
@@ -222,12 +224,12 @@ public:
      * @brief Add element by specifying all fields
      * @return Index of added element, or capacity if full
      */
-    template<typename... Args>
+    template <typename... Args>
     size_t push_back(Args&&... args) {
         static_assert(sizeof...(Args) == field_count, "Must provide all fields");
 
         if (size_ >= Capacity) {
-            return Capacity; // Full
+            return Capacity;  // Full
         }
 
         size_t idx = size_++;
@@ -238,12 +240,12 @@ public:
     /**
      * @brief Get field array for vectorized processing
      */
-    template<size_t FieldIndex>
+    template <size_t FieldIndex>
     auto& get_field_array() noexcept {
         return std::get<FieldIndex>(arrays_);
     }
 
-    template<size_t FieldIndex>
+    template <size_t FieldIndex>
     const auto& get_field_array() const noexcept {
         return std::get<FieldIndex>(arrays_);
     }
@@ -251,12 +253,12 @@ public:
     /**
      * @brief Get single element's field value
      */
-    template<size_t FieldIndex>
+    template <size_t FieldIndex>
     auto& get(size_t index) noexcept {
         return std::get<FieldIndex>(arrays_)[index];
     }
 
-    template<size_t FieldIndex>
+    template <size_t FieldIndex>
     const auto& get(size_t index) const noexcept {
         return std::get<FieldIndex>(arrays_)[index];
     }
@@ -270,9 +272,7 @@ public:
     /**
      * @brief Prefetch field arrays for batch processing
      */
-    void prefetch_fields() const noexcept {
-        prefetch_all(std::make_index_sequence<field_count>{});
-    }
+    void prefetch_fields() const noexcept { prefetch_all(std::make_index_sequence<field_count>{}); }
 
 private:
     using Arrays = std::tuple<std::array<Fields, Capacity>...>;
@@ -280,9 +280,9 @@ private:
     alignas(IPB_CACHE_LINE_SIZE) Arrays arrays_;
     size_t size_;
 
-    template<typename First, typename... Rest>
+    template <typename First, typename... Rest>
     void set_fields(size_t idx, First&& first, Rest&&... rest) {
-        constexpr size_t field_idx = field_count - sizeof...(Rest) - 1;
+        constexpr size_t field_idx        = field_count - sizeof...(Rest) - 1;
         std::get<field_idx>(arrays_)[idx] = std::forward<First>(first);
 
         if constexpr (sizeof...(Rest) > 0) {
@@ -290,9 +290,9 @@ private:
         }
     }
 
-    void set_fields(size_t) {} // Base case
+    void set_fields(size_t) {}  // Base case
 
-    template<size_t... Is>
+    template <size_t... Is>
     void prefetch_all(std::index_sequence<Is...>) const noexcept {
         (IPB_PREFETCH_READ(std::get<Is>(arrays_).data()), ...);
     }
@@ -306,12 +306,12 @@ private:
  *
  * @tparam T Element type
  */
-template<typename T>
+template <typename T>
 class BatchProcessor {
 public:
     // Elements per cache line
     static constexpr size_t elements_per_line = IPB_CACHE_LINE_SIZE / sizeof(T);
-    static constexpr size_t prefetch_lines = 4; // Prefetch ahead distance
+    static constexpr size_t prefetch_lines    = 4;  // Prefetch ahead distance
 
     /**
      * @brief Process array in cache-optimized batches
@@ -319,7 +319,7 @@ public:
      * @param count Number of elements
      * @param processor Function to process each element
      */
-    template<typename Func>
+    template <typename Func>
     static void process(T* IPB_RESTRICT data, size_t count, Func&& processor) {
         // Process in cache-line batches
         size_t full_batches = count / elements_per_line;
@@ -347,11 +347,9 @@ public:
     /**
      * @brief Process two arrays in parallel (useful for transformations)
      */
-    template<typename U, typename Func>
-    static void process_parallel(const T* IPB_RESTRICT input,
-                                  U* IPB_RESTRICT output,
-                                  size_t count,
-                                  Func&& processor) {
+    template <typename U, typename Func>
+    static void process_parallel(const T* IPB_RESTRICT input, U* IPB_RESTRICT output, size_t count,
+                                 Func&& processor) {
         size_t full_batches = count / elements_per_line;
 
         for (size_t batch = 0; batch < full_batches; ++batch) {
@@ -382,7 +380,7 @@ public:
  *
  * For building cache-optimized linked data structures.
  */
-template<typename T>
+template <typename T>
 struct alignas(IPB_CACHE_LINE_SIZE) CacheAlignedNode {
     T data;
     CacheAlignedNode* next{nullptr};
@@ -402,7 +400,7 @@ struct alignas(IPB_CACHE_LINE_SIZE) CacheAlignedNode {
  * @tparam T Data type (should be small, cache-line sized)
  * @tparam MaxCPUs Maximum number of CPUs supported
  */
-template<typename T, size_t MaxCPUs = 128>
+template <typename T, size_t MaxCPUs = 128>
 class alignas(IPB_CACHE_LINE_SIZE) PerCPUData {
 public:
     PerCPUData() = default;
@@ -429,18 +427,14 @@ public:
     /**
      * @brief Get data for specific slot
      */
-    T& at(size_t slot) noexcept {
-        return data_[slot % MaxCPUs].value;
-    }
+    T& at(size_t slot) noexcept { return data_[slot % MaxCPUs].value; }
 
-    const T& at(size_t slot) const noexcept {
-        return data_[slot % MaxCPUs].value;
-    }
+    const T& at(size_t slot) const noexcept { return data_[slot % MaxCPUs].value; }
 
     /**
      * @brief Aggregate all per-CPU values
      */
-    template<typename Reducer>
+    template <typename Reducer>
     T reduce(Reducer&& reducer) const {
         T result = data_[0].value;
         for (size_t i = 1; i < MaxCPUs; ++i) {
@@ -490,13 +484,11 @@ struct CacheStats {
         misses.fetch_add(1, std::memory_order_relaxed);
     }
 
-    void record_eviction() noexcept {
-        evictions.fetch_add(1, std::memory_order_relaxed);
-    }
+    void record_eviction() noexcept { evictions.fetch_add(1, std::memory_order_relaxed); }
 
     double hit_rate() const noexcept {
         auto total = accesses.load(std::memory_order_relaxed);
-        auto h = hits.load(std::memory_order_relaxed);
+        auto h     = hits.load(std::memory_order_relaxed);
         return total > 0 ? static_cast<double>(h) / total * 100.0 : 0.0;
     }
 
@@ -516,7 +508,7 @@ public:
     static constexpr size_t HISTORY_SIZE = 64;
 
     void record_access(const void* addr) noexcept {
-        uintptr_t line = reinterpret_cast<uintptr_t>(addr) / IPB_CACHE_LINE_SIZE;
+        uintptr_t line                    = reinterpret_cast<uintptr_t>(addr) / IPB_CACHE_LINE_SIZE;
         history_[index_++ % HISTORY_SIZE] = line;
     }
 
@@ -525,10 +517,11 @@ public:
      * @return true if accesses are mostly sequential
      */
     bool is_sequential() const noexcept {
-        if (index_ < 2) return false;
+        if (index_ < 2)
+            return false;
 
         size_t sequential = 0;
-        size_t count = std::min(index_, HISTORY_SIZE);
+        size_t count      = std::min(index_, HISTORY_SIZE);
 
         for (size_t i = 1; i < count; ++i) {
             size_t prev_idx = (index_ - count + i - 1) % HISTORY_SIZE;
@@ -546,16 +539,16 @@ public:
      * @brief Get stride pattern (0 if irregular)
      */
     size_t detect_stride() const noexcept {
-        if (index_ < 3) return 0;
+        if (index_ < 3)
+            return 0;
 
-        size_t count = std::min(index_, HISTORY_SIZE);
-        int64_t first_diff = static_cast<int64_t>(history_[1]) -
-                             static_cast<int64_t>(history_[0]);
+        size_t count       = std::min(index_, HISTORY_SIZE);
+        int64_t first_diff = static_cast<int64_t>(history_[1]) - static_cast<int64_t>(history_[0]);
 
         size_t consistent = 0;
         for (size_t i = 2; i < count; ++i) {
-            int64_t diff = static_cast<int64_t>(history_[i]) -
-                          static_cast<int64_t>(history_[i-1]);
+            int64_t diff =
+                static_cast<int64_t>(history_[i]) - static_cast<int64_t>(history_[i - 1]);
             if (diff == first_diff) {
                 ++consistent;
             }
@@ -569,4 +562,4 @@ private:
     size_t index_{0};
 };
 
-} // namespace ipb::common
+}  // namespace ipb::common

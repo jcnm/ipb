@@ -8,8 +8,8 @@
  * YAML (default) or JSON files.
  */
 
-#include <ipb/common/protocol_capabilities.hpp>
 #include <ipb/common/error.hpp>
+#include <ipb/common/protocol_capabilities.hpp>
 
 #include <chrono>
 #include <map>
@@ -28,9 +28,9 @@ namespace ipb::core::config {
  * @brief Supported configuration file formats
  */
 enum class ConfigFormat : uint8_t {
-    AUTO,   ///< Auto-detect from file extension
-    YAML,   ///< YAML format (default)
-    JSON    ///< JSON format
+    AUTO,  ///< Auto-detect from file extension
+    YAML,  ///< YAML format (default)
+    JSON   ///< JSON format
 };
 
 // ============================================================================
@@ -40,24 +40,23 @@ enum class ConfigFormat : uint8_t {
 /**
  * @brief Generic configuration value
  */
-using ConfigValue = std::variant<
-    std::monostate,           ///< null/empty
-    bool,                     ///< boolean
-    int64_t,                  ///< integer
-    double,                   ///< floating point
-    std::string,              ///< string
-    std::vector<std::string>, ///< string array
-    std::map<std::string, std::string>  ///< string map
->;
+using ConfigValue = std::variant<std::monostate,                     ///< null/empty
+                                 bool,                               ///< boolean
+                                 int64_t,                            ///< integer
+                                 double,                             ///< floating point
+                                 std::string,                        ///< string
+                                 std::vector<std::string>,           ///< string array
+                                 std::map<std::string, std::string>  ///< string map
+                                 >;
 
 /**
  * @brief Base configuration with common fields
  */
 struct BaseConfig {
-    std::string id;                    ///< Unique identifier
-    std::string name;                  ///< Human-readable name
-    std::string description;           ///< Description
-    bool enabled = true;               ///< Whether component is enabled
+    std::string id;                               ///< Unique identifier
+    std::string name;                             ///< Human-readable name
+    std::string description;                      ///< Description
+    bool enabled = true;                          ///< Whether component is enabled
     std::map<std::string, ConfigValue> metadata;  ///< Additional metadata
 };
 
@@ -74,7 +73,7 @@ struct TlsConfig {
     std::string key_file;
     std::string ca_file;
     std::string ca_path;
-    bool verify_peer = true;
+    bool verify_peer     = true;
     bool verify_hostname = true;
     std::string cipher_suites;
     std::string tls_version;  ///< "1.2", "1.3", or "auto"
@@ -100,7 +99,7 @@ struct SecurityConfig {
     TlsConfig tls;
     AuthConfig auth;
     bool encrypt_payload = false;
-    bool sign_messages = false;
+    bool sign_messages   = false;
 };
 
 // ============================================================================
@@ -113,15 +112,15 @@ struct SecurityConfig {
 struct EndpointConfig {
     std::string host;
     uint16_t port = 0;
-    std::string path;           ///< For HTTP/WebSocket
-    std::string protocol;       ///< tcp, udp, serial, etc.
+    std::string path;      ///< For HTTP/WebSocket
+    std::string protocol;  ///< tcp, udp, serial, etc.
 
     // Serial specific
-    std::string device;         ///< /dev/ttyUSB0, COM1, etc.
+    std::string device;  ///< /dev/ttyUSB0, COM1, etc.
     uint32_t baud_rate = 9600;
-    uint8_t data_bits = 8;
-    uint8_t stop_bits = 1;
-    char parity = 'N';          ///< N, E, O
+    uint8_t data_bits  = 8;
+    uint8_t stop_bits  = 1;
+    char parity        = 'N';  ///< N, E, O
 
     std::string to_uri() const {
         if (!device.empty()) {
@@ -163,11 +162,11 @@ struct ConnectionConfig {
  * @brief Data point mapping for Scoops
  */
 struct DataPointMapping {
-    std::string source_address;     ///< Protocol-specific address
-    std::string target_name;        ///< IPB DataPoint name
-    std::string data_type;          ///< int, float, bool, string, etc.
+    std::string source_address;  ///< Protocol-specific address
+    std::string target_name;     ///< IPB DataPoint name
+    std::string data_type;       ///< int, float, bool, string, etc.
     double scale_factor = 1.0;
-    double offset = 0.0;
+    double offset       = 0.0;
     std::string unit;
     std::map<std::string, std::string> metadata;
 };
@@ -189,7 +188,7 @@ struct PollingConfig {
 struct SubscriptionConfig {
     bool enabled = false;
     std::vector<std::string> topics;
-    uint8_t qos = 0;
+    uint8_t qos     = 0;
     bool persistent = false;
 };
 
@@ -217,8 +216,8 @@ struct ScoopConfig : BaseConfig {
 
     // Behavior
     bool start_on_load = true;
-    uint32_t priority = 0;
-    bool is_primary = false;
+    uint32_t priority  = 0;
+    bool is_primary    = false;
 };
 
 // ============================================================================
@@ -229,11 +228,11 @@ struct ScoopConfig : BaseConfig {
  * @brief Output formatting configuration
  */
 struct FormatConfig {
-    std::string format;             ///< json, csv, binary, custom
-    std::string timestamp_format;   ///< ISO8601, unix, custom
-    std::string encoding;           ///< utf-8, ascii, etc.
+    std::string format;            ///< json, csv, binary, custom
+    std::string timestamp_format;  ///< ISO8601, unix, custom
+    std::string encoding;          ///< utf-8, ascii, etc.
     bool include_metadata = true;
-    bool pretty_print = false;
+    bool pretty_print     = false;
     std::string custom_template;
 };
 
@@ -241,7 +240,7 @@ struct FormatConfig {
  * @brief Batching configuration for Sinks
  */
 struct BatchConfig {
-    bool enabled = false;
+    bool enabled      = false;
     uint32_t max_size = 100;
     std::chrono::milliseconds max_delay{1000};
     bool flush_on_shutdown = true;
@@ -251,7 +250,7 @@ struct BatchConfig {
  * @brief Retry configuration for Sinks
  */
 struct RetryConfig {
-    bool enabled = true;
+    bool enabled         = true;
     uint32_t max_retries = 3;
     std::chrono::milliseconds initial_delay{100};
     std::chrono::milliseconds max_delay{10000};
@@ -265,7 +264,7 @@ struct FilterConfig {
     std::vector<std::string> include_patterns;  ///< Regex patterns to include
     std::vector<std::string> exclude_patterns;  ///< Regex patterns to exclude
     std::map<std::string, std::string> tag_filters;
-    double min_change_threshold = 0.0;  ///< Minimum change to send
+    double min_change_threshold = 0.0;          ///< Minimum change to send
     std::chrono::milliseconds min_interval{0};  ///< Rate limiting
 };
 
@@ -294,8 +293,8 @@ struct SinkConfig : BaseConfig {
 
     // Behavior
     bool start_on_load = true;
-    uint32_t weight = 100;          ///< Load balancing weight
-    uint32_t priority = 0;          ///< Failover priority
+    uint32_t weight    = 100;  ///< Load balancing weight
+    uint32_t priority  = 0;    ///< Failover priority
 };
 
 // ============================================================================
@@ -316,17 +315,17 @@ struct RouteFilterConfig {
 
     // Value-based filtering
     bool enable_value_filter = false;
-    std::string value_condition;              ///< e.g., "> 100", "between 0 100"
+    std::string value_condition;  ///< e.g., "> 100", "between 0 100"
 };
 
 /**
  * @brief Destination configuration for a route
  */
 struct RouteDestinationConfig {
-    std::string sink_id;                      ///< Target sink ID
-    uint32_t priority = 0;                    ///< Priority for this destination (higher = first)
-    uint32_t weight = 100;                    ///< Load balancing weight
-    bool failover_only = false;               ///< Only use if primary fails
+    std::string sink_id;         ///< Target sink ID
+    uint32_t priority  = 0;      ///< Priority for this destination (higher = first)
+    uint32_t weight    = 100;    ///< Load balancing weight
+    bool failover_only = false;  ///< Only use if primary fails
 };
 
 /**
@@ -335,9 +334,9 @@ struct RouteDestinationConfig {
 struct RouteConfig {
     std::string id;
     std::string name;
-    std::string source_pattern;     ///< Glob or regex for source matching (legacy)
+    std::string source_pattern;         ///< Glob or regex for source matching (legacy)
     std::vector<std::string> sink_ids;  ///< Simple sink list (legacy)
-    bool enabled = true;
+    bool enabled      = true;
     uint32_t priority = 0;
 
     // Enhanced filtering (preferred over source_pattern)
@@ -347,29 +346,29 @@ struct RouteConfig {
     std::vector<RouteDestinationConfig> destinations;
 
     // Transformation
-    std::string transform_script;   ///< Optional transformation
+    std::string transform_script;  ///< Optional transformation
     std::map<std::string, std::string> field_mappings;
 
     // Behavior
-    bool stop_on_match = false;     ///< Stop evaluating further rules if matched
+    bool stop_on_match = false;  ///< Stop evaluating further rules if matched
 };
 
 /**
  * @brief Router configuration
  */
 struct RouterConfig {
-    std::string id = "default";
+    std::string id   = "default";
     std::string name = "IPB Router";
 
     // Threading
-    uint32_t worker_threads = 0;    ///< 0 = auto (CPU count)
-    uint32_t queue_size = 10000;
+    uint32_t worker_threads = 0;  ///< 0 = auto (CPU count)
+    uint32_t queue_size     = 10000;
 
     // Performance
-    bool enable_zero_copy = true;
-    bool enable_lock_free = true;
-    uint32_t batch_size = 100;
-    size_t routing_table_size = 1000;  ///< Max routing rules
+    bool enable_zero_copy     = true;
+    bool enable_lock_free     = true;
+    uint32_t batch_size       = 100;
+    size_t routing_table_size = 1000;                ///< Max routing rules
     std::chrono::microseconds routing_timeout{500};  ///< Timeout per evaluation
 
     // Routes
@@ -393,20 +392,20 @@ struct SchedulerConfig {
     bool enabled = true;
 
     // Real-time settings
-    bool enable_realtime_priority = false;    ///< Use RT scheduling (requires privileges)
-    int realtime_priority = 50;               ///< RT priority (1-99, higher = more urgent)
+    bool enable_realtime_priority = false;  ///< Use RT scheduling (requires privileges)
+    int realtime_priority         = 50;     ///< RT priority (1-99, higher = more urgent)
 
     // CPU affinity
-    bool enable_cpu_affinity = false;         ///< Pin threads to specific CPUs
-    std::vector<int> cpu_cores;               ///< CPU cores to use (empty = auto)
+    bool enable_cpu_affinity = false;  ///< Pin threads to specific CPUs
+    std::vector<int> cpu_cores;        ///< CPU cores to use (empty = auto)
 
     // Task management
     std::chrono::microseconds default_deadline{1000};  ///< Default task deadline (1ms)
-    size_t max_tasks = 10000;                 ///< Maximum concurrent tasks
-    size_t worker_threads = 0;                ///< Worker threads (0 = auto)
+    size_t max_tasks      = 10000;                     ///< Maximum concurrent tasks
+    size_t worker_threads = 0;                         ///< Worker threads (0 = auto)
 
     // Behavior
-    bool preemptive = true;                   ///< Allow task preemption
+    bool preemptive = true;                            ///< Allow task preemption
     std::chrono::milliseconds watchdog_timeout{5000};  ///< Watchdog for stuck tasks
 };
 
@@ -424,12 +423,12 @@ struct CommandInterfaceConfig {
 
     // Connection
     std::string broker_url = "mqtt://localhost:1883";
-    std::string client_id = "ipb-gateway-cmd";
+    std::string client_id  = "ipb-gateway-cmd";
 
     // Topics
-    std::string command_topic = "ipb/gateway/commands";
+    std::string command_topic  = "ipb/gateway/commands";
     std::string response_topic = "ipb/gateway/responses";
-    std::string status_topic = "ipb/gateway/status";
+    std::string status_topic   = "ipb/gateway/status";
 
     // Behavior
     std::chrono::seconds status_interval{30};  ///< Status publish interval
@@ -447,13 +446,13 @@ struct CommandInterfaceConfig {
  * @brief Logging configuration
  */
 struct LoggingConfig {
-    std::string level = "info";     ///< trace, debug, info, warn, error
-    std::string output = "console"; ///< console, file, syslog
+    std::string level  = "info";     ///< trace, debug, info, warn, error
+    std::string output = "console";  ///< console, file, syslog
     std::string file_path;
     uint32_t max_file_size_mb = 100;
-    uint32_t max_files = 5;
-    bool include_timestamp = true;
-    bool include_thread_id = false;
+    uint32_t max_files        = 5;
+    bool include_timestamp    = true;
+    bool include_thread_id    = false;
 };
 
 /**
@@ -476,10 +475,10 @@ struct MetricsConfig {
  */
 struct HealthCheckConfig {
     bool enabled = true;
-    std::chrono::seconds interval{10};        ///< Health check interval
-    std::chrono::seconds timeout{5};          ///< Timeout for health checks
-    uint32_t unhealthy_threshold = 3;         ///< Failures before unhealthy
-    uint32_t healthy_threshold = 2;           ///< Successes before healthy
+    std::chrono::seconds interval{10};  ///< Health check interval
+    std::chrono::seconds timeout{5};    ///< Timeout for health checks
+    uint32_t unhealthy_threshold = 3;   ///< Failures before unhealthy
+    uint32_t healthy_threshold   = 2;   ///< Successes before healthy
 
     // Endpoints to check
     std::vector<std::string> check_endpoints;
@@ -489,9 +488,9 @@ struct HealthCheckConfig {
  * @brief Prometheus metrics export configuration
  */
 struct PrometheusConfig {
-    bool enabled = false;
-    uint16_t port = 9090;
-    std::string path = "/metrics";
+    bool enabled             = false;
+    uint16_t port            = 9090;
+    std::string path         = "/metrics";
     std::string bind_address = "0.0.0.0";
 };
 
@@ -514,9 +513,9 @@ struct MonitoringConfig {
 struct HotReloadConfig {
     bool enabled = true;
     std::chrono::seconds check_interval{10};  ///< Config file check interval
-    bool reload_scoops = true;                ///< Allow scoop config reload
-    bool reload_sinks = true;                 ///< Allow sink config reload
-    bool reload_routes = true;                ///< Allow route config reload
+    bool reload_scoops    = true;             ///< Allow scoop config reload
+    bool reload_sinks     = true;             ///< Allow sink config reload
+    bool reload_routes    = true;             ///< Allow route config reload
     bool graceful_restart = true;             ///< Graceful component restart
 };
 
@@ -527,7 +526,7 @@ struct HotReloadConfig {
  * It includes all component configurations and operational settings.
  */
 struct ApplicationConfig {
-    std::string name = "ipb";
+    std::string name    = "ipb";
     std::string version = "1.0.0";
     std::string instance_id;
 
@@ -593,4 +592,4 @@ struct ConfigConverter {
     }
 };
 
-} // namespace ipb::core::config
+}  // namespace ipb::core::config

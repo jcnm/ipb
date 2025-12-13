@@ -29,9 +29,9 @@
 #include <json/json.h>
 #endif
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
-#include <algorithm>
 
 namespace ipb::core::config {
 
@@ -42,11 +42,11 @@ namespace ipb::core::config {
 namespace {
 
 thread_local size_t g_current_memory = 0;
-thread_local size_t g_peak_memory = 0;
+thread_local size_t g_peak_memory    = 0;
 
 void reset_memory_tracking() {
     g_current_memory = 0;
-    g_peak_memory = 0;
+    g_peak_memory    = 0;
 }
 
 void track_allocation(size_t size) {
@@ -62,7 +62,7 @@ void track_deallocation(size_t size) {
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // ============================================================================
 // RAPIDYAML PARSING HELPERS
@@ -72,7 +72,7 @@ void track_deallocation(size_t size) {
 
 namespace {
 
-template<typename T>
+template <typename T>
 T ryml_get(const ryml::ConstNodeRef& node, const char* key, T default_value) {
     if (!node.valid() || !node.is_map()) {
         return default_value;
@@ -90,8 +90,9 @@ T ryml_get(const ryml::ConstNodeRef& node, const char* key, T default_value) {
     return result;
 }
 
-template<>
-std::string ryml_get<std::string>(const ryml::ConstNodeRef& node, const char* key, std::string default_value) {
+template <>
+std::string ryml_get<std::string>(const ryml::ConstNodeRef& node, const char* key,
+                                  std::string default_value) {
     if (!node.valid() || !node.is_map()) {
         return default_value;
     }
@@ -107,7 +108,7 @@ std::string ryml_get<std::string>(const ryml::ConstNodeRef& node, const char* ke
     return std::string(val.str, val.len);
 }
 
-template<>
+template <>
 bool ryml_get<bool>(const ryml::ConstNodeRef& node, const char* key, bool default_value) {
     if (!node.valid() || !node.is_map()) {
         return default_value;
@@ -148,7 +149,8 @@ std::vector<std::string> ryml_get_string_array(const ryml::ConstNodeRef& node, c
     return result;
 }
 
-std::map<std::string, std::string> ryml_get_string_map(const ryml::ConstNodeRef& node, const char* key) {
+std::map<std::string, std::string> ryml_get_string_map(const ryml::ConstNodeRef& node,
+                                                       const char* key) {
     std::map<std::string, std::string> result;
     if (!node.valid() || !node.is_map()) {
         return result;
@@ -163,8 +165,8 @@ std::map<std::string, std::string> ryml_get_string_map(const ryml::ConstNodeRef&
 
     for (const auto& item : child) {
         if (item.has_key() && item.has_val()) {
-            auto k = item.key();
-            auto v = item.val();
+            auto k                            = item.key();
+            auto v                            = item.val();
             result[std::string(k.str, k.len)] = std::string(v.str, v.len);
         }
     }
@@ -182,39 +184,42 @@ SchedulerConfig parse_scheduler_config_ryml(const ryml::ConstNodeRef& node);
 
 LoggingConfig parse_logging_config_ryml(const ryml::ConstNodeRef& node) {
     LoggingConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.level = ryml_get<std::string>(node, "level", "info");
-    config.format = ryml_get<std::string>(node, "format", "text");
-    config.file_path = ryml_get<std::string>(node, "file_path", "");
-    config.max_file_size = ryml_get<size_t>(node, "max_file_size", 10 * 1024 * 1024);
-    config.max_files = ryml_get<size_t>(node, "max_files", 5);
+    config.level          = ryml_get<std::string>(node, "level", "info");
+    config.format         = ryml_get<std::string>(node, "format", "text");
+    config.file_path      = ryml_get<std::string>(node, "file_path", "");
+    config.max_file_size  = ryml_get<size_t>(node, "max_file_size", 10 * 1024 * 1024);
+    config.max_files      = ryml_get<size_t>(node, "max_files", 5);
     config.enable_console = ryml_get<bool>(node, "enable_console", true);
-    config.enable_file = ryml_get<bool>(node, "enable_file", false);
+    config.enable_file    = ryml_get<bool>(node, "enable_file", false);
 
     return config;
 }
 
 MetricsConfig parse_metrics_config_ryml(const ryml::ConstNodeRef& node) {
     MetricsConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.enabled = ryml_get<bool>(node, "enabled", true);
+    config.enabled                = ryml_get<bool>(node, "enabled", true);
     config.collection_interval_ms = ryml_get<uint32_t>(node, "collection_interval_ms", 1000);
-    config.history_size = ryml_get<size_t>(node, "history_size", 1000);
-    config.enable_histograms = ryml_get<bool>(node, "enable_histograms", true);
+    config.history_size           = ryml_get<size_t>(node, "history_size", 1000);
+    config.enable_histograms      = ryml_get<bool>(node, "enable_histograms", true);
 
     return config;
 }
 
 SecurityConfig parse_security_config_ryml(const ryml::ConstNodeRef& node) {
     SecurityConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.enable_tls = ryml_get<bool>(node, "enable_tls", false);
-    config.cert_file = ryml_get<std::string>(node, "cert_file", "");
-    config.key_file = ryml_get<std::string>(node, "key_file", "");
-    config.ca_file = ryml_get<std::string>(node, "ca_file", "");
+    config.enable_tls  = ryml_get<bool>(node, "enable_tls", false);
+    config.cert_file   = ryml_get<std::string>(node, "cert_file", "");
+    config.key_file    = ryml_get<std::string>(node, "key_file", "");
+    config.ca_file     = ryml_get<std::string>(node, "ca_file", "");
     config.verify_peer = ryml_get<bool>(node, "verify_peer", true);
 
     return config;
@@ -222,19 +227,20 @@ SecurityConfig parse_security_config_ryml(const ryml::ConstNodeRef& node) {
 
 SchedulerConfig parse_scheduler_config_ryml(const ryml::ConstNodeRef& node) {
     SchedulerConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.enabled = ryml_get<bool>(node, "enabled", true);
+    config.enabled                  = ryml_get<bool>(node, "enabled", true);
     config.enable_realtime_priority = ryml_get<bool>(node, "enable_realtime_priority", false);
-    config.realtime_priority = ryml_get<int>(node, "realtime_priority", 50);
-    config.worker_threads = ryml_get<size_t>(node, "worker_threads", 0);
-    config.max_tasks = ryml_get<size_t>(node, "max_tasks", 10000);
-    config.preemptive = ryml_get<bool>(node, "preemptive", true);
+    config.realtime_priority        = ryml_get<int>(node, "realtime_priority", 50);
+    config.worker_threads           = ryml_get<size_t>(node, "worker_threads", 0);
+    config.max_tasks                = ryml_get<size_t>(node, "max_tasks", 10000);
+    config.preemptive               = ryml_get<bool>(node, "preemptive", true);
 
-    auto deadline_us = ryml_get<uint64_t>(node, "default_deadline_us", 1000);
+    auto deadline_us        = ryml_get<uint64_t>(node, "default_deadline_us", 1000);
     config.default_deadline = std::chrono::microseconds(deadline_us);
 
-    auto watchdog_ms = ryml_get<uint64_t>(node, "watchdog_timeout_ms", 5000);
+    auto watchdog_ms        = ryml_get<uint64_t>(node, "watchdog_timeout_ms", 5000);
     config.watchdog_timeout = std::chrono::milliseconds(watchdog_ms);
 
     return config;
@@ -242,25 +248,27 @@ SchedulerConfig parse_scheduler_config_ryml(const ryml::ConstNodeRef& node) {
 
 RouteFilterConfig parse_route_filter_ryml(const ryml::ConstNodeRef& node) {
     RouteFilterConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.address_pattern = ryml_get<std::string>(node, "address_pattern", "");
-    config.protocol_ids = ryml_get_string_array(node, "protocol_ids");
-    config.quality_levels = ryml_get_string_array(node, "quality_levels");
-    config.tags = ryml_get_string_array(node, "tags");
+    config.address_pattern     = ryml_get<std::string>(node, "address_pattern", "");
+    config.protocol_ids        = ryml_get_string_array(node, "protocol_ids");
+    config.quality_levels      = ryml_get_string_array(node, "quality_levels");
+    config.tags                = ryml_get_string_array(node, "tags");
     config.enable_value_filter = ryml_get<bool>(node, "enable_value_filter", false);
-    config.value_condition = ryml_get<std::string>(node, "value_condition", "");
+    config.value_condition     = ryml_get<std::string>(node, "value_condition", "");
 
     return config;
 }
 
 RouteDestinationConfig parse_route_destination_ryml(const ryml::ConstNodeRef& node) {
     RouteDestinationConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.sink_id = ryml_get<std::string>(node, "sink_id", "");
-    config.priority = ryml_get<uint32_t>(node, "priority", 0);
-    config.weight = ryml_get<uint32_t>(node, "weight", 100);
+    config.sink_id       = ryml_get<std::string>(node, "sink_id", "");
+    config.priority      = ryml_get<uint32_t>(node, "priority", 0);
+    config.weight        = ryml_get<uint32_t>(node, "weight", 100);
     config.failover_only = ryml_get<bool>(node, "failover_only", false);
 
     return config;
@@ -268,16 +276,17 @@ RouteDestinationConfig parse_route_destination_ryml(const ryml::ConstNodeRef& no
 
 RouteConfig parse_route_config_ryml(const ryml::ConstNodeRef& node) {
     RouteConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.id = ryml_get<std::string>(node, "id", "");
-    config.name = ryml_get<std::string>(node, "name", "");
-    config.enabled = ryml_get<bool>(node, "enabled", true);
+    config.id       = ryml_get<std::string>(node, "id", "");
+    config.name     = ryml_get<std::string>(node, "name", "");
+    config.enabled  = ryml_get<bool>(node, "enabled", true);
     config.priority = ryml_get<uint32_t>(node, "priority", 0);
 
     // Legacy fields
-    config.source_pattern = ryml_get<std::string>(node, "source_pattern", "");
-    config.sink_ids = ryml_get_string_array(node, "sink_ids");
+    config.source_pattern       = ryml_get<std::string>(node, "source_pattern", "");
+    config.sink_ids             = ryml_get_string_array(node, "sink_ids");
     config.transform_expression = ryml_get<std::string>(node, "transform_expression", "");
 
     // Enhanced filter
@@ -300,17 +309,18 @@ RouteConfig parse_route_config_ryml(const ryml::ConstNodeRef& node) {
 
 RouterConfig parse_router_config_ryml(const ryml::ConstNodeRef& node) {
     RouterConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.id = ryml_get<std::string>(node, "id", "default-router");
-    config.worker_threads = ryml_get<size_t>(node, "worker_threads", 4);
-    config.queue_size = ryml_get<size_t>(node, "queue_size", 10000);
-    config.batch_size = ryml_get<size_t>(node, "batch_size", 100);
-    config.routing_table_size = ryml_get<size_t>(node, "routing_table_size", 1000);
-    config.enable_metrics = ryml_get<bool>(node, "enable_metrics", true);
+    config.id                    = ryml_get<std::string>(node, "id", "default-router");
+    config.worker_threads        = ryml_get<size_t>(node, "worker_threads", 4);
+    config.queue_size            = ryml_get<size_t>(node, "queue_size", 10000);
+    config.batch_size            = ryml_get<size_t>(node, "batch_size", 100);
+    config.routing_table_size    = ryml_get<size_t>(node, "routing_table_size", 1000);
+    config.enable_metrics        = ryml_get<bool>(node, "enable_metrics", true);
     config.enable_load_balancing = ryml_get<bool>(node, "enable_load_balancing", false);
 
-    auto timeout_ms = ryml_get<uint64_t>(node, "default_timeout_ms", 5000);
+    auto timeout_ms        = ryml_get<uint64_t>(node, "default_timeout_ms", 5000);
     config.default_timeout = std::chrono::milliseconds(timeout_ms);
 
     // Routes
@@ -328,18 +338,19 @@ RouterConfig parse_router_config_ryml(const ryml::ConstNodeRef& node) {
 
 ScoopConfig parse_scoop_config_ryml(const ryml::ConstNodeRef& node) {
     ScoopConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.id = ryml_get<std::string>(node, "id", "");
-    config.name = ryml_get<std::string>(node, "name", "");
-    config.type = ryml_get<std::string>(node, "type", "");
+    config.id      = ryml_get<std::string>(node, "id", "");
+    config.name    = ryml_get<std::string>(node, "name", "");
+    config.type    = ryml_get<std::string>(node, "type", "");
     config.enabled = ryml_get<bool>(node, "enabled", true);
 
-    auto poll_ms = ryml_get<uint64_t>(node, "poll_interval_ms", 1000);
+    auto poll_ms         = ryml_get<uint64_t>(node, "poll_interval_ms", 1000);
     config.poll_interval = std::chrono::milliseconds(poll_ms);
 
     auto timeout_ms = ryml_get<uint64_t>(node, "timeout_ms", 5000);
-    config.timeout = std::chrono::milliseconds(timeout_ms);
+    config.timeout  = std::chrono::milliseconds(timeout_ms);
 
     config.retry_count = ryml_get<uint32_t>(node, "retry_count", 3);
     config.buffer_size = ryml_get<size_t>(node, "buffer_size", 1000);
@@ -359,21 +370,22 @@ ScoopConfig parse_scoop_config_ryml(const ryml::ConstNodeRef& node) {
 
 SinkConfig parse_sink_config_ryml(const ryml::ConstNodeRef& node) {
     SinkConfig config;
-    if (!node.valid()) return config;
+    if (!node.valid())
+        return config;
 
-    config.id = ryml_get<std::string>(node, "id", "");
-    config.name = ryml_get<std::string>(node, "name", "");
-    config.type = ryml_get<std::string>(node, "type", "");
+    config.id      = ryml_get<std::string>(node, "id", "");
+    config.name    = ryml_get<std::string>(node, "name", "");
+    config.type    = ryml_get<std::string>(node, "type", "");
     config.enabled = ryml_get<bool>(node, "enabled", true);
 
     auto timeout_ms = ryml_get<uint64_t>(node, "timeout_ms", 5000);
-    config.timeout = std::chrono::milliseconds(timeout_ms);
+    config.timeout  = std::chrono::milliseconds(timeout_ms);
 
     config.retry_count = ryml_get<uint32_t>(node, "retry_count", 3);
     config.buffer_size = ryml_get<size_t>(node, "buffer_size", 1000);
-    config.batch_size = ryml_get<size_t>(node, "batch_size", 100);
+    config.batch_size  = ryml_get<size_t>(node, "batch_size", 100);
 
-    auto flush_ms = ryml_get<uint64_t>(node, "flush_interval_ms", 1000);
+    auto flush_ms         = ryml_get<uint64_t>(node, "flush_interval_ms", 1000);
     config.flush_interval = std::chrono::milliseconds(flush_ms);
 
     // Connection parameters
@@ -392,8 +404,8 @@ SinkConfig parse_sink_config_ryml(const ryml::ConstNodeRef& node) {
 ApplicationConfig parse_application_config_ryml(const ryml::ConstNodeRef& root) {
     ApplicationConfig config;
 
-    config.name = ryml_get<std::string>(root, "name", "ipb-gateway");
-    config.version = ryml_get<std::string>(root, "version", "1.0.0");
+    config.name        = ryml_get<std::string>(root, "name", "ipb-gateway");
+    config.version     = ryml_get<std::string>(root, "version", "1.0.0");
     config.instance_id = ryml_get<std::string>(root, "instance_id", "");
 
     // Logging
@@ -444,9 +456,9 @@ ApplicationConfig parse_application_config_ryml(const ryml::ConstNodeRef& root) 
     return config;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
-#endif // IPB_CONFIG_USE_RYML
+#endif  // IPB_CONFIG_USE_RYML
 
 // ============================================================================
 // CJSON PARSING HELPERS
@@ -456,61 +468,74 @@ ApplicationConfig parse_application_config_ryml(const ryml::ConstNodeRef& root) 
 
 namespace {
 
-template<typename T>
+template <typename T>
 T cjson_get(const cJSON* node, const char* key, T default_value);
 
-template<>
+template <>
 std::string cjson_get<std::string>(const cJSON* node, const char* key, std::string default_value) {
-    if (!node) return default_value;
+    if (!node)
+        return default_value;
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(node, key);
-    if (!item || !cJSON_IsString(item)) return default_value;
+    if (!item || !cJSON_IsString(item))
+        return default_value;
     return item->valuestring ? item->valuestring : default_value;
 }
 
-template<>
+template <>
 bool cjson_get<bool>(const cJSON* node, const char* key, bool default_value) {
-    if (!node) return default_value;
+    if (!node)
+        return default_value;
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(node, key);
-    if (!item) return default_value;
-    if (cJSON_IsBool(item)) return cJSON_IsTrue(item);
+    if (!item)
+        return default_value;
+    if (cJSON_IsBool(item))
+        return cJSON_IsTrue(item);
     return default_value;
 }
 
-template<>
+template <>
 int cjson_get<int>(const cJSON* node, const char* key, int default_value) {
-    if (!node) return default_value;
+    if (!node)
+        return default_value;
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(node, key);
-    if (!item || !cJSON_IsNumber(item)) return default_value;
+    if (!item || !cJSON_IsNumber(item))
+        return default_value;
     return item->valueint;
 }
 
-template<>
+template <>
 uint32_t cjson_get<uint32_t>(const cJSON* node, const char* key, uint32_t default_value) {
     return static_cast<uint32_t>(cjson_get<int>(node, key, static_cast<int>(default_value)));
 }
 
-template<>
+template <>
 size_t cjson_get<size_t>(const cJSON* node, const char* key, size_t default_value) {
-    if (!node) return default_value;
+    if (!node)
+        return default_value;
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(node, key);
-    if (!item || !cJSON_IsNumber(item)) return default_value;
+    if (!item || !cJSON_IsNumber(item))
+        return default_value;
     return static_cast<size_t>(item->valuedouble);
 }
 
-template<>
+template <>
 uint64_t cjson_get<uint64_t>(const cJSON* node, const char* key, uint64_t default_value) {
-    if (!node) return default_value;
+    if (!node)
+        return default_value;
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(node, key);
-    if (!item || !cJSON_IsNumber(item)) return default_value;
+    if (!item || !cJSON_IsNumber(item))
+        return default_value;
     return static_cast<uint64_t>(item->valuedouble);
 }
 
 std::vector<std::string> cjson_get_string_array(const cJSON* node, const char* key) {
     std::vector<std::string> result;
-    if (!node) return result;
+    if (!node)
+        return result;
 
     const cJSON* arr = cJSON_GetObjectItemCaseSensitive(node, key);
-    if (!arr || !cJSON_IsArray(arr)) return result;
+    if (!arr || !cJSON_IsArray(arr))
+        return result;
 
     const cJSON* item = nullptr;
     cJSON_ArrayForEach(item, arr) {
@@ -523,10 +548,12 @@ std::vector<std::string> cjson_get_string_array(const cJSON* node, const char* k
 
 std::map<std::string, std::string> cjson_get_string_map(const cJSON* node, const char* key) {
     std::map<std::string, std::string> result;
-    if (!node) return result;
+    if (!node)
+        return result;
 
     const cJSON* obj = cJSON_GetObjectItemCaseSensitive(node, key);
-    if (!obj || !cJSON_IsObject(obj)) return result;
+    if (!obj || !cJSON_IsObject(obj))
+        return result;
 
     const cJSON* item = nullptr;
     cJSON_ArrayForEach(item, obj) {
@@ -541,8 +568,11 @@ std::map<std::string, std::string> cjson_get_string_map(const cJSON* node, const
 struct CJsonGuard {
     cJSON* json;
     explicit CJsonGuard(cJSON* j) : json(j) {}
-    ~CJsonGuard() { if (json) cJSON_Delete(json); }
-    CJsonGuard(const CJsonGuard&) = delete;
+    ~CJsonGuard() {
+        if (json)
+            cJSON_Delete(json);
+    }
+    CJsonGuard(const CJsonGuard&)            = delete;
     CJsonGuard& operator=(const CJsonGuard&) = delete;
 };
 
@@ -554,73 +584,78 @@ ApplicationConfig parse_application_config_cjson(const cJSON* root);
 
 LoggingConfig parse_logging_config_cjson(const cJSON* node) {
     LoggingConfig config;
-    if (!node) return config;
+    if (!node)
+        return config;
 
-    config.level = cjson_get<std::string>(node, "level", "info");
-    config.format = cjson_get<std::string>(node, "format", "text");
-    config.file_path = cjson_get<std::string>(node, "file_path", "");
-    config.max_file_size = cjson_get<size_t>(node, "max_file_size", 10 * 1024 * 1024);
-    config.max_files = cjson_get<size_t>(node, "max_files", 5);
+    config.level          = cjson_get<std::string>(node, "level", "info");
+    config.format         = cjson_get<std::string>(node, "format", "text");
+    config.file_path      = cjson_get<std::string>(node, "file_path", "");
+    config.max_file_size  = cjson_get<size_t>(node, "max_file_size", 10 * 1024 * 1024);
+    config.max_files      = cjson_get<size_t>(node, "max_files", 5);
     config.enable_console = cjson_get<bool>(node, "enable_console", true);
-    config.enable_file = cjson_get<bool>(node, "enable_file", false);
+    config.enable_file    = cjson_get<bool>(node, "enable_file", false);
 
     return config;
 }
 
 ScoopConfig parse_scoop_config_cjson(const cJSON* node) {
     ScoopConfig config;
-    if (!node) return config;
+    if (!node)
+        return config;
 
-    config.id = cjson_get<std::string>(node, "id", "");
-    config.name = cjson_get<std::string>(node, "name", "");
-    config.type = cjson_get<std::string>(node, "type", "");
+    config.id      = cjson_get<std::string>(node, "id", "");
+    config.name    = cjson_get<std::string>(node, "name", "");
+    config.type    = cjson_get<std::string>(node, "type", "");
     config.enabled = cjson_get<bool>(node, "enabled", true);
 
-    auto poll_ms = cjson_get<uint64_t>(node, "poll_interval_ms", 1000);
+    auto poll_ms         = cjson_get<uint64_t>(node, "poll_interval_ms", 1000);
     config.poll_interval = std::chrono::milliseconds(poll_ms);
 
     config.connection_params = cjson_get_string_map(node, "connection");
-    config.custom_params = cjson_get_string_map(node, "parameters");
+    config.custom_params     = cjson_get_string_map(node, "parameters");
 
     return config;
 }
 
 SinkConfig parse_sink_config_cjson(const cJSON* node) {
     SinkConfig config;
-    if (!node) return config;
+    if (!node)
+        return config;
 
-    config.id = cjson_get<std::string>(node, "id", "");
-    config.name = cjson_get<std::string>(node, "name", "");
-    config.type = cjson_get<std::string>(node, "type", "");
+    config.id      = cjson_get<std::string>(node, "id", "");
+    config.name    = cjson_get<std::string>(node, "name", "");
+    config.type    = cjson_get<std::string>(node, "type", "");
     config.enabled = cjson_get<bool>(node, "enabled", true);
 
     config.connection_params = cjson_get_string_map(node, "connection");
-    config.custom_params = cjson_get_string_map(node, "parameters");
+    config.custom_params     = cjson_get_string_map(node, "parameters");
 
     return config;
 }
 
 RouteConfig parse_route_config_cjson(const cJSON* node) {
     RouteConfig config;
-    if (!node) return config;
+    if (!node)
+        return config;
 
-    config.id = cjson_get<std::string>(node, "id", "");
-    config.name = cjson_get<std::string>(node, "name", "");
-    config.enabled = cjson_get<bool>(node, "enabled", true);
-    config.priority = cjson_get<uint32_t>(node, "priority", 0);
+    config.id             = cjson_get<std::string>(node, "id", "");
+    config.name           = cjson_get<std::string>(node, "name", "");
+    config.enabled        = cjson_get<bool>(node, "enabled", true);
+    config.priority       = cjson_get<uint32_t>(node, "priority", 0);
     config.source_pattern = cjson_get<std::string>(node, "source_pattern", "");
-    config.sink_ids = cjson_get_string_array(node, "sink_ids");
+    config.sink_ids       = cjson_get_string_array(node, "sink_ids");
 
     return config;
 }
 
 RouterConfig parse_router_config_cjson(const cJSON* node) {
     RouterConfig config;
-    if (!node) return config;
+    if (!node)
+        return config;
 
-    config.id = cjson_get<std::string>(node, "id", "default-router");
+    config.id             = cjson_get<std::string>(node, "id", "default-router");
     config.worker_threads = cjson_get<size_t>(node, "worker_threads", 4);
-    config.queue_size = cjson_get<size_t>(node, "queue_size", 10000);
+    config.queue_size     = cjson_get<size_t>(node, "queue_size", 10000);
 
     const cJSON* routes = cJSON_GetObjectItemCaseSensitive(node, "routes");
     if (routes && cJSON_IsArray(routes)) {
@@ -635,9 +670,10 @@ RouterConfig parse_router_config_cjson(const cJSON* node) {
 
 ApplicationConfig parse_application_config_cjson(const cJSON* root) {
     ApplicationConfig config;
-    if (!root) return config;
+    if (!root)
+        return config;
 
-    config.name = cjson_get<std::string>(root, "name", "ipb-gateway");
+    config.name    = cjson_get<std::string>(root, "name", "ipb-gateway");
     config.version = cjson_get<std::string>(root, "version", "1.0.0");
 
     const cJSON* logging = cJSON_GetObjectItemCaseSensitive(root, "logging");
@@ -669,35 +705,26 @@ ApplicationConfig parse_application_config_cjson(const cJSON* root) {
     return config;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
-#endif // IPB_CONFIG_USE_CJSON
+#endif  // IPB_CONFIG_USE_CJSON
 
 // ============================================================================
 // EMBEDDED CONFIG LOADER IMPLEMENTATION
 // ============================================================================
 
-EmbeddedConfigLoader::EmbeddedConfigLoader()
-    : constraints_{}
-    , allocator_{}
-    , last_stats_{} {
-}
+EmbeddedConfigLoader::EmbeddedConfigLoader() : constraints_{}, allocator_{}, last_stats_{} {}
 
 EmbeddedConfigLoader::EmbeddedConfigLoader(const EmbeddedConfigConstraints& constraints)
-    : constraints_(constraints)
-    , allocator_{}
-    , last_stats_{} {
+    : constraints_(constraints), allocator_{}, last_stats_{} {
     if (constraints_.use_static_buffers && constraints_.static_buffer_size > 0) {
         static_buffer_ = std::make_unique<char[]>(constraints_.static_buffer_size);
     }
 }
 
-EmbeddedConfigLoader::EmbeddedConfigLoader(
-    const EmbeddedConfigConstraints& constraints,
-    const EmbeddedAllocator& allocator)
-    : constraints_(constraints)
-    , allocator_(allocator)
-    , last_stats_{} {
+EmbeddedConfigLoader::EmbeddedConfigLoader(const EmbeddedConfigConstraints& constraints,
+                                           const EmbeddedAllocator& allocator)
+    : constraints_(constraints), allocator_(allocator), last_stats_{} {
     if (constraints_.use_static_buffers && constraints_.static_buffer_size > 0) {
         static_buffer_ = std::make_unique<char[]>(constraints_.static_buffer_size);
     }
@@ -705,7 +732,7 @@ EmbeddedConfigLoader::EmbeddedConfigLoader(
 
 EmbeddedConfigLoader::~EmbeddedConfigLoader() = default;
 
-EmbeddedConfigLoader::EmbeddedConfigLoader(EmbeddedConfigLoader&&) noexcept = default;
+EmbeddedConfigLoader::EmbeddedConfigLoader(EmbeddedConfigLoader&&) noexcept            = default;
 EmbeddedConfigLoader& EmbeddedConfigLoader::operator=(EmbeddedConfigLoader&&) noexcept = default;
 
 void EmbeddedConfigLoader::set_constraints(const EmbeddedConfigConstraints& constraints) {
@@ -742,7 +769,7 @@ bool EmbeddedConfigLoader::check_constraints(std::string_view content) const {
 bool EmbeddedConfigLoader::validate_constraints(std::string_view content) {
     if (content.size() > constraints_.max_file_size) {
         last_stats_.constraints_exceeded = true;
-        last_stats_.constraint_error = "File size exceeds maximum";
+        last_stats_.constraint_error     = "File size exceeds maximum";
         return false;
     }
     return true;
@@ -750,25 +777,22 @@ bool EmbeddedConfigLoader::validate_constraints(std::string_view content) {
 
 void EmbeddedConfigLoader::update_stats(size_t memory_used, size_t parse_time_us) {
     last_stats_.peak_memory_usage = memory_used;
-    last_stats_.parse_time_us = parse_time_us;
+    last_stats_.parse_time_us     = parse_time_us;
 }
 
 common::Result<std::string> EmbeddedConfigLoader::read_file_constrained(
     const std::filesystem::path& path) {
-
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file) {
-        return common::Result<std::string>(
-            common::ErrorCode::FILE_NOT_FOUND,
-            "Cannot open file: " + path.string());
+        return common::Result<std::string>(common::ErrorCode::FILE_NOT_FOUND,
+                                           "Cannot open file: " + path.string());
     }
 
     auto size = file.tellg();
     if (static_cast<size_t>(size) > constraints_.max_file_size) {
-        return common::Result<std::string>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "File size exceeds maximum: " + std::to_string(size) + " > " +
-            std::to_string(constraints_.max_file_size));
+        return common::Result<std::string>(common::ErrorCode::INVALID_ARGUMENT,
+                                           "File size exceeds maximum: " + std::to_string(size) +
+                                               " > " + std::to_string(constraints_.max_file_size));
     }
 
     last_stats_.file_size = static_cast<size_t>(size);
@@ -786,14 +810,11 @@ common::Result<std::string> EmbeddedConfigLoader::read_file_constrained(
 // ============================================================================
 
 common::Result<ApplicationConfig> EmbeddedConfigLoader::load_application(
-    const std::filesystem::path& path,
-    ConfigFormat format) {
-
+    const std::filesystem::path& path, ConfigFormat format) {
     auto content_result = read_file_constrained(path);
     if (!content_result.is_success()) {
-        return common::Result<ApplicationConfig>(
-            content_result.error_code(),
-            content_result.error_message());
+        return common::Result<ApplicationConfig>(content_result.error_code(),
+                                                 content_result.error_message());
     }
 
     if (format == ConfigFormat::AUTO) {
@@ -803,15 +824,12 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::load_application(
     return parse_application(content_result.value(), format);
 }
 
-common::Result<ScoopConfig> EmbeddedConfigLoader::load_scoop(
-    const std::filesystem::path& path,
-    ConfigFormat format) {
-
+common::Result<ScoopConfig> EmbeddedConfigLoader::load_scoop(const std::filesystem::path& path,
+                                                             ConfigFormat format) {
     auto content_result = read_file_constrained(path);
     if (!content_result.is_success()) {
-        return common::Result<ScoopConfig>(
-            content_result.error_code(),
-            content_result.error_message());
+        return common::Result<ScoopConfig>(content_result.error_code(),
+                                           content_result.error_message());
     }
 
     if (format == ConfigFormat::AUTO) {
@@ -821,15 +839,12 @@ common::Result<ScoopConfig> EmbeddedConfigLoader::load_scoop(
     return parse_scoop(content_result.value(), format);
 }
 
-common::Result<SinkConfig> EmbeddedConfigLoader::load_sink(
-    const std::filesystem::path& path,
-    ConfigFormat format) {
-
+common::Result<SinkConfig> EmbeddedConfigLoader::load_sink(const std::filesystem::path& path,
+                                                           ConfigFormat format) {
     auto content_result = read_file_constrained(path);
     if (!content_result.is_success()) {
-        return common::Result<SinkConfig>(
-            content_result.error_code(),
-            content_result.error_message());
+        return common::Result<SinkConfig>(content_result.error_code(),
+                                          content_result.error_message());
     }
 
     if (format == ConfigFormat::AUTO) {
@@ -839,15 +854,12 @@ common::Result<SinkConfig> EmbeddedConfigLoader::load_sink(
     return parse_sink(content_result.value(), format);
 }
 
-common::Result<RouterConfig> EmbeddedConfigLoader::load_router(
-    const std::filesystem::path& path,
-    ConfigFormat format) {
-
+common::Result<RouterConfig> EmbeddedConfigLoader::load_router(const std::filesystem::path& path,
+                                                               ConfigFormat format) {
     auto content_result = read_file_constrained(path);
     if (!content_result.is_success()) {
-        return common::Result<RouterConfig>(
-            content_result.error_code(),
-            content_result.error_message());
+        return common::Result<RouterConfig>(content_result.error_code(),
+                                            content_result.error_message());
     }
 
     if (format == ConfigFormat::AUTO) {
@@ -858,24 +870,23 @@ common::Result<RouterConfig> EmbeddedConfigLoader::load_router(
 }
 
 common::Result<std::vector<ScoopConfig>> EmbeddedConfigLoader::load_scoops_from_directory(
-    const std::filesystem::path& dir_path,
-    ConfigFormat format) {
-
+    const std::filesystem::path& dir_path, ConfigFormat format) {
     std::vector<ScoopConfig> configs;
 
     if (!std::filesystem::exists(dir_path)) {
         return common::Result<std::vector<ScoopConfig>>(
-            common::ErrorCode::FILE_NOT_FOUND,
-            "Directory not found: " + dir_path.string());
+            common::ErrorCode::FILE_NOT_FOUND, "Directory not found: " + dir_path.string());
     }
 
     for (const auto& entry : std::filesystem::directory_iterator(dir_path)) {
-        if (!entry.is_regular_file()) continue;
+        if (!entry.is_regular_file())
+            continue;
 
         auto ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-        if (ext != ".yaml" && ext != ".yml" && ext != ".json") continue;
+        if (ext != ".yaml" && ext != ".yml" && ext != ".json")
+            continue;
 
         auto result = load_scoop(entry.path(), format);
         if (result.is_success()) {
@@ -887,24 +898,23 @@ common::Result<std::vector<ScoopConfig>> EmbeddedConfigLoader::load_scoops_from_
 }
 
 common::Result<std::vector<SinkConfig>> EmbeddedConfigLoader::load_sinks_from_directory(
-    const std::filesystem::path& dir_path,
-    ConfigFormat format) {
-
+    const std::filesystem::path& dir_path, ConfigFormat format) {
     std::vector<SinkConfig> configs;
 
     if (!std::filesystem::exists(dir_path)) {
-        return common::Result<std::vector<SinkConfig>>(
-            common::ErrorCode::FILE_NOT_FOUND,
-            "Directory not found: " + dir_path.string());
+        return common::Result<std::vector<SinkConfig>>(common::ErrorCode::FILE_NOT_FOUND,
+                                                       "Directory not found: " + dir_path.string());
     }
 
     for (const auto& entry : std::filesystem::directory_iterator(dir_path)) {
-        if (!entry.is_regular_file()) continue;
+        if (!entry.is_regular_file())
+            continue;
 
         auto ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-        if (ext != ".yaml" && ext != ".yml" && ext != ".json") continue;
+        if (ext != ".yaml" && ext != ".yml" && ext != ".json")
+            continue;
 
         auto result = load_sink(entry.path(), format);
         if (result.is_success()) {
@@ -919,14 +929,11 @@ common::Result<std::vector<SinkConfig>> EmbeddedConfigLoader::load_sinks_from_di
 // STRING PARSING
 // ============================================================================
 
-common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(
-    std::string_view content,
-    ConfigFormat format) {
-
+common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(std::string_view content,
+                                                                          ConfigFormat format) {
     if (!validate_constraints(content)) {
-        return common::Result<ApplicationConfig>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            last_stats_.constraint_error);
+        return common::Result<ApplicationConfig>(common::ErrorCode::INVALID_ARGUMENT,
+                                                 last_stats_.constraint_error);
     }
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -943,9 +950,8 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<ApplicationConfig>(
-                    common::ErrorCode::PARSE_ERROR,
-                    "Failed to parse JSON");
+                return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
+                                                         "Failed to parse JSON");
             }
             CJsonGuard guard(json);
             config = parse_application_config_cjson(json);
@@ -956,9 +962,8 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(
             std::string errors;
             std::istringstream stream(std::string(content));
             if (!Json::parseFromStream(builder, stream, &root, &errors)) {
-                return common::Result<ApplicationConfig>(
-                    common::ErrorCode::PARSE_ERROR,
-                    "JSON parse error: " + errors);
+                return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
+                                                         "JSON parse error: " + errors);
             }
             // Use standard parser (not shown for brevity)
             return common::Result<ApplicationConfig>(
@@ -968,7 +973,7 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(
         } else {
 #ifdef IPB_CONFIG_USE_RYML
             ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
-            config = parse_application_config_ryml(tree.rootref());
+            config          = parse_application_config_ryml(tree.rootref());
 #else
             // Fallback to yaml-cpp
             YAML::Node root = YAML::Load(std::string(content));
@@ -979,7 +984,7 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(
 #endif
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end      = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         update_stats(g_peak_memory, duration.count());
 
@@ -990,20 +995,16 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(
         return common::Result<ApplicationConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<ApplicationConfig>(
-            common::ErrorCode::PARSE_ERROR,
-            std::string("Parse error: ") + e.what());
+        return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
+                                                 std::string("Parse error: ") + e.what());
     }
 }
 
-common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(
-    std::string_view content,
-    ConfigFormat format) {
-
+common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(std::string_view content,
+                                                              ConfigFormat format) {
     if (!validate_constraints(content)) {
-        return common::Result<ScoopConfig>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            last_stats_.constraint_error);
+        return common::Result<ScoopConfig>(common::ErrorCode::INVALID_ARGUMENT,
+                                           last_stats_.constraint_error);
     }
 
     if (format == ConfigFormat::AUTO) {
@@ -1017,44 +1018,38 @@ common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<ScoopConfig>(
-                    common::ErrorCode::PARSE_ERROR, "Failed to parse JSON");
+                return common::Result<ScoopConfig>(common::ErrorCode::PARSE_ERROR,
+                                                   "Failed to parse JSON");
             }
             CJsonGuard guard(json);
             config = parse_scoop_config_cjson(json);
 #else
-            return common::Result<ScoopConfig>(
-                common::ErrorCode::NOT_IMPLEMENTED,
-                "JSON parsing requires cJSON in embedded mode");
+            return common::Result<ScoopConfig>(common::ErrorCode::NOT_IMPLEMENTED,
+                                               "JSON parsing requires cJSON in embedded mode");
 #endif
         } else {
 #ifdef IPB_CONFIG_USE_RYML
             ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
-            config = parse_scoop_config_ryml(tree.rootref());
+            config          = parse_scoop_config_ryml(tree.rootref());
 #else
-            return common::Result<ScoopConfig>(
-                common::ErrorCode::NOT_IMPLEMENTED,
-                "YAML parsing requires ryml in embedded mode");
+            return common::Result<ScoopConfig>(common::ErrorCode::NOT_IMPLEMENTED,
+                                               "YAML parsing requires ryml in embedded mode");
 #endif
         }
 
         return common::Result<ScoopConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<ScoopConfig>(
-            common::ErrorCode::PARSE_ERROR,
-            std::string("Parse error: ") + e.what());
+        return common::Result<ScoopConfig>(common::ErrorCode::PARSE_ERROR,
+                                           std::string("Parse error: ") + e.what());
     }
 }
 
-common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(
-    std::string_view content,
-    ConfigFormat format) {
-
+common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(std::string_view content,
+                                                            ConfigFormat format) {
     if (!validate_constraints(content)) {
-        return common::Result<SinkConfig>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            last_stats_.constraint_error);
+        return common::Result<SinkConfig>(common::ErrorCode::INVALID_ARGUMENT,
+                                          last_stats_.constraint_error);
     }
 
     if (format == ConfigFormat::AUTO) {
@@ -1068,44 +1063,38 @@ common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<SinkConfig>(
-                    common::ErrorCode::PARSE_ERROR, "Failed to parse JSON");
+                return common::Result<SinkConfig>(common::ErrorCode::PARSE_ERROR,
+                                                  "Failed to parse JSON");
             }
             CJsonGuard guard(json);
             config = parse_sink_config_cjson(json);
 #else
-            return common::Result<SinkConfig>(
-                common::ErrorCode::NOT_IMPLEMENTED,
-                "JSON parsing requires cJSON in embedded mode");
+            return common::Result<SinkConfig>(common::ErrorCode::NOT_IMPLEMENTED,
+                                              "JSON parsing requires cJSON in embedded mode");
 #endif
         } else {
 #ifdef IPB_CONFIG_USE_RYML
             ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
-            config = parse_sink_config_ryml(tree.rootref());
+            config          = parse_sink_config_ryml(tree.rootref());
 #else
-            return common::Result<SinkConfig>(
-                common::ErrorCode::NOT_IMPLEMENTED,
-                "YAML parsing requires ryml in embedded mode");
+            return common::Result<SinkConfig>(common::ErrorCode::NOT_IMPLEMENTED,
+                                              "YAML parsing requires ryml in embedded mode");
 #endif
         }
 
         return common::Result<SinkConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<SinkConfig>(
-            common::ErrorCode::PARSE_ERROR,
-            std::string("Parse error: ") + e.what());
+        return common::Result<SinkConfig>(common::ErrorCode::PARSE_ERROR,
+                                          std::string("Parse error: ") + e.what());
     }
 }
 
-common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(
-    std::string_view content,
-    ConfigFormat format) {
-
+common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(std::string_view content,
+                                                                ConfigFormat format) {
     if (!validate_constraints(content)) {
-        return common::Result<RouterConfig>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            last_stats_.constraint_error);
+        return common::Result<RouterConfig>(common::ErrorCode::INVALID_ARGUMENT,
+                                            last_stats_.constraint_error);
     }
 
     if (format == ConfigFormat::AUTO) {
@@ -1119,33 +1108,30 @@ common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<RouterConfig>(
-                    common::ErrorCode::PARSE_ERROR, "Failed to parse JSON");
+                return common::Result<RouterConfig>(common::ErrorCode::PARSE_ERROR,
+                                                    "Failed to parse JSON");
             }
             CJsonGuard guard(json);
             config = parse_router_config_cjson(json);
 #else
-            return common::Result<RouterConfig>(
-                common::ErrorCode::NOT_IMPLEMENTED,
-                "JSON parsing requires cJSON in embedded mode");
+            return common::Result<RouterConfig>(common::ErrorCode::NOT_IMPLEMENTED,
+                                                "JSON parsing requires cJSON in embedded mode");
 #endif
         } else {
 #ifdef IPB_CONFIG_USE_RYML
             ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
-            config = parse_router_config_ryml(tree.rootref());
+            config          = parse_router_config_ryml(tree.rootref());
 #else
-            return common::Result<RouterConfig>(
-                common::ErrorCode::NOT_IMPLEMENTED,
-                "YAML parsing requires ryml in embedded mode");
+            return common::Result<RouterConfig>(common::ErrorCode::NOT_IMPLEMENTED,
+                                                "YAML parsing requires ryml in embedded mode");
 #endif
         }
 
         return common::Result<RouterConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<RouterConfig>(
-            common::ErrorCode::PARSE_ERROR,
-            std::string("Parse error: ") + e.what());
+        return common::Result<RouterConfig>(common::ErrorCode::PARSE_ERROR,
+                                            std::string("Parse error: ") + e.what());
     }
 }
 
@@ -1154,66 +1140,52 @@ common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(
 // ============================================================================
 
 common::Result<std::string> EmbeddedConfigLoader::serialize_application(
-    const ApplicationConfig& /*config*/,
-    ConfigFormat /*format*/) {
-    return common::Result<std::string>(
-        common::ErrorCode::NOT_IMPLEMENTED,
-        "Serialization not supported in embedded mode");
+    const ApplicationConfig& /*config*/, ConfigFormat /*format*/) {
+    return common::Result<std::string>(common::ErrorCode::NOT_IMPLEMENTED,
+                                       "Serialization not supported in embedded mode");
 }
 
-common::Result<std::string> EmbeddedConfigLoader::serialize_scoop(
-    const ScoopConfig& /*config*/,
-    ConfigFormat /*format*/) {
-    return common::Result<std::string>(
-        common::ErrorCode::NOT_IMPLEMENTED,
-        "Serialization not supported in embedded mode");
+common::Result<std::string> EmbeddedConfigLoader::serialize_scoop(const ScoopConfig& /*config*/,
+                                                                  ConfigFormat /*format*/) {
+    return common::Result<std::string>(common::ErrorCode::NOT_IMPLEMENTED,
+                                       "Serialization not supported in embedded mode");
 }
 
-common::Result<std::string> EmbeddedConfigLoader::serialize_sink(
-    const SinkConfig& /*config*/,
-    ConfigFormat /*format*/) {
-    return common::Result<std::string>(
-        common::ErrorCode::NOT_IMPLEMENTED,
-        "Serialization not supported in embedded mode");
+common::Result<std::string> EmbeddedConfigLoader::serialize_sink(const SinkConfig& /*config*/,
+                                                                 ConfigFormat /*format*/) {
+    return common::Result<std::string>(common::ErrorCode::NOT_IMPLEMENTED,
+                                       "Serialization not supported in embedded mode");
 }
 
-common::Result<std::string> EmbeddedConfigLoader::serialize_router(
-    const RouterConfig& /*config*/,
-    ConfigFormat /*format*/) {
-    return common::Result<std::string>(
-        common::ErrorCode::NOT_IMPLEMENTED,
-        "Serialization not supported in embedded mode");
+common::Result<std::string> EmbeddedConfigLoader::serialize_router(const RouterConfig& /*config*/,
+                                                                   ConfigFormat /*format*/) {
+    return common::Result<std::string>(common::ErrorCode::NOT_IMPLEMENTED,
+                                       "Serialization not supported in embedded mode");
 }
 
 // ============================================================================
 // FILE SAVING (Not supported in embedded mode)
 // ============================================================================
 
-common::Result<void> EmbeddedConfigLoader::save_application(
-    const ApplicationConfig& /*config*/,
-    const std::filesystem::path& /*path*/,
-    ConfigFormat /*format*/) {
-    return common::Result<void>(
-        common::ErrorCode::NOT_IMPLEMENTED,
-        "File saving not supported in embedded mode");
+common::Result<void> EmbeddedConfigLoader::save_application(const ApplicationConfig& /*config*/,
+                                                            const std::filesystem::path& /*path*/,
+                                                            ConfigFormat /*format*/) {
+    return common::Result<void>(common::ErrorCode::NOT_IMPLEMENTED,
+                                "File saving not supported in embedded mode");
 }
 
-common::Result<void> EmbeddedConfigLoader::save_scoop(
-    const ScoopConfig& /*config*/,
-    const std::filesystem::path& /*path*/,
-    ConfigFormat /*format*/) {
-    return common::Result<void>(
-        common::ErrorCode::NOT_IMPLEMENTED,
-        "File saving not supported in embedded mode");
+common::Result<void> EmbeddedConfigLoader::save_scoop(const ScoopConfig& /*config*/,
+                                                      const std::filesystem::path& /*path*/,
+                                                      ConfigFormat /*format*/) {
+    return common::Result<void>(common::ErrorCode::NOT_IMPLEMENTED,
+                                "File saving not supported in embedded mode");
 }
 
-common::Result<void> EmbeddedConfigLoader::save_sink(
-    const SinkConfig& /*config*/,
-    const std::filesystem::path& /*path*/,
-    ConfigFormat /*format*/) {
-    return common::Result<void>(
-        common::ErrorCode::NOT_IMPLEMENTED,
-        "File saving not supported in embedded mode");
+common::Result<void> EmbeddedConfigLoader::save_sink(const SinkConfig& /*config*/,
+                                                     const std::filesystem::path& /*path*/,
+                                                     ConfigFormat /*format*/) {
+    return common::Result<void>(common::ErrorCode::NOT_IMPLEMENTED,
+                                "File saving not supported in embedded mode");
 }
 
 // ============================================================================
@@ -1222,46 +1194,36 @@ common::Result<void> EmbeddedConfigLoader::save_sink(
 
 common::Result<void> EmbeddedConfigLoader::validate(const ApplicationConfig& config) {
     if (config.name.empty()) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "Application name is required");
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                    "Application name is required");
     }
     return common::Result<void>();
 }
 
 common::Result<void> EmbeddedConfigLoader::validate(const ScoopConfig& config) {
     if (config.id.empty()) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "Scoop ID is required");
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop ID is required");
     }
     if (config.type.empty()) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "Scoop type is required");
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop type is required");
     }
     return common::Result<void>();
 }
 
 common::Result<void> EmbeddedConfigLoader::validate(const SinkConfig& config) {
     if (config.id.empty()) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "Sink ID is required");
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink ID is required");
     }
     if (config.type.empty()) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "Sink type is required");
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink type is required");
     }
     return common::Result<void>();
 }
 
 common::Result<void> EmbeddedConfigLoader::validate(const RouterConfig& config) {
     if (config.worker_threads == 0) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "Router must have at least one worker thread");
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                    "Router must have at least one worker thread");
     }
     return common::Result<void>();
 }
@@ -1280,9 +1242,7 @@ std::unique_ptr<ConfigLoader> create_embedded_config_loader(
 }
 
 std::unique_ptr<ConfigLoader> create_config_loader_for_platform(
-    common::DeploymentPlatform platform,
-    const EmbeddedConfigConstraints& constraints) {
-
+    common::DeploymentPlatform platform, const EmbeddedConfigConstraints& constraints) {
     switch (platform) {
         case common::DeploymentPlatform::EMBEDDED_BARE_METAL:
         case common::DeploymentPlatform::EMBEDDED_RTOS:
@@ -1299,4 +1259,4 @@ std::unique_ptr<ConfigLoader> create_config_loader_for_platform(
     }
 }
 
-} // namespace ipb::core::config
+}  // namespace ipb::core::config

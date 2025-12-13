@@ -5,10 +5,11 @@
  * @brief Thread-safe priority queue for EDF scheduling
  */
 
-#include "edf_scheduler.hpp"
 #include <mutex>
 #include <queue>
 #include <vector>
+
+#include "edf_scheduler.hpp"
 
 namespace ipb::core {
 
@@ -24,7 +25,7 @@ public:
     ~TaskQueue() = default;
 
     // Non-copyable
-    TaskQueue(const TaskQueue&) = delete;
+    TaskQueue(const TaskQueue&)            = delete;
     TaskQueue& operator=(const TaskQueue&) = delete;
 
     /// Push a task into the queue
@@ -62,9 +63,8 @@ private:
     mutable std::mutex mutex_;
 
     // Priority queue with earliest deadline at top
-    std::priority_queue<ScheduledTask,
-                       std::vector<ScheduledTask>,
-                       std::greater<ScheduledTask>> queue_;
+    std::priority_queue<ScheduledTask, std::vector<ScheduledTask>, std::greater<ScheduledTask>>
+        queue_;
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

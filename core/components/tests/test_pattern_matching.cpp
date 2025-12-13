@@ -10,14 +10,15 @@
  * - CachedPatternMatcher (RAII helper)
  */
 
-#include <gtest/gtest.h>
-#include <ipb/core/rule_engine/pattern_matcher.hpp>
 #include <ipb/core/rule_engine/compiled_pattern_cache.hpp>
+#include <ipb/core/rule_engine/pattern_matcher.hpp>
 
-#include <thread>
-#include <vector>
 #include <atomic>
 #include <chrono>
+#include <thread>
+#include <vector>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::core;
 
@@ -82,9 +83,7 @@ TEST_F(PatternValidatorTest, BackreferencesDetected) {
 
 class CompiledPatternCacheTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        cache_ = std::make_unique<CompiledPatternCache>();
-    }
+    void SetUp() override { cache_ = std::make_unique<CompiledPatternCache>(); }
 
     std::unique_ptr<CompiledPatternCache> cache_;
 };
@@ -151,7 +150,7 @@ TEST_F(CompiledPatternCacheTest, Clear) {
 }
 
 TEST_F(CompiledPatternCacheTest, ThreadSafety) {
-    constexpr int NUM_THREADS = 8;
+    constexpr int NUM_THREADS    = 8;
     constexpr int OPS_PER_THREAD = 100;
 
     std::vector<std::thread> threads;
@@ -161,7 +160,7 @@ TEST_F(CompiledPatternCacheTest, ThreadSafety) {
         threads.emplace_back([this, t, &success_count]() {
             for (int i = 0; i < OPS_PER_THREAD; ++i) {
                 std::string pattern = "pattern_" + std::to_string(t) + "_" + std::to_string(i % 10);
-                auto result = cache_->get_or_compile(pattern);
+                auto result         = cache_->get_or_compile(pattern);
                 if (result) {
                     success_count.fetch_add(1);
                 }
@@ -183,9 +182,7 @@ TEST_F(CompiledPatternCacheTest, ThreadSafety) {
 
 class TrieMatcherTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        trie_ = std::make_unique<TrieMatcher>();
-    }
+    void SetUp() override { trie_ = std::make_unique<TrieMatcher>(); }
 
     std::unique_ptr<TrieMatcher> trie_;
 };
@@ -276,8 +273,8 @@ TEST_F(TrieMatcherTest, Stats) {
 TEST_F(TrieMatcherTest, LargeScalePerformance) {
     // Add 1000 patterns
     for (int i = 0; i < 1000; ++i) {
-        std::string pattern = "sensors/area" + std::to_string(i / 100) +
-                             "/device" + std::to_string(i);
+        std::string pattern =
+            "sensors/area" + std::to_string(i / 100) + "/device" + std::to_string(i);
         trie_->add_exact(pattern, static_cast<uint32_t>(i));
     }
 
@@ -288,11 +285,11 @@ TEST_F(TrieMatcherTest, LargeScalePerformance) {
 
     for (int i = 0; i < 10000; ++i) {
         std::string pattern = "sensors/area5/device500";
-        auto result = trie_->find_exact(pattern);
+        auto result         = trie_->find_exact(pattern);
         EXPECT_TRUE(result.has_value());
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
     // 10000 lookups should complete in reasonable time (< 100ms)
@@ -305,9 +302,7 @@ TEST_F(TrieMatcherTest, LargeScalePerformance) {
 
 class FastPatternMatcherTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        matcher_ = std::make_unique<FastPatternMatcher>();
-    }
+    void SetUp() override { matcher_ = std::make_unique<FastPatternMatcher>(); }
 
     std::unique_ptr<FastPatternMatcher> matcher_;
 };
@@ -398,7 +393,9 @@ TEST_F(FastPatternMatcherTest, Clear) {
     matcher_->add_pattern("b", 2);
 
     auto stats = matcher_->stats();
-    EXPECT_GT(stats.exact_patterns + stats.prefix_patterns + stats.wildcard_patterns + stats.regex_patterns, 0u);
+    EXPECT_GT(stats.exact_patterns + stats.prefix_patterns + stats.wildcard_patterns +
+                  stats.regex_patterns,
+              0u);
 
     matcher_->clear();
 
@@ -477,7 +474,7 @@ TEST_F(PatternMatchingIntegrationTest, IndustrialAddressPatterns) {
     FastPatternMatcher matcher;
 
     // Common industrial patterns
-    matcher.add_pattern("ns=2;s=MyServer/MyNode", 1);  // OPC UA exact
+    matcher.add_pattern("ns=2;s=MyServer/MyNode", 1);   // OPC UA exact
     matcher.add_pattern("ns=2;*", 2);                   // OPC UA prefix
     matcher.add_pattern("MB:1:*", 3);                   // Modbus prefix
     matcher.add_pattern("sensors/[a-z]+/temp\\d+", 4);  // Regex pattern
@@ -513,7 +510,7 @@ TEST_F(PatternMatchingIntegrationTest, HighVolumeRouting) {
         EXPECT_FALSE(matches.empty());
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     // Should complete in reasonable time

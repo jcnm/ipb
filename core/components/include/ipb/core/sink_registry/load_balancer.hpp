@@ -5,7 +5,6 @@
  * @brief Load balancing algorithms for sink selection
  */
 
-#include "sink_registry.hpp"
 #include <ipb/common/data_point.hpp>
 
 #include <atomic>
@@ -14,6 +13,8 @@
 #include <span>
 #include <string>
 #include <vector>
+
+#include "sink_registry.hpp"
 
 namespace ipb::core {
 
@@ -25,13 +26,11 @@ public:
     virtual ~ILoadBalancer() = default;
 
     /// Select sink(s) from candidates
-    virtual std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) = 0;
+    virtual std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) = 0;
 
     /// Select with data point context (for hash-based strategies)
-    virtual std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates,
-        const common::DataPoint& context) {
+    virtual std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates,
+                                            const common::DataPoint& context) {
         return select(candidates);  // Default ignores context
     }
 
@@ -44,8 +43,7 @@ public:
  */
 class RoundRobinBalancer : public ILoadBalancer {
 public:
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) override;
 
     LoadBalanceStrategy strategy() const noexcept override {
         return LoadBalanceStrategy::ROUND_ROBIN;
@@ -60,8 +58,7 @@ private:
  */
 class WeightedRoundRobinBalancer : public ILoadBalancer {
 public:
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) override;
 
     LoadBalanceStrategy strategy() const noexcept override {
         return LoadBalanceStrategy::WEIGHTED_ROUND_ROBIN;
@@ -76,8 +73,7 @@ private:
  */
 class LeastConnectionsBalancer : public ILoadBalancer {
 public:
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) override;
 
     LoadBalanceStrategy strategy() const noexcept override {
         return LoadBalanceStrategy::LEAST_CONNECTIONS;
@@ -89,8 +85,7 @@ public:
  */
 class LeastLatencyBalancer : public ILoadBalancer {
 public:
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) override;
 
     LoadBalanceStrategy strategy() const noexcept override {
         return LoadBalanceStrategy::LEAST_LATENCY;
@@ -102,12 +97,10 @@ public:
  */
 class HashBasedBalancer : public ILoadBalancer {
 public:
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) override;
 
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates,
-        const common::DataPoint& context) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates,
+                                    const common::DataPoint& context) override;
 
     LoadBalanceStrategy strategy() const noexcept override {
         return LoadBalanceStrategy::HASH_BASED;
@@ -125,12 +118,9 @@ class RandomBalancer : public ILoadBalancer {
 public:
     RandomBalancer();
 
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) override;
 
-    LoadBalanceStrategy strategy() const noexcept override {
-        return LoadBalanceStrategy::RANDOM;
-    }
+    LoadBalanceStrategy strategy() const noexcept override { return LoadBalanceStrategy::RANDOM; }
 
 private:
     std::mt19937 rng_;
@@ -142,12 +132,9 @@ private:
  */
 class FailoverBalancer : public ILoadBalancer {
 public:
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) override;
 
-    LoadBalanceStrategy strategy() const noexcept override {
-        return LoadBalanceStrategy::FAILOVER;
-    }
+    LoadBalanceStrategy strategy() const noexcept override { return LoadBalanceStrategy::FAILOVER; }
 };
 
 /**
@@ -155,8 +142,7 @@ public:
  */
 class BroadcastBalancer : public ILoadBalancer {
 public:
-    std::vector<std::string> select(
-        const std::vector<const SinkInfo*>& candidates) override;
+    std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates) override;
 
     LoadBalanceStrategy strategy() const noexcept override {
         return LoadBalanceStrategy::BROADCAST;
@@ -171,4 +157,4 @@ public:
     static std::unique_ptr<ILoadBalancer> create(LoadBalanceStrategy strategy);
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

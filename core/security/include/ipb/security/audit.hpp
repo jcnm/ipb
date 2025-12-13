@@ -13,8 +13,6 @@
  * - Compliance-ready formats (CEF, JSON, LEEF)
  */
 
-#include "authentication.hpp"
-
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -34,6 +32,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "authentication.hpp"
+
 namespace ipb::security {
 
 //=============================================================================
@@ -44,26 +44,34 @@ namespace ipb::security {
  * @brief Audit event severity levels
  */
 enum class AuditSeverity {
-    DEBUG = 0,
-    INFO = 1,
-    NOTICE = 2,
-    WARNING = 3,
-    ERROR = 4,
-    CRITICAL = 5,
-    ALERT = 6,
+    DEBUG     = 0,
+    INFO      = 1,
+    NOTICE    = 2,
+    WARNING   = 3,
+    ERROR     = 4,
+    CRITICAL  = 5,
+    ALERT     = 6,
     EMERGENCY = 7
 };
 
 inline std::string_view severity_string(AuditSeverity sev) {
     switch (sev) {
-        case AuditSeverity::DEBUG: return "DEBUG";
-        case AuditSeverity::INFO: return "INFO";
-        case AuditSeverity::NOTICE: return "NOTICE";
-        case AuditSeverity::WARNING: return "WARNING";
-        case AuditSeverity::ERROR: return "ERROR";
-        case AuditSeverity::CRITICAL: return "CRITICAL";
-        case AuditSeverity::ALERT: return "ALERT";
-        case AuditSeverity::EMERGENCY: return "EMERGENCY";
+        case AuditSeverity::DEBUG:
+            return "DEBUG";
+        case AuditSeverity::INFO:
+            return "INFO";
+        case AuditSeverity::NOTICE:
+            return "NOTICE";
+        case AuditSeverity::WARNING:
+            return "WARNING";
+        case AuditSeverity::ERROR:
+            return "ERROR";
+        case AuditSeverity::CRITICAL:
+            return "CRITICAL";
+        case AuditSeverity::ALERT:
+            return "ALERT";
+        case AuditSeverity::EMERGENCY:
+            return "EMERGENCY";
     }
     return "UNKNOWN";
 }
@@ -72,28 +80,37 @@ inline std::string_view severity_string(AuditSeverity sev) {
  * @brief Audit event categories
  */
 enum class AuditCategory {
-    AUTHENTICATION,    // Login, logout, auth failures
-    AUTHORIZATION,     // Permission checks, access denials
-    DATA_ACCESS,       // Read/write operations on data
-    CONFIGURATION,     // System configuration changes
-    ADMINISTRATION,    // User/role management
-    SECURITY,          // Security-related events
-    SYSTEM,            // System lifecycle events
-    NETWORK,           // Network-related events
-    CUSTOM             // Application-specific events
+    AUTHENTICATION,  // Login, logout, auth failures
+    AUTHORIZATION,   // Permission checks, access denials
+    DATA_ACCESS,     // Read/write operations on data
+    CONFIGURATION,   // System configuration changes
+    ADMINISTRATION,  // User/role management
+    SECURITY,        // Security-related events
+    SYSTEM,          // System lifecycle events
+    NETWORK,         // Network-related events
+    CUSTOM           // Application-specific events
 };
 
 inline std::string_view category_string(AuditCategory cat) {
     switch (cat) {
-        case AuditCategory::AUTHENTICATION: return "AUTHENTICATION";
-        case AuditCategory::AUTHORIZATION: return "AUTHORIZATION";
-        case AuditCategory::DATA_ACCESS: return "DATA_ACCESS";
-        case AuditCategory::CONFIGURATION: return "CONFIGURATION";
-        case AuditCategory::ADMINISTRATION: return "ADMINISTRATION";
-        case AuditCategory::SECURITY: return "SECURITY";
-        case AuditCategory::SYSTEM: return "SYSTEM";
-        case AuditCategory::NETWORK: return "NETWORK";
-        case AuditCategory::CUSTOM: return "CUSTOM";
+        case AuditCategory::AUTHENTICATION:
+            return "AUTHENTICATION";
+        case AuditCategory::AUTHORIZATION:
+            return "AUTHORIZATION";
+        case AuditCategory::DATA_ACCESS:
+            return "DATA_ACCESS";
+        case AuditCategory::CONFIGURATION:
+            return "CONFIGURATION";
+        case AuditCategory::ADMINISTRATION:
+            return "ADMINISTRATION";
+        case AuditCategory::SECURITY:
+            return "SECURITY";
+        case AuditCategory::SYSTEM:
+            return "SYSTEM";
+        case AuditCategory::NETWORK:
+            return "NETWORK";
+        case AuditCategory::CUSTOM:
+            return "CUSTOM";
     }
     return "UNKNOWN";
 }
@@ -101,17 +118,16 @@ inline std::string_view category_string(AuditCategory cat) {
 /**
  * @brief Audit event outcome
  */
-enum class AuditOutcome {
-    SUCCESS,
-    FAILURE,
-    UNKNOWN
-};
+enum class AuditOutcome { SUCCESS, FAILURE, UNKNOWN };
 
 inline std::string_view outcome_string(AuditOutcome outcome) {
     switch (outcome) {
-        case AuditOutcome::SUCCESS: return "SUCCESS";
-        case AuditOutcome::FAILURE: return "FAILURE";
-        case AuditOutcome::UNKNOWN: return "UNKNOWN";
+        case AuditOutcome::SUCCESS:
+            return "SUCCESS";
+        case AuditOutcome::FAILURE:
+            return "FAILURE";
+        case AuditOutcome::UNKNOWN:
+            return "UNKNOWN";
     }
     return "UNKNOWN";
 }
@@ -140,23 +156,23 @@ struct AuditEvent {
     std::string event_type;  // e.g., "user.login", "data.read"
 
     // Actor
-    std::string actor_id;        // User/service identifier
-    std::string actor_type;      // "user", "service", "system"
-    std::string actor_ip;        // Source IP address
+    std::string actor_id;    // User/service identifier
+    std::string actor_type;  // "user", "service", "system"
+    std::string actor_ip;    // Source IP address
     std::string actor_user_agent;
 
     // Target
-    std::string target_type;     // Resource type
-    std::string target_id;       // Resource identifier
-    std::string target_name;     // Human-readable name
+    std::string target_type;  // Resource type
+    std::string target_id;    // Resource identifier
+    std::string target_name;  // Human-readable name
 
     // Action details
-    std::string action;          // Action performed
-    std::string action_detail;   // Additional details
+    std::string action;         // Action performed
+    std::string action_detail;  // Additional details
     std::unordered_map<std::string, std::string> metadata;
 
     // Integrity
-    std::string previous_hash;   // Hash chain for tamper evidence
+    std::string previous_hash;  // Hash chain for tamper evidence
     std::string event_hash;
 
     // Message
@@ -174,7 +190,7 @@ struct AuditEvent {
      * @brief Set the actor from an identity
      */
     AuditEvent& from_identity(const Identity& identity) {
-        actor_id = identity.id;
+        actor_id   = identity.id;
         actor_type = identity.name.empty() ? "user" : identity.name;
         return *this;
     }
@@ -188,11 +204,11 @@ struct AuditEvent {
  * @brief Output format for audit logs
  */
 enum class AuditFormat {
-    JSON,       // Structured JSON
-    CEF,        // Common Event Format (ArcSight)
-    LEEF,       // Log Event Extended Format (IBM QRadar)
-    SYSLOG,     // RFC 5424 syslog
-    TEXT        // Human-readable text
+    JSON,    // Structured JSON
+    CEF,     // Common Event Format (ArcSight)
+    LEEF,    // Log Event Extended Format (IBM QRadar)
+    SYSLOG,  // RFC 5424 syslog
+    TEXT     // Human-readable text
 };
 
 /**
@@ -200,9 +216,9 @@ enum class AuditFormat {
  */
 class IAuditFormatter {
 public:
-    virtual ~IAuditFormatter() = default;
+    virtual ~IAuditFormatter()                          = default;
     virtual std::string format(const AuditEvent& event) = 0;
-    virtual AuditFormat type() const = 0;
+    virtual AuditFormat type() const                    = 0;
 };
 
 /**
@@ -214,8 +230,9 @@ public:
         std::ostringstream oss;
 
         auto time_t = std::chrono::system_clock::to_time_t(event.timestamp);
-        auto us = std::chrono::duration_cast<std::chrono::microseconds>(
-            event.timestamp.time_since_epoch()) % 1000000;
+        auto us     = std::chrono::duration_cast<std::chrono::microseconds>(
+                      event.timestamp.time_since_epoch()) %
+                  1000000;
 
         oss << "{";
         oss << "\"event_id\":" << event.event_id << ",";
@@ -268,7 +285,8 @@ public:
             oss << "\"metadata\":{";
             bool first = true;
             for (const auto& [k, v] : event.metadata) {
-                if (!first) oss << ",";
+                if (!first)
+                    oss << ",";
                 oss << "\"" << escape_json(k) << "\":\"" << escape_json(v) << "\"";
                 first = false;
             }
@@ -304,13 +322,27 @@ private:
         result.reserve(s.size());
         for (char c : s) {
             switch (c) {
-                case '"': result += "\\\""; break;
-                case '\\': result += "\\\\"; break;
-                case '\b': result += "\\b"; break;
-                case '\f': result += "\\f"; break;
-                case '\n': result += "\\n"; break;
-                case '\r': result += "\\r"; break;
-                case '\t': result += "\\t"; break;
+                case '"':
+                    result += "\\\"";
+                    break;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '\b':
+                    result += "\\b";
+                    break;
+                case '\f':
+                    result += "\\f";
+                    break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                case '\t':
+                    result += "\\t";
+                    break;
                 default:
                     if (static_cast<unsigned char>(c) < 0x20) {
                         char buf[8];
@@ -330,13 +362,14 @@ private:
  */
 class CefAuditFormatter : public IAuditFormatter {
 public:
-    CefAuditFormatter(std::string_view vendor = "IPB",
+    CefAuditFormatter(std::string_view vendor  = "IPB",
                       std::string_view product = "IndustrialProtocolBridge",
                       std::string_view version = "1.0")
         : vendor_(vendor), product_(product), version_(version) {}
 
     std::string format(const AuditEvent& event) override {
-        // CEF:Version|Device Vendor|Device Product|Device Version|Signature ID|Name|Severity|Extension
+        // CEF:Version|Device Vendor|Device Product|Device Version|Signature
+        // ID|Name|Severity|Extension
         std::ostringstream oss;
 
         int cef_severity = static_cast<int>(event.severity) + 1;  // CEF uses 0-10
@@ -347,8 +380,10 @@ public:
         oss << cef_severity << "|";
 
         // Extensions
-        oss << "rt=" << std::chrono::duration_cast<std::chrono::milliseconds>(
-            event.timestamp.time_since_epoch()).count();
+        oss << "rt="
+            << std::chrono::duration_cast<std::chrono::milliseconds>(
+                   event.timestamp.time_since_epoch())
+                   .count();
         oss << " cat=" << category_string(event.category);
         oss << " outcome=" << outcome_string(event.outcome);
 
@@ -383,12 +418,23 @@ private:
         result.reserve(s.size());
         for (char c : s) {
             switch (c) {
-                case '\\': result += "\\\\"; break;
-                case '|': result += "\\|"; break;
-                case '=': result += "\\="; break;
-                case '\n': result += "\\n"; break;
-                case '\r': result += "\\r"; break;
-                default: result += c;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '|':
+                    result += "\\|";
+                    break;
+                case '=':
+                    result += "\\=";
+                    break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                default:
+                    result += c;
             }
         }
         return result;
@@ -434,10 +480,10 @@ public:
  */
 class IAuditBackend {
 public:
-    virtual ~IAuditBackend() = default;
+    virtual ~IAuditBackend()                               = default;
     virtual bool write(const std::string& formatted_event) = 0;
-    virtual void flush() = 0;
-    virtual std::string name() const = 0;
+    virtual void flush()                                   = 0;
+    virtual std::string name() const                       = 0;
 };
 
 /**
@@ -452,19 +498,13 @@ public:
         bool compress_rotated;
 
         Config()
-            : base_path("audit.log")
-            , max_file_size(100 * 1024 * 1024)
-            , max_files(10)
-            , compress_rotated(true)
-        {}
+            : base_path("audit.log"), max_file_size(100 * 1024 * 1024), max_files(10),
+              compress_rotated(true) {}
     };
 
     FileAuditBackend() : FileAuditBackend(Config{}) {}
 
-    explicit FileAuditBackend(Config config)
-        : config_(std::move(config)) {
-        open_file();
-    }
+    explicit FileAuditBackend(Config config) : config_(std::move(config)) { open_file(); }
 
     ~FileAuditBackend() override {
         if (file_.is_open()) {
@@ -476,7 +516,8 @@ public:
         std::lock_guard lock(mutex_);
 
         if (!file_.is_open()) {
-            if (!open_file()) return false;
+            if (!open_file())
+                return false;
         }
 
         file_ << formatted_event << "\n";
@@ -496,17 +537,15 @@ public:
         }
     }
 
-    std::string name() const override {
-        return "file:" + config_.base_path.string();
-    }
+    std::string name() const override { return "file:" + config_.base_path.string(); }
 
 private:
     bool open_file() {
         file_.open(config_.base_path, std::ios::app);
         if (file_.is_open()) {
             current_size_ = std::filesystem::exists(config_.base_path)
-                ? std::filesystem::file_size(config_.base_path)
-                : 0;
+                              ? std::filesystem::file_size(config_.base_path)
+                              : 0;
             return true;
         }
         return false;
@@ -550,8 +589,7 @@ private:
  */
 class ConsoleAuditBackend : public IAuditBackend {
 public:
-    explicit ConsoleAuditBackend(bool use_stderr = false)
-        : use_stderr_(use_stderr) {}
+    explicit ConsoleAuditBackend(bool use_stderr = false) : use_stderr_(use_stderr) {}
 
     bool write(const std::string& formatted_event) override {
         std::lock_guard lock(mutex_);
@@ -565,9 +603,7 @@ public:
         stream.flush();
     }
 
-    std::string name() const override {
-        return use_stderr_ ? "stderr" : "stdout";
-    }
+    std::string name() const override { return use_stderr_ ? "stderr" : "stdout"; }
 
 private:
     bool use_stderr_;
@@ -618,34 +654,26 @@ public:
         std::chrono::milliseconds flush_interval;
 
         Config()
-            : min_severity(AuditSeverity::INFO)
-            , enable_hash_chain(true)
-            , async_write(true)
-            , queue_size(10000)
-            , flush_interval(1000)
-        {}
+            : min_severity(AuditSeverity::INFO), enable_hash_chain(true), async_write(true),
+              queue_size(10000), flush_interval(1000) {}
     };
 
     AuditLogger() : AuditLogger(Config{}) {}
 
     explicit AuditLogger(Config config)
-        : config_(std::move(config))
-        , event_counter_(0)
-        , running_(false) {
-
+        : config_(std::move(config)), event_counter_(0), running_(false) {
         // Default formatter
         formatter_ = std::make_unique<JsonAuditFormatter>();
     }
 
-    ~AuditLogger() {
-        stop();
-    }
+    ~AuditLogger() { stop(); }
 
     /**
      * @brief Start async processing
      */
     void start() {
-        if (running_.exchange(true)) return;
+        if (running_.exchange(true))
+            return;
 
         if (config_.async_write) {
             worker_ = std::thread([this] { worker_loop(); });
@@ -656,7 +684,8 @@ public:
      * @brief Stop and flush
      */
     void stop() {
-        if (!running_.exchange(false)) return;
+        if (!running_.exchange(false))
+            return;
 
         if (worker_.joinable()) {
             cv_.notify_all();
@@ -703,8 +732,8 @@ public:
         if (config_.enable_hash_chain) {
             std::lock_guard lock(hash_mutex_);
             event.previous_hash = last_hash_;
-            event.event_hash = compute_hash(event);
-            last_hash_ = event.event_hash;
+            event.event_hash    = compute_hash(event);
+            last_hash_          = event.event_hash;
         }
 
         if (config_.async_write) {
@@ -722,13 +751,12 @@ public:
     /**
      * @brief Create audit event builder
      */
-    AuditEvent create_event(AuditCategory category,
-                            std::string_view event_type,
+    AuditEvent create_event(AuditCategory category, std::string_view event_type,
                             std::string_view message) {
         AuditEvent event;
-        event.category = category;
+        event.category   = category;
         event.event_type = std::string(event_type);
-        event.message = std::string(message);
+        event.message    = std::string(message);
         return event;
     }
 
@@ -755,107 +783,90 @@ public:
     // Convenience methods
 
     void log_auth_success(const Identity& identity, std::string_view method) {
-        auto event = create_event(AuditCategory::AUTHENTICATION,
-                                  "auth.success",
+        auto event = create_event(AuditCategory::AUTHENTICATION, "auth.success",
                                   "Authentication successful");
         event.from_identity(identity);
         event.outcome = AuditOutcome::SUCCESS;
-        event.action = "login";
+        event.action  = "login";
         event.with("method", method);
         log(std::move(event));
     }
 
     void log_auth_failure(std::string_view principal, std::string_view reason) {
-        auto event = create_event(AuditCategory::AUTHENTICATION,
-                                  "auth.failure",
-                                  "Authentication failed: " + std::string(reason));
+        auto event     = create_event(AuditCategory::AUTHENTICATION, "auth.failure",
+                                      "Authentication failed: " + std::string(reason));
         event.actor_id = std::string(principal);
-        event.outcome = AuditOutcome::FAILURE;
-        event.action = "login";
+        event.outcome  = AuditOutcome::FAILURE;
+        event.action   = "login";
         event.severity = AuditSeverity::WARNING;
         event.with("reason", reason);
         log(std::move(event));
     }
 
-    void log_access_granted(const Identity& identity,
-                            std::string_view resource,
+    void log_access_granted(const Identity& identity, std::string_view resource,
                             std::string_view action) {
-        auto event = create_event(AuditCategory::AUTHORIZATION,
-                                  "access.granted",
+        auto event = create_event(AuditCategory::AUTHORIZATION, "access.granted",
                                   "Access granted to " + std::string(resource));
         event.from_identity(identity);
-        event.outcome = AuditOutcome::SUCCESS;
+        event.outcome   = AuditOutcome::SUCCESS;
         event.target_id = std::string(resource);
-        event.action = std::string(action);
+        event.action    = std::string(action);
         log(std::move(event));
     }
 
-    void log_access_denied(const Identity& identity,
-                           std::string_view resource,
-                           std::string_view action,
-                           std::string_view reason) {
-        auto event = create_event(AuditCategory::AUTHORIZATION,
-                                  "access.denied",
+    void log_access_denied(const Identity& identity, std::string_view resource,
+                           std::string_view action, std::string_view reason) {
+        auto event = create_event(AuditCategory::AUTHORIZATION, "access.denied",
                                   "Access denied to " + std::string(resource));
         event.from_identity(identity);
-        event.outcome = AuditOutcome::FAILURE;
-        event.severity = AuditSeverity::WARNING;
+        event.outcome   = AuditOutcome::FAILURE;
+        event.severity  = AuditSeverity::WARNING;
         event.target_id = std::string(resource);
-        event.action = std::string(action);
+        event.action    = std::string(action);
         event.with("reason", reason);
         log(std::move(event));
     }
 
-    void log_data_read(const Identity& identity,
-                       std::string_view resource_type,
+    void log_data_read(const Identity& identity, std::string_view resource_type,
                        std::string_view resource_id) {
-        auto event = create_event(AuditCategory::DATA_ACCESS,
-                                  "data.read",
+        auto event = create_event(AuditCategory::DATA_ACCESS, "data.read",
                                   "Data read from " + std::string(resource_type));
         event.from_identity(identity);
-        event.outcome = AuditOutcome::SUCCESS;
+        event.outcome     = AuditOutcome::SUCCESS;
         event.target_type = std::string(resource_type);
-        event.target_id = std::string(resource_id);
-        event.action = "read";
+        event.target_id   = std::string(resource_id);
+        event.action      = "read";
         log(std::move(event));
     }
 
-    void log_data_write(const Identity& identity,
-                        std::string_view resource_type,
+    void log_data_write(const Identity& identity, std::string_view resource_type,
                         std::string_view resource_id) {
-        auto event = create_event(AuditCategory::DATA_ACCESS,
-                                  "data.write",
+        auto event = create_event(AuditCategory::DATA_ACCESS, "data.write",
                                   "Data written to " + std::string(resource_type));
         event.from_identity(identity);
-        event.outcome = AuditOutcome::SUCCESS;
+        event.outcome     = AuditOutcome::SUCCESS;
         event.target_type = std::string(resource_type);
-        event.target_id = std::string(resource_id);
-        event.action = "write";
+        event.target_id   = std::string(resource_id);
+        event.action      = "write";
         log(std::move(event));
     }
 
-    void log_config_change(const Identity& identity,
-                           std::string_view setting,
-                           std::string_view old_value,
-                           std::string_view new_value) {
-        auto event = create_event(AuditCategory::CONFIGURATION,
-                                  "config.change",
+    void log_config_change(const Identity& identity, std::string_view setting,
+                           std::string_view old_value, std::string_view new_value) {
+        auto event = create_event(AuditCategory::CONFIGURATION, "config.change",
                                   "Configuration changed: " + std::string(setting));
         event.from_identity(identity);
-        event.outcome = AuditOutcome::SUCCESS;
+        event.outcome   = AuditOutcome::SUCCESS;
         event.target_id = std::string(setting);
-        event.action = "modify";
+        event.action    = "modify";
         event.with("old_value", old_value);
         event.with("new_value", new_value);
         log(std::move(event));
     }
 
-    void log_security_event(AuditSeverity severity,
-                            std::string_view event_type,
+    void log_security_event(AuditSeverity severity, std::string_view event_type,
                             std::string_view message) {
-        auto event = create_event(AuditCategory::SECURITY,
-                                  event_type,
-                                  message);
+        auto event     = create_event(AuditCategory::SECURITY, event_type, message);
         event.severity = severity;
         log(std::move(event));
     }
@@ -867,9 +878,8 @@ private:
         while (running_.load()) {
             std::unique_lock lock(queue_mutex_);
 
-            cv_.wait_for(lock, config_.flush_interval, [this] {
-                return !event_queue_.empty() || !running_.load();
-            });
+            cv_.wait_for(lock, config_.flush_interval,
+                         [this] { return !event_queue_.empty() || !running_.load(); });
 
             while (!event_queue_.empty()) {
                 auto event = std::move(event_queue_.front());
@@ -903,11 +913,8 @@ private:
     std::string compute_hash(const AuditEvent& event) {
         // Simple hash computation (in production, use SHA-256)
         std::hash<std::string> hasher;
-        std::string data = std::to_string(event.event_id) +
-                          event.event_type +
-                          event.message +
-                          event.actor_id +
-                          event.previous_hash;
+        std::string data = std::to_string(event.event_id) + event.event_type + event.message +
+                           event.actor_id + event.previous_hash;
 
         auto hash = hasher(data);
 
@@ -970,4 +977,4 @@ inline AuditLogger& get_audit_logger() {
 #define AUDIT_SECURITY(severity, type, message) \
     ::ipb::security::get_audit_logger().log_security_event(severity, type, message)
 
-} // namespace ipb::security
+}  // namespace ipb::security

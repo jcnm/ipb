@@ -85,13 +85,11 @@ struct ConcurrencyResult {
     size_t completed_threads{0};
     size_t failed_threads{0};
 
-    void add_warning(const std::string& msg) {
-        warnings.push_back(msg);
-    }
+    void add_warning(const std::string& msg) { warnings.push_back(msg); }
 
     void fail(const std::string& msg) {
         success = false;
-        error = msg;
+        error   = msg;
     }
 };
 
@@ -104,10 +102,7 @@ struct ConcurrencyResult {
  */
 class ThreadBarrier {
 public:
-    explicit ThreadBarrier(size_t count)
-        : count_(count)
-        , waiting_(0)
-        , generation_(0) {}
+    explicit ThreadBarrier(size_t count) : count_(count), waiting_(0), generation_(0) {}
 
     void wait() {
         std::unique_lock lock(mutex_);
@@ -124,7 +119,7 @@ public:
 
     void reset(size_t count) {
         std::lock_guard lock(mutex_);
-        count_ = count;
+        count_   = count;
         waiting_ = 0;
         ++generation_;
     }
@@ -142,8 +137,7 @@ private:
  */
 class CountdownLatch {
 public:
-    explicit CountdownLatch(size_t count)
-        : count_(count) {}
+    explicit CountdownLatch(size_t count) : count_(count) {}
 
     void count_down() {
         std::lock_guard lock(mutex_);
@@ -194,31 +188,26 @@ struct ThreadTask {
 class ConcurrencyTest {
 public:
     explicit ConcurrencyTest(ConcurrencyConfig config = {})
-        : config_(std::move(config))
-        , stop_(false) {}
+        : config_(std::move(config)), stop_(false) {}
 
     /**
      * @brief Add thread task
      */
-    void add_thread(std::function<void(size_t, std::atomic<bool>&)> func,
-                    size_t count = 1,
+    void add_thread(std::function<void(size_t, std::atomic<bool>&)> func, size_t count = 1,
                     const std::string& name = "") {
         ThreadTask task;
-        task.func = std::move(func);
+        task.func         = std::move(func);
         task.thread_count = count;
-        task.name = name.empty() ? "task_" + std::to_string(tasks_.size()) : name;
+        task.name         = name.empty() ? "task_" + std::to_string(tasks_.size()) : name;
         tasks_.push_back(std::move(task));
     }
 
     /**
      * @brief Add simple thread task (no stop signal)
      */
-    void add_thread(std::function<void(size_t)> func,
-                    size_t count = 1,
+    void add_thread(std::function<void(size_t)> func, size_t count = 1,
                     const std::string& name = "") {
-        add_thread([f = std::move(func)](size_t id, std::atomic<bool>&) {
-            f(id);
-        }, count, name);
+        add_thread([f = std::move(func)](size_t id, std::atomic<bool>&) { f(id); }, count, name);
     }
 
     /**
@@ -242,7 +231,7 @@ public:
 
         // Create synchronization primitives
         auto barrier = std::make_shared<ThreadBarrier>(total_threads);
-        auto latch = std::make_shared<CountdownLatch>(total_threads);
+        auto latch   = std::make_shared<CountdownLatch>(total_threads);
         stop_.store(false);
 
         // Launch threads
@@ -278,9 +267,8 @@ public:
         }
 
         // Wait for completion with timeout
-        bool completed = latch->wait_for(
-            std::chrono::duration_cast<std::chrono::milliseconds>(config_.timeout)
-        );
+        bool completed =
+            latch->wait_for(std::chrono::duration_cast<std::chrono::milliseconds>(config_.timeout));
 
         // Signal stop
         stop_.store(true);
@@ -292,13 +280,13 @@ public:
             }
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end        = std::chrono::high_resolution_clock::now();
         result.duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         // Check for timeout
         if (!completed) {
-            result.fail("Test timed out after " +
-                        std::to_string(config_.timeout.count()) + " seconds");
+            result.fail("Test timed out after " + std::to_string(config_.timeout.count()) +
+                        " seconds");
             if (config_.detect_deadlock) {
                 result.add_warning("Possible deadlock detected");
             }
@@ -345,8 +333,8 @@ public:
 
             if (!results.back().success) {
                 if (config_.verbose) {
-                    std::cout << "Stress test failed on run " << (i + 1)
-                              << ": " << results.back().error << "\n";
+                    std::cout << "Stress test failed on run " << (i + 1) << ": "
+                              << results.back().error << "\n";
                 }
             }
         }
@@ -357,9 +345,7 @@ public:
     /**
      * @brief Clear all tasks
      */
-    void clear() {
-        tasks_.clear();
-    }
+    void clear() { tasks_.clear(); }
 
 private:
     ConcurrencyConfig config_;
@@ -374,22 +360,21 @@ private:
 /**
  * @brief Helper to detect data races
  */
-template<typename T>
+template <typename T>
 class RaceDetector {
 public:
     void write(const T& value, size_t thread_id) {
         std::lock_guard lock(mutex_);
         if (reading_) {
             race_detected_ = true;
-            race_info_ = "Write during read by thread " + std::to_string(thread_id);
+            race_info_     = "Write during read by thread " + std::to_string(thread_id);
         }
         if (writing_) {
             race_detected_ = true;
-            race_info_ = "Concurrent writes by threads " +
-                         std::to_string(writer_thread_) + " and " +
-                         std::to_string(thread_id);
+            race_info_     = "Concurrent writes by threads " + std::to_string(writer_thread_) +
+                         " and " + std::to_string(thread_id);
         }
-        writing_ = true;
+        writing_       = true;
         writer_thread_ = thread_id;
 
         value_ = value;
@@ -401,7 +386,7 @@ public:
         std::lock_guard lock(mutex_);
         if (writing_) {
             race_detected_ = true;
-            race_info_ = "Read during write by thread " + std::to_string(thread_id);
+            race_info_     = "Read during write by thread " + std::to_string(thread_id);
         }
         reading_ = true;
 
@@ -506,7 +491,7 @@ public:
     /**
      * @brief Try to acquire lock with timeout
      */
-    template<typename Mutex>
+    template <typename Mutex>
     bool try_lock(Mutex& mutex, const std::string& lock_name = "") {
         auto start = std::chrono::steady_clock::now();
 
@@ -514,7 +499,7 @@ public:
             auto elapsed = std::chrono::steady_clock::now() - start;
             if (elapsed > timeout_) {
                 potential_deadlock_ = true;
-                deadlock_info_ = "Timeout waiting for lock: " + lock_name;
+                deadlock_info_      = "Timeout waiting for lock: " + lock_name;
                 return false;
             }
             std::this_thread::yield();
@@ -544,46 +529,47 @@ public:
     /**
      * @brief Producer-consumer stress test
      */
-    template<typename Queue>
-    static ConcurrencyResult producer_consumer(
-            Queue& queue,
-            size_t producers,
-            size_t consumers,
-            size_t items_per_producer) {
-
+    template <typename Queue>
+    static ConcurrencyResult producer_consumer(Queue& queue, size_t producers, size_t consumers,
+                                               size_t items_per_producer) {
         ConcurrencyTest test;
         std::atomic<size_t> produced{0};
         std::atomic<size_t> consumed{0};
 
         // Producers
-        test.add_thread([&](size_t id, std::atomic<bool>& stop) {
-            for (size_t i = 0; i < items_per_producer && !stop.load(); ++i) {
-                while (!queue.try_push(static_cast<int>(id * items_per_producer + i))) {
-                    if (stop.load()) return;
-                    std::this_thread::yield();
+        test.add_thread(
+            [&](size_t id, std::atomic<bool>& stop) {
+                for (size_t i = 0; i < items_per_producer && !stop.load(); ++i) {
+                    while (!queue.try_push(static_cast<int>(id * items_per_producer + i))) {
+                        if (stop.load())
+                            return;
+                        std::this_thread::yield();
+                    }
+                    produced.fetch_add(1);
                 }
-                produced.fetch_add(1);
-            }
-        }, producers, "producer");
+            },
+            producers, "producer");
 
         // Consumers
-        test.add_thread([&](size_t, std::atomic<bool>& stop) {
-            int value;
-            while (!stop.load() || consumed.load() < produced.load()) {
-                if (queue.try_pop(value)) {
-                    consumed.fetch_add(1);
-                } else {
-                    std::this_thread::yield();
+        test.add_thread(
+            [&](size_t, std::atomic<bool>& stop) {
+                int value;
+                while (!stop.load() || consumed.load() < produced.load()) {
+                    if (queue.try_pop(value)) {
+                        consumed.fetch_add(1);
+                    } else {
+                        std::this_thread::yield();
+                    }
                 }
-            }
-        }, consumers, "consumer");
+            },
+            consumers, "consumer");
 
         auto result = test.run();
 
         // Verify all items consumed
         if (produced.load() != consumed.load()) {
-            result.add_warning("Produced " + std::to_string(produced.load()) +
-                               " but consumed " + std::to_string(consumed.load()));
+            result.add_warning("Produced " + std::to_string(produced.load()) + " but consumed " +
+                               std::to_string(consumed.load()));
         }
 
         return result;
@@ -592,30 +578,30 @@ public:
     /**
      * @brief Reader-writer stress test
      */
-    template<typename Container>
-    static ConcurrencyResult reader_writer(
-            Container& container,
-            size_t readers,
-            size_t writers,
-            size_t operations_per_thread,
-            std::function<void(Container&, size_t)> write_op,
-            std::function<void(Container&, size_t)> read_op) {
-
+    template <typename Container>
+    static ConcurrencyResult reader_writer(Container& container, size_t readers, size_t writers,
+                                           size_t operations_per_thread,
+                                           std::function<void(Container&, size_t)> write_op,
+                                           std::function<void(Container&, size_t)> read_op) {
         ConcurrencyTest test;
 
         // Writers
-        test.add_thread([&](size_t id, std::atomic<bool>& stop) {
-            for (size_t i = 0; i < operations_per_thread && !stop.load(); ++i) {
-                write_op(container, id * operations_per_thread + i);
-            }
-        }, writers, "writer");
+        test.add_thread(
+            [&](size_t id, std::atomic<bool>& stop) {
+                for (size_t i = 0; i < operations_per_thread && !stop.load(); ++i) {
+                    write_op(container, id * operations_per_thread + i);
+                }
+            },
+            writers, "writer");
 
         // Readers
-        test.add_thread([&](size_t id, std::atomic<bool>& stop) {
-            for (size_t i = 0; i < operations_per_thread && !stop.load(); ++i) {
-                read_op(container, id * operations_per_thread + i);
-            }
-        }, readers, "reader");
+        test.add_thread(
+            [&](size_t id, std::atomic<bool>& stop) {
+                for (size_t i = 0; i < operations_per_thread && !stop.load(); ++i) {
+                    read_op(container, id * operations_per_thread + i);
+                }
+            },
+            readers, "reader");
 
         return test.run();
     }
@@ -623,31 +609,30 @@ public:
     /**
      * @brief Counter stress test
      */
-    template<typename Counter>
-    static ConcurrencyResult counter_stress(
-            Counter& counter,
-            size_t threads,
-            size_t increments_per_thread) {
-
+    template <typename Counter>
+    static ConcurrencyResult counter_stress(Counter& counter, size_t threads,
+                                            size_t increments_per_thread) {
         ConcurrencyTest test;
         std::atomic<size_t> total_increments{0};
 
-        test.add_thread([&](size_t, std::atomic<bool>& stop) {
-            for (size_t i = 0; i < increments_per_thread && !stop.load(); ++i) {
-                counter.increment();
-                total_increments.fetch_add(1);
-            }
-        }, threads, "incrementer");
+        test.add_thread(
+            [&](size_t, std::atomic<bool>& stop) {
+                for (size_t i = 0; i < increments_per_thread && !stop.load(); ++i) {
+                    counter.increment();
+                    total_increments.fetch_add(1);
+                }
+            },
+            threads, "incrementer");
 
         auto result = test.run();
 
         // Verify counter value
         size_t expected = threads * increments_per_thread;
-        size_t actual = counter.value();
+        size_t actual   = counter.value();
 
         if (actual != expected) {
-            result.fail("Counter mismatch: expected " + std::to_string(expected) +
-                        " but got " + std::to_string(actual));
+            result.fail("Counter mismatch: expected " + std::to_string(expected) + " but got " +
+                        std::to_string(actual));
         }
 
         return result;
@@ -658,18 +643,18 @@ public:
 // Assertion Helpers
 //=============================================================================
 
-#define CONCURRENCY_ASSERT(condition, message) \
-    do { \
-        if (!(condition)) { \
+#define CONCURRENCY_ASSERT(condition, message)                                     \
+    do {                                                                           \
+        if (!(condition)) {                                                        \
             throw std::runtime_error(std::string("Assertion failed: ") + message); \
-        } \
-    } while(0)
+        }                                                                          \
+    } while (0)
 
-#define CONCURRENCY_EXPECT_TRUE(result) \
-    do { \
-        if (!(result).success) { \
+#define CONCURRENCY_EXPECT_TRUE(result)                                             \
+    do {                                                                            \
+        if (!(result).success) {                                                    \
             throw std::runtime_error("Concurrency test failed: " + (result).error); \
-        } \
-    } while(0)
+        }                                                                           \
+    } while (0)
 
-} // namespace ipb::testing
+}  // namespace ipb::testing

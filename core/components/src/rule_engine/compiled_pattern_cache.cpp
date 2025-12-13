@@ -1,5 +1,5 @@
-#include <ipb/core/rule_engine/compiled_pattern_cache.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/core/rule_engine/compiled_pattern_cache.hpp>
 
 #include <algorithm>
 #include <future>
@@ -11,23 +11,21 @@ using namespace common;
 using namespace common::debug;
 
 namespace {
-    constexpr const char* LOG_CAT = "PatternCache";
-}
+constexpr const char* LOG_CAT = "PatternCache";
+}  // namespace
 
 // ============================================================================
 // PatternValidator Implementation
 // ============================================================================
 
-PatternValidationResult PatternValidator::validate(
-        std::string_view pattern,
-        size_t max_complexity) noexcept {
-
+PatternValidationResult PatternValidator::validate(std::string_view pattern,
+                                                   size_t max_complexity) noexcept {
     PatternValidationResult result;
 
     // Empty pattern check
     if (pattern.empty()) {
         result.is_safe = false;
-        result.reason = "Pattern cannot be empty";
+        result.reason  = "Pattern cannot be empty";
         return result;
     }
 
@@ -39,37 +37,36 @@ PatternValidationResult PatternValidator::validate(
 
     // Check for backreferences
     result.has_backreferences = (pattern.find("\\1") != std::string_view::npos ||
-                                  pattern.find("\\2") != std::string_view::npos ||
-                                  pattern.find("\\3") != std::string_view::npos);
+                                 pattern.find("\\2") != std::string_view::npos ||
+                                 pattern.find("\\3") != std::string_view::npos);
 
     // Determine safety
     if (result.has_nested_quantifiers) {
         result.is_safe = false;
-        result.reason = "Pattern contains nested quantifiers - potential ReDoS";
+        result.reason  = "Pattern contains nested quantifiers - potential ReDoS";
         return result;
     }
 
     if (result.estimated_complexity > max_complexity) {
         result.is_safe = false;
-        result.reason = "Pattern complexity (" + std::to_string(result.estimated_complexity) +
-                       ") exceeds maximum (" + std::to_string(max_complexity) + ")";
+        result.reason  = "Pattern complexity (" + std::to_string(result.estimated_complexity) +
+                        ") exceeds maximum (" + std::to_string(max_complexity) + ")";
         return result;
     }
 
     result.is_safe = true;
-    result.reason = "OK";
+    result.reason  = "OK";
     return result;
 }
 
 bool PatternValidator::has_nested_quantifiers(std::string_view pattern) noexcept {
-    return check_nested_plus(pattern) ||
-           check_nested_star(pattern) ||
+    return check_nested_plus(pattern) || check_nested_star(pattern) ||
            check_alternation_in_quantified_group(pattern);
 }
 
 bool PatternValidator::check_nested_plus(std::string_view pattern) noexcept {
     // Detect patterns like (a+)+, (.+)+, ([^/]+)+
-    size_t depth = 0;
+    size_t depth             = 0;
     bool in_quantified_group = false;
 
     for (size_t i = 0; i < pattern.size(); ++i) {
@@ -132,9 +129,9 @@ bool PatternValidator::check_nested_star(std::string_view pattern) noexcept {
 
 bool PatternValidator::check_alternation_in_quantified_group(std::string_view pattern) noexcept {
     // Detect patterns like (a|aa)+, (x|xy)*
-    size_t depth = 0;
+    size_t depth         = 0;
     bool has_alternation = false;
-    size_t group_start = 0;
+    size_t group_start   = 0;
 
     for (size_t i = 0; i < pattern.size(); ++i) {
         char c = pattern[i];
@@ -146,7 +143,7 @@ bool PatternValidator::check_alternation_in_quantified_group(std::string_view pa
 
         if (c == '(') {
             if (depth == 0) {
-                group_start = i;
+                group_start     = i;
                 has_alternation = false;
             }
             ++depth;
@@ -186,14 +183,20 @@ size_t PatternValidator::calculate_complexity(std::string_view pattern) noexcept
     }
 
     // Backreferences
-    if (pattern.find("\\1") != std::string_view::npos) complexity += 5;
-    if (pattern.find("\\2") != std::string_view::npos) complexity += 5;
+    if (pattern.find("\\1") != std::string_view::npos)
+        complexity += 5;
+    if (pattern.find("\\2") != std::string_view::npos)
+        complexity += 5;
 
     // Lookahead/lookbehind
-    if (pattern.find("(?=") != std::string_view::npos) complexity += 3;
-    if (pattern.find("(?!") != std::string_view::npos) complexity += 3;
-    if (pattern.find("(?<=") != std::string_view::npos) complexity += 5;
-    if (pattern.find("(?<!") != std::string_view::npos) complexity += 5;
+    if (pattern.find("(?=") != std::string_view::npos)
+        complexity += 3;
+    if (pattern.find("(?!") != std::string_view::npos)
+        complexity += 3;
+    if (pattern.find("(?<=") != std::string_view::npos)
+        complexity += 5;
+    if (pattern.find("(?<!") != std::string_view::npos)
+        complexity += 5;
 
     return complexity;
 }
@@ -232,11 +235,9 @@ size_t PatternValidator::count_groups(std::string_view pattern) noexcept {
 // CompiledPatternCache Implementation
 // ============================================================================
 
-CompiledPatternCache::CompiledPatternCache()
-    : CompiledPatternCache(PatternCacheConfig{}) {}
+CompiledPatternCache::CompiledPatternCache() : CompiledPatternCache(PatternCacheConfig{}) {}
 
-CompiledPatternCache::CompiledPatternCache(const PatternCacheConfig& config)
-    : config_(config) {
+CompiledPatternCache::CompiledPatternCache(const PatternCacheConfig& config) : config_(config) {
     IPB_LOG_DEBUG(LOG_CAT, "Pattern cache created with max_size=" << config.max_size);
 }
 
@@ -244,16 +245,16 @@ CompiledPatternCache::~CompiledPatternCache() = default;
 
 CompiledPatternCache::CompiledPatternCache(CompiledPatternCache&& other) noexcept {
     std::unique_lock lock(other.mutex_);
-    config_ = std::move(other.config_);
-    cache_ = std::move(other.cache_);
+    config_   = std::move(other.config_);
+    cache_    = std::move(other.cache_);
     lru_list_ = std::move(other.lru_list_);
 }
 
 CompiledPatternCache& CompiledPatternCache::operator=(CompiledPatternCache&& other) noexcept {
     if (this != &other) {
         std::scoped_lock lock(mutex_, other.mutex_);
-        config_ = std::move(other.config_);
-        cache_ = std::move(other.cache_);
+        config_   = std::move(other.config_);
+        cache_    = std::move(other.cache_);
         lru_list_ = std::move(other.lru_list_);
     }
     return *this;
@@ -314,8 +315,8 @@ Result<const std::regex*> CompiledPatternCache::get_or_compile(std::string_view 
     std::string pattern_str(pattern);
     lru_list_.push_front(pattern_str);
 
-    auto& entry = cache_[pattern_str];
-    entry.first = std::move(compile_result.value());
+    auto& entry  = cache_[pattern_str];
+    entry.first  = std::move(compile_result.value());
     entry.second = lru_list_.begin();
 
     IPB_LOG_DEBUG(LOG_CAT, "Compiled and cached pattern: " << pattern);
@@ -382,8 +383,8 @@ Result<CachedPattern> CompiledPatternCache::compile_pattern(std::string_view pat
     if (pattern.size() > config_.max_pattern_length) {
         stats_.compilation_failures.fetch_add(1, std::memory_order_relaxed);
         return err<CachedPattern>(ErrorCode::INVALID_ARGUMENT,
-            "Pattern too long: " + std::to_string(pattern.size()) +
-            " > " + std::to_string(config_.max_pattern_length));
+                                  "Pattern too long: " + std::to_string(pattern.size()) + " > " +
+                                      std::to_string(config_.max_pattern_length));
     }
 
     // Validate pattern safety
@@ -392,7 +393,7 @@ Result<CachedPattern> CompiledPatternCache::compile_pattern(std::string_view pat
         if (!validation.is_safe) {
             stats_.validation_rejections.fetch_add(1, std::memory_order_relaxed);
             IPB_LOG_WARN(LOG_CAT, "Pattern validation failed: " << validation.reason
-                         << " for pattern: " << pattern);
+                                                                << " for pattern: " << pattern);
             return err<CachedPattern>(ErrorCode::PATTERN_INVALID, validation.reason);
         }
     }
@@ -407,8 +408,8 @@ Result<CachedPattern> CompiledPatternCache::compile_pattern(std::string_view pat
 
         std::thread compile_thread([&promise, &pattern, this]() {
             try {
-                auto regex = std::make_unique<std::regex>(
-                    std::string(pattern), config_.regex_flags);
+                auto regex =
+                    std::make_unique<std::regex>(std::string(pattern), config_.regex_flags);
                 promise.set_value(std::move(regex));
             } catch (const std::regex_error& e) {
                 promise.set_exception(std::current_exception());
@@ -423,24 +424,25 @@ Result<CachedPattern> CompiledPatternCache::compile_pattern(std::string_view pat
             stats_.timeout_rejections.fetch_add(1, std::memory_order_relaxed);
             IPB_LOG_WARN(LOG_CAT, "Pattern compilation timeout: " << pattern);
             return err<CachedPattern>(ErrorCode::OPERATION_TIMEOUT,
-                "Pattern compilation exceeded " +
-                std::to_string(config_.compilation_timeout.count()) + "ms");
+                                      "Pattern compilation exceeded " +
+                                          std::to_string(config_.compilation_timeout.count()) +
+                                          "ms");
         }
 
         compile_thread.join();
 
         try {
             auto compiled = future.get();
-            auto end = std::chrono::steady_clock::now();
+            auto end      = std::chrono::steady_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
             stats_.compilations.fetch_add(1, std::memory_order_relaxed);
             stats_.total_compilation_time_ns.fetch_add(duration.count(), std::memory_order_relaxed);
 
             CachedPattern result;
-            result.pattern_string = std::string(pattern);
-            result.compiled = std::move(compiled);
-            result.compiled_at = std::chrono::steady_clock::now();
+            result.pattern_string   = std::string(pattern);
+            result.compiled         = std::move(compiled);
+            result.compiled_at      = std::chrono::steady_clock::now();
             result.compilation_time = duration;
             result.complexity_score = PatternValidator::calculate_complexity(pattern);
 
@@ -448,27 +450,26 @@ Result<CachedPattern> CompiledPatternCache::compile_pattern(std::string_view pat
 
         } catch (const std::regex_error& e) {
             stats_.compilation_failures.fetch_add(1, std::memory_order_relaxed);
-            IPB_LOG_WARN(LOG_CAT, "Pattern compilation failed: " << e.what()
-                         << " for pattern: " << pattern);
+            IPB_LOG_WARN(LOG_CAT,
+                         "Pattern compilation failed: " << e.what() << " for pattern: " << pattern);
             return err<CachedPattern>(ErrorCode::PATTERN_INVALID,
-                std::string("Regex compilation error: ") + e.what());
+                                      std::string("Regex compilation error: ") + e.what());
         }
     } else {
         // No timeout - compile directly
         try {
-            auto compiled = std::make_unique<std::regex>(
-                std::string(pattern), config_.regex_flags);
+            auto compiled = std::make_unique<std::regex>(std::string(pattern), config_.regex_flags);
 
-            auto end = std::chrono::steady_clock::now();
+            auto end      = std::chrono::steady_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
             stats_.compilations.fetch_add(1, std::memory_order_relaxed);
             stats_.total_compilation_time_ns.fetch_add(duration.count(), std::memory_order_relaxed);
 
             CachedPattern result;
-            result.pattern_string = std::string(pattern);
-            result.compiled = std::move(compiled);
-            result.compiled_at = std::chrono::steady_clock::now();
+            result.pattern_string   = std::string(pattern);
+            result.compiled         = std::move(compiled);
+            result.compiled_at      = std::chrono::steady_clock::now();
             result.compilation_time = duration;
             result.complexity_score = PatternValidator::calculate_complexity(pattern);
 
@@ -477,13 +478,14 @@ Result<CachedPattern> CompiledPatternCache::compile_pattern(std::string_view pat
         } catch (const std::regex_error& e) {
             stats_.compilation_failures.fetch_add(1, std::memory_order_relaxed);
             return err<CachedPattern>(ErrorCode::PATTERN_INVALID,
-                std::string("Regex compilation error: ") + e.what());
+                                      std::string("Regex compilation error: ") + e.what());
         }
     }
 }
 
 void CompiledPatternCache::evict_lru() {
-    if (lru_list_.empty()) return;
+    if (lru_list_.empty())
+        return;
 
     std::string victim = lru_list_.back();
     lru_list_.pop_back();
@@ -512,7 +514,6 @@ CachedPatternMatcher::CachedPatternMatcher(std::string_view pattern)
 
 CachedPatternMatcher::CachedPatternMatcher(std::string_view pattern, CompiledPatternCache& cache)
     : pattern_(pattern) {
-
     auto result = cache.get_or_compile(pattern);
     if (result) {
         compiled_ = result.value();
@@ -522,7 +523,8 @@ CachedPatternMatcher::CachedPatternMatcher(std::string_view pattern, CompiledPat
 }
 
 bool CachedPatternMatcher::matches(std::string_view input) const noexcept {
-    if (!compiled_) return false;
+    if (!compiled_)
+        return false;
 
     try {
         return std::regex_match(input.begin(), input.end(), *compiled_);
@@ -533,9 +535,9 @@ bool CachedPatternMatcher::matches(std::string_view input) const noexcept {
 }
 
 std::optional<std::vector<std::string>> CachedPatternMatcher::match_groups(
-        std::string_view input) const {
-
-    if (!compiled_) return std::nullopt;
+    std::string_view input) const {
+    if (!compiled_)
+        return std::nullopt;
 
     try {
         std::match_results<std::string_view::const_iterator> match;
@@ -554,4 +556,4 @@ std::optional<std::vector<std::string>> CachedPatternMatcher::match_groups(
     return std::nullopt;
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

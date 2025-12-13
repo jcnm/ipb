@@ -12,8 +12,6 @@
  * - Caching for performance
  */
 
-#include "authentication.hpp"
-
 #include <algorithm>
 #include <memory>
 #include <mutex>
@@ -26,6 +24,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "authentication.hpp"
+
 namespace ipb::security {
 
 //=============================================================================
@@ -35,34 +35,39 @@ namespace ipb::security {
 /**
  * @brief Permission actions
  */
-enum class Action {
-    READ,
-    WRITE,
-    DELETE,
-    EXECUTE,
-    ADMIN,
-    ALL
-};
+enum class Action { READ, WRITE, DELETE, EXECUTE, ADMIN, ALL };
 
 inline std::string action_string(Action action) {
     switch (action) {
-        case Action::READ: return "read";
-        case Action::WRITE: return "write";
-        case Action::DELETE: return "delete";
-        case Action::EXECUTE: return "execute";
-        case Action::ADMIN: return "admin";
-        case Action::ALL: return "*";
+        case Action::READ:
+            return "read";
+        case Action::WRITE:
+            return "write";
+        case Action::DELETE:
+            return "delete";
+        case Action::EXECUTE:
+            return "execute";
+        case Action::ADMIN:
+            return "admin";
+        case Action::ALL:
+            return "*";
     }
     return "unknown";
 }
 
 inline std::optional<Action> parse_action(std::string_view str) {
-    if (str == "read") return Action::READ;
-    if (str == "write") return Action::WRITE;
-    if (str == "delete") return Action::DELETE;
-    if (str == "execute") return Action::EXECUTE;
-    if (str == "admin") return Action::ADMIN;
-    if (str == "*") return Action::ALL;
+    if (str == "read")
+        return Action::READ;
+    if (str == "write")
+        return Action::WRITE;
+    if (str == "delete")
+        return Action::DELETE;
+    if (str == "execute")
+        return Action::EXECUTE;
+    if (str == "admin")
+        return Action::ADMIN;
+    if (str == "*")
+        return Action::ALL;
     return std::nullopt;
 }
 
@@ -70,9 +75,9 @@ inline std::optional<Action> parse_action(std::string_view str) {
  * @brief Resource type
  */
 struct Resource {
-    std::string type;      // e.g., "datapoint", "route", "sink"
-    std::string id;        // e.g., "sensor.temperature", "*"
-    std::string scope;     // e.g., "namespace:production", "*"
+    std::string type;   // e.g., "datapoint", "route", "sink"
+    std::string id;     // e.g., "sensor.temperature", "*"
+    std::string scope;  // e.g., "namespace:production", "*"
 
     bool matches(const Resource& other) const {
         return (type == "*" || other.type == "*" || type == other.type) &&
@@ -80,27 +85,25 @@ struct Resource {
                (scope == "*" || other.scope == "*" || scope == other.scope);
     }
 
-    std::string to_string() const {
-        return type + ":" + id + "@" + scope;
-    }
+    std::string to_string() const { return type + ":" + id + "@" + scope; }
 
     static Resource parse(std::string_view str) {
         Resource res;
-        auto at_pos = str.find('@');
+        auto at_pos    = str.find('@');
         auto colon_pos = str.find(':');
 
         if (colon_pos != std::string_view::npos) {
             res.type = std::string(str.substr(0, colon_pos));
             if (at_pos != std::string_view::npos) {
-                res.id = std::string(str.substr(colon_pos + 1, at_pos - colon_pos - 1));
+                res.id    = std::string(str.substr(colon_pos + 1, at_pos - colon_pos - 1));
                 res.scope = std::string(str.substr(at_pos + 1));
             } else {
-                res.id = std::string(str.substr(colon_pos + 1));
+                res.id    = std::string(str.substr(colon_pos + 1));
                 res.scope = "*";
             }
         } else {
-            res.type = std::string(str);
-            res.id = "*";
+            res.type  = std::string(str);
+            res.id    = "*";
             res.scope = "*";
         }
         return res;
@@ -115,7 +118,8 @@ struct Permission {
     std::set<Action> actions;
 
     bool allows(const Resource& res, Action action) const {
-        if (!resource.matches(res)) return false;
+        if (!resource.matches(res))
+            return false;
         return actions.count(Action::ALL) > 0 || actions.count(action) > 0;
     }
 };
@@ -137,7 +141,8 @@ struct Role {
                         const std::unordered_map<std::string, Role>& all_roles,
                         std::unordered_set<std::string>& visited) const {
         // Prevent circular inheritance
-        if (visited.count(name)) return false;
+        if (visited.count(name))
+            return false;
         visited.insert(name);
 
         // Check direct permissions
@@ -168,10 +173,7 @@ struct Role {
 /**
  * @brief Access policy effect
  */
-enum class PolicyEffect {
-    ALLOW,
-    DENY
-};
+enum class PolicyEffect { ALLOW, DENY };
 
 /**
  * @brief Access policy
@@ -193,7 +195,8 @@ struct Policy {
                 break;
             }
         }
-        if (!principal_match) return false;
+        if (!principal_match)
+            return false;
 
         // Check resource
         bool resource_match = false;
@@ -203,7 +206,8 @@ struct Policy {
                 break;
             }
         }
-        if (!resource_match) return false;
+        if (!resource_match)
+            return false;
 
         // Check action
         bool action_match = false;
@@ -225,11 +229,7 @@ struct Policy {
 /**
  * @brief Authorization result
  */
-enum class AuthzResult {
-    ALLOWED,
-    DENIED,
-    NOT_APPLICABLE
-};
+enum class AuthzResult { ALLOWED, DENIED, NOT_APPLICABLE };
 
 /**
  * @brief Authorization decision with context
@@ -279,8 +279,7 @@ public:
     /**
      * @brief Check authorization
      */
-    AuthzDecision authorize(const Identity& identity,
-                            const Resource& resource,
+    AuthzDecision authorize(const Identity& identity, const Resource& resource,
                             Action action) const {
         auto start = std::chrono::high_resolution_clock::now();
         AuthzDecision decision;
@@ -292,15 +291,15 @@ public:
             if (policy.effect == PolicyEffect::DENY) {
                 for (const auto& role : identity.roles) {
                     if (policy.applies_to(role, resource, action)) {
-                        decision.result = AuthzResult::DENIED;
-                        decision.reason = "Denied by policy";
+                        decision.result         = AuthzResult::DENIED;
+                        decision.reason         = "Denied by policy";
                         decision.matched_policy = policy.name;
                         goto done;
                     }
                 }
                 if (policy.applies_to(identity.id, resource, action)) {
-                    decision.result = AuthzResult::DENIED;
-                    decision.reason = "Denied by policy";
+                    decision.result         = AuthzResult::DENIED;
+                    decision.reason         = "Denied by policy";
                     decision.matched_policy = policy.name;
                     goto done;
                 }
@@ -325,15 +324,15 @@ public:
             if (policy.effect == PolicyEffect::ALLOW) {
                 for (const auto& role : identity.roles) {
                     if (policy.applies_to(role, resource, action)) {
-                        decision.result = AuthzResult::ALLOWED;
-                        decision.reason = "Allowed by policy";
+                        decision.result         = AuthzResult::ALLOWED;
+                        decision.reason         = "Allowed by policy";
                         decision.matched_policy = policy.name;
                         goto done;
                     }
                 }
                 if (policy.applies_to(identity.id, resource, action)) {
-                    decision.result = AuthzResult::ALLOWED;
-                    decision.reason = "Allowed by policy";
+                    decision.result         = AuthzResult::ALLOWED;
+                    decision.reason         = "Allowed by policy";
                     decision.matched_policy = policy.name;
                     goto done;
                 }
@@ -345,7 +344,7 @@ public:
         decision.reason = "No matching permission";
 
     done:
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end         = std::chrono::high_resolution_clock::now();
         decision.latency = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         return decision;
     }
@@ -354,8 +353,8 @@ public:
      * @brief Check if identity has specific role
      */
     bool has_role(const Identity& identity, std::string_view role) const {
-        return std::find(identity.roles.begin(), identity.roles.end(), role)
-               != identity.roles.end();
+        return std::find(identity.roles.begin(), identity.roles.end(), role) !=
+               identity.roles.end();
     }
 
     /**
@@ -368,8 +367,7 @@ public:
         for (const auto& role_name : identity.roles) {
             auto it = roles_.find(role_name);
             if (it != roles_.end()) {
-                result.insert(result.end(),
-                              it->second.permissions.begin(),
+                result.insert(result.end(), it->second.permissions.begin(),
                               it->second.permissions.end());
             }
         }
@@ -383,7 +381,7 @@ public:
     void setup_default_roles() {
         // Admin role - full access
         Role admin;
-        admin.name = "admin";
+        admin.name        = "admin";
         admin.description = "Administrator with full access";
         admin.permissions.push_back({
             Resource{"*", "*", "*"},
@@ -393,7 +391,7 @@ public:
 
         // Operator role - read/write data
         Role ops;
-        ops.name = "operator";
+        ops.name        = "operator";
         ops.description = "Operator with read/write access to data";
         ops.permissions.push_back({
             Resource{"datapoint", "*", "*"},
@@ -407,7 +405,7 @@ public:
 
         // Viewer role - read only
         Role viewer;
-        viewer.name = "viewer";
+        viewer.name        = "viewer";
         viewer.description = "Read-only access";
         viewer.permissions.push_back({
             Resource{"*", "*", "*"},
@@ -417,10 +415,10 @@ public:
 
         // Service role - for internal services
         Role service;
-        service.name = "service";
+        service.name        = "service";
         service.description = "Internal service access";
         service.permissions.push_back({
-            Resource{"datapoint", "*", "*"},
+            Resource{"datapoint",  "*",           "*"           },
             {Action::READ, Action::WRITE, Action::DELETE}
         });
         service.permissions.push_back({
@@ -446,4 +444,4 @@ private:
     std::vector<Policy> policies_;
 };
 
-} // namespace ipb::security
+}  // namespace ipb::security

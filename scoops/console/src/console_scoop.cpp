@@ -1,72 +1,77 @@
 #include "ipb/scoop/console/console_scoop.hpp"
 
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 #include <ipb/common/platform.hpp>
 
-#include <json/json.h>
-#include <sstream>
 #include <algorithm>
-#include <thread>
 #include <condition_variable>
 #include <iostream>
 #include <regex>
+#include <sstream>
+#include <thread>
+
+#include <json/json.h>
 
 namespace ipb::scoop::console {
 
 using namespace common::debug;
 
 namespace {
-    constexpr const char* LOG_CAT = category::PROTOCOL;
-}
+constexpr const char* LOG_CAT = category::PROTOCOL;
+}  // namespace
 
 //=============================================================================
 // ConsoleScoopConfig Implementation
 //=============================================================================
 
 bool ConsoleScoopConfig::is_valid() const {
-    if (buffer_size == 0) return false;
-    if (format == InputFormat::CSV && csv_columns.empty()) return false;
+    if (buffer_size == 0)
+        return false;
+    if (format == InputFormat::CSV && csv_columns.empty())
+        return false;
     return true;
 }
 
 std::string ConsoleScoopConfig::validation_error() const {
-    if (buffer_size == 0) return "Buffer size must be > 0";
-    if (format == InputFormat::CSV && csv_columns.empty()) return "CSV columns not configured";
+    if (buffer_size == 0)
+        return "Buffer size must be > 0";
+    if (format == InputFormat::CSV && csv_columns.empty())
+        return "CSV columns not configured";
     return "";
 }
 
 ConsoleScoopConfig ConsoleScoopConfig::create_default() {
     ConsoleScoopConfig config;
-    config.format = InputFormat::AUTO;
+    config.format      = InputFormat::AUTO;
     config.interactive = false;
     return config;
 }
 
 ConsoleScoopConfig ConsoleScoopConfig::create_interactive() {
     ConsoleScoopConfig config;
-    config.format = InputFormat::AUTO;
+    config.format      = InputFormat::AUTO;
     config.interactive = true;
-    config.prompt = "ipb> ";
-    config.echo_input = true;
+    config.prompt      = "ipb> ";
+    config.echo_input  = true;
     return config;
 }
 
 ConsoleScoopConfig ConsoleScoopConfig::create_json_pipe() {
     ConsoleScoopConfig config;
-    config.format = InputFormat::JSON;
-    config.interactive = false;
+    config.format           = InputFormat::JSON;
+    config.interactive      = false;
     config.skip_empty_lines = true;
-    config.skip_comments = true;
+    config.skip_comments    = true;
     return config;
 }
 
 ConsoleScoopConfig ConsoleScoopConfig::create_csv_pipe() {
     ConsoleScoopConfig config;
-    config.format = InputFormat::CSV;
-    config.interactive = false;
+    config.format         = InputFormat::CSV;
+    config.interactive    = false;
     config.csv_has_header = true;
-    config.csv_columns = {"address", "value", "quality", "timestamp"};
+    config.csv_columns    = {"address", "value", "quality", "timestamp"};
     return config;
 }
 
@@ -77,21 +82,15 @@ ConsoleScoopConfig ConsoleScoopConfig::create_csv_pipe() {
 class ConsoleScoop::Impl {
 public:
     explicit Impl(const ConsoleScoopConfig& config)
-        : config_(config)
-        , input_stream_(&std::cin)
-        , owns_stream_(false)
-        , running_(false)
-        , connected_(false) {
-        IPB_LOG_DEBUG(LOG_CAT, "ConsoleScoop::Impl created with format="
-                      << static_cast<int>(config.format));
+        : config_(config), input_stream_(&std::cin), owns_stream_(false), running_(false),
+          connected_(false) {
+        IPB_LOG_DEBUG(LOG_CAT,
+                      "ConsoleScoop::Impl created with format=" << static_cast<int>(config.format));
     }
 
     Impl(const ConsoleScoopConfig& config, std::istream& input)
-        : config_(config)
-        , input_stream_(&input)
-        , owns_stream_(false)
-        , running_(false)
-        , connected_(false) {
+        : config_(config), input_stream_(&input), owns_stream_(false), running_(false),
+          connected_(false) {
         IPB_LOG_DEBUG(LOG_CAT, "ConsoleScoop::Impl created with custom stream");
     }
 
@@ -174,7 +173,7 @@ public:
 
     common::Result<> subscribe(DataCallback data_cb, ErrorCallback error_cb) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
-        data_callback_ = std::move(data_cb);
+        data_callback_  = std::move(data_cb);
         error_callback_ = std::move(error_cb);
         IPB_LOG_DEBUG(LOG_CAT, "Callbacks subscribed");
         return common::Result<>::success();
@@ -182,7 +181,7 @@ public:
 
     common::Result<> unsubscribe() {
         std::lock_guard<std::mutex> lock(callback_mutex_);
-        data_callback_ = nullptr;
+        data_callback_  = nullptr;
         error_callback_ = nullptr;
         IPB_LOG_DEBUG(LOG_CAT, "Callbacks unsubscribed");
         return common::Result<>::success();
@@ -212,17 +211,14 @@ public:
     }
 
     bool is_healthy() const noexcept {
-        if (!running_.load()) return false;
+        if (!running_.load())
+            return false;
         return stats_.parse_errors.load() < config_.max_parse_errors;
     }
 
-    void reset_statistics() {
-        stats_.reset();
-    }
+    void reset_statistics() { stats_.reset(); }
 
-    ConsoleScoopStatistics get_console_statistics() const {
-        return stats_;
-    }
+    ConsoleScoopStatistics get_console_statistics() const { return stats_; }
 
     void set_custom_parser(ConsoleScoop::CustomParserCallback parser) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
@@ -307,13 +303,14 @@ private:
             // Get line from queue
             {
                 std::unique_lock<std::mutex> lock(line_mutex_);
-                line_cv_.wait_for(lock, std::chrono::milliseconds(100), [this] {
-                    return !line_queue_.empty() || !running_.load();
-                });
+                line_cv_.wait_for(lock, std::chrono::milliseconds(100),
+                                  [this] { return !line_queue_.empty() || !running_.load(); });
 
-                if (!running_.load() && line_queue_.empty()) break;
+                if (!running_.load() && line_queue_.empty())
+                    break;
 
-                if (line_queue_.empty()) continue;
+                if (line_queue_.empty())
+                    continue;
 
                 line = std::move(line_queue_.front());
                 line_queue_.pop();
@@ -335,7 +332,7 @@ private:
             // Echo if enabled
             if (config_.echo_input) {
                 std::cout << "Parsed: address=" << dp_opt->get_address()
-                         << " value=" << dp_opt->value_to_string() << std::endl;
+                          << " value=" << dp_opt->value_to_string() << std::endl;
             }
 
             // Buffer or deliver
@@ -388,7 +385,8 @@ private:
             std::lock_guard<std::mutex> lock(callback_mutex_);
             if (custom_parser_) {
                 auto result = custom_parser_(line);
-                if (result) return result;
+                if (result)
+                    return result;
             }
         }
 
@@ -417,7 +415,8 @@ private:
         trimmed.erase(0, trimmed.find_first_not_of(" \t"));
         trimmed.erase(trimmed.find_last_not_of(" \t") + 1);
 
-        if (trimmed.empty()) return InputFormat::KEY_VALUE;
+        if (trimmed.empty())
+            return InputFormat::KEY_VALUE;
 
         // Check for JSON
         if (trimmed[0] == '{') {
@@ -425,8 +424,7 @@ private:
         }
 
         // Check for CSV (contains commas but no '=')
-        if (trimmed.find(',') != std::string::npos &&
-            trimmed.find('=') == std::string::npos) {
+        if (trimmed.find(',') != std::string::npos && trimmed.find('=') == std::string::npos) {
             return InputFormat::CSV;
         }
 
@@ -499,8 +497,7 @@ private:
         // Parse timestamp
         if (root.isMember("timestamp") && root["timestamp"].isInt64()) {
             auto ts = std::chrono::system_clock::time_point(
-                std::chrono::milliseconds(root["timestamp"].asInt64())
-            );
+                std::chrono::milliseconds(root["timestamp"].asInt64()));
             dp.set_timestamp(ts);
         } else {
             dp.set_timestamp(std::chrono::system_clock::now());
@@ -557,8 +554,9 @@ private:
 
         // Parse value
         if (fields.count("value") || fields.count("val") || fields.count("v")) {
-            std::string val_str = fields.count("value") ? fields["value"] :
-                                 (fields.count("val") ? fields["val"] : fields["v"]);
+            std::string val_str = fields.count("value")
+                                    ? fields["value"]
+                                    : (fields.count("val") ? fields["val"] : fields["v"]);
             try {
                 if (val_str == "true" || val_str == "True" || val_str == "TRUE") {
                     dp.set_value(true);
@@ -659,9 +657,8 @@ private:
         if (named_fields.count("timestamp")) {
             try {
                 auto ts_ms = std::stoll(named_fields["timestamp"]);
-                dp.set_timestamp(std::chrono::system_clock::time_point(
-                    std::chrono::milliseconds(ts_ms)
-                ));
+                dp.set_timestamp(
+                    std::chrono::system_clock::time_point(std::chrono::milliseconds(ts_ms)));
             } catch (...) {
                 dp.set_timestamp(std::chrono::system_clock::now());
             }
@@ -789,10 +786,10 @@ std::unique_ptr<common::ConfigurationBase> ConsoleScoop::get_configuration() con
 common::Statistics ConsoleScoop::get_statistics() const noexcept {
     auto console_stats = impl_->get_console_statistics();
     common::Statistics stats;
-    stats.messages_received = console_stats.lines_received.load();
+    stats.messages_received  = console_stats.lines_received.load();
     stats.messages_processed = console_stats.lines_processed.load();
-    stats.messages_dropped = console_stats.lines_skipped.load();
-    stats.errors = console_stats.parse_errors.load();
+    stats.messages_dropped   = console_stats.lines_skipped.load();
+    stats.errors             = console_stats.parse_errors.load();
     return stats;
 }
 
@@ -839,7 +836,7 @@ std::unique_ptr<ConsoleScoop> ConsoleScoopFactory::create() {
 }
 
 std::unique_ptr<ConsoleScoop> ConsoleScoopFactory::create_interactive(const std::string& prompt) {
-    auto config = ConsoleScoopConfig::create_interactive();
+    auto config   = ConsoleScoopConfig::create_interactive();
     config.prompt = prompt;
     return std::make_unique<ConsoleScoop>(config);
 }
@@ -848,9 +845,10 @@ std::unique_ptr<ConsoleScoop> ConsoleScoopFactory::create_json_pipe() {
     return std::make_unique<ConsoleScoop>(ConsoleScoopConfig::create_json_pipe());
 }
 
-std::unique_ptr<ConsoleScoop> ConsoleScoopFactory::create_csv_pipe(char delimiter, bool has_header) {
-    auto config = ConsoleScoopConfig::create_csv_pipe();
-    config.csv_delimiter = delimiter;
+std::unique_ptr<ConsoleScoop> ConsoleScoopFactory::create_csv_pipe(char delimiter,
+                                                                   bool has_header) {
+    auto config           = ConsoleScoopConfig::create_csv_pipe();
+    config.csv_delimiter  = delimiter;
     config.csv_has_header = has_header;
     return std::make_unique<ConsoleScoop>(config);
 }
@@ -863,4 +861,4 @@ std::unique_ptr<ConsoleScoop> ConsoleScoopFactory::create(const ConsoleScoopConf
     return std::make_unique<ConsoleScoop>(config);
 }
 
-} // namespace ipb::scoop::console
+}  // namespace ipb::scoop::console

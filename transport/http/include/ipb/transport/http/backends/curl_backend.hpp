@@ -12,11 +12,11 @@
  * - Automatic decompression
  */
 
-#include "../http_backend.hpp"
-
+#include <atomic>
 #include <memory>
 #include <mutex>
-#include <atomic>
+
+#include "../http_backend.hpp"
 
 namespace ipb::transport::http {
 
@@ -29,7 +29,7 @@ public:
     ~CurlBackend() override;
 
     // Non-copyable, non-movable
-    CurlBackend(const CurlBackend&) = delete;
+    CurlBackend(const CurlBackend&)            = delete;
     CurlBackend& operator=(const CurlBackend&) = delete;
 
     //=========================================================================
@@ -59,4 +59,4 @@ private:
     std::mutex mutex_;
 };
 
-} // namespace ipb::transport::http
+}  // namespace ipb::transport::http

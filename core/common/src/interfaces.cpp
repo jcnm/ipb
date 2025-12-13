@@ -18,4 +18,4 @@ namespace ipb::common {
 //
 // No additional implementations needed here.
 
-} // namespace ipb::common
+}  // namespace ipb::common

@@ -10,16 +10,17 @@
  * - Cache-optimized data structures
  */
 
-#include "performance_benchmarks.hpp"
-#include <ipb/common/memory_pool.hpp>
-#include <ipb/common/lockfree_queue.hpp>
-#include <ipb/common/rate_limiter.hpp>
 #include <ipb/common/backpressure.hpp>
 #include <ipb/common/cache_optimized.hpp>
+#include <ipb/common/lockfree_queue.hpp>
+#include <ipb/common/memory_pool.hpp>
+#include <ipb/common/rate_limiter.hpp>
 
 #include <cstring>
 #include <random>
 #include <thread>
+
+#include "performance_benchmarks.hpp"
 
 using namespace ipb::common;
 using namespace ipb::common::benchmark;
@@ -35,7 +36,7 @@ struct TestData {
 
 // Benchmark configurations
 constexpr size_t ITERATIONS = 100000;
-constexpr size_t WARMUP = 1000;
+constexpr size_t WARMUP     = 1000;
 
 /**
  * @brief Memory Pool Benchmarks
@@ -61,8 +62,7 @@ void run_memory_pool_benchmarks() {
                 allocated = nullptr;
             }
         },
-        SLOSpec{.name = "pool_alloc", .p50_ns = 100, .p99_ns = 1000}
-    );
+        SLOSpec{.name = "pool_alloc", .p50_ns = 100, .p99_ns = 1000});
 
     // Benchmark: Pool deallocation
     suite.add_benchmark(
@@ -71,12 +71,8 @@ void run_memory_pool_benchmarks() {
             pool.deallocate(allocated);
             allocated = nullptr;
         },
-        [&]() {
-            allocated = pool.allocate();
-        },
-        [&]() { /* teardown */ },
-        SLOSpec{.name = "pool_dealloc", .p50_ns = 100, .p99_ns = 1000}
-    );
+        [&]() { allocated = pool.allocate(); }, [&]() { /* teardown */ },
+        SLOSpec{.name = "pool_dealloc", .p50_ns = 100, .p99_ns = 1000});
 
     // Benchmark: Allocate + deallocate cycle
     suite.add_benchmark(
@@ -86,8 +82,7 @@ void run_memory_pool_benchmarks() {
             DoNotOptimize(ptr);
             pool.deallocate(ptr);
         },
-        SLOSpec{.name = "pool_cycle", .p50_ns = 200, .p99_ns = 2000}
-    );
+        SLOSpec{.name = "pool_cycle", .p50_ns = 200, .p99_ns = 2000});
 
     // Benchmark: Heap allocation for comparison
     suite.add_benchmark(
@@ -97,12 +92,11 @@ void run_memory_pool_benchmarks() {
             DoNotOptimize(ptr);
             delete ptr;
         },
-        SLOSpec{.name = "heap", .p50_ns = 500, .p99_ns = 5000}
-    );
+        SLOSpec{.name = "heap", .p50_ns = 500, .p99_ns = 5000});
 
     // Run benchmarks
     BenchmarkConfig config;
-    config.iterations = ITERATIONS;
+    config.iterations        = ITERATIONS;
     config.warmup_iterations = WARMUP;
 
     suite.run(config);
@@ -124,17 +118,12 @@ void run_queue_benchmarks() {
     uint64_t value = 0;
 
     suite.add_benchmark(
-        "spsc_enqueue",
-        [&]() {
-            spsc_queue.try_enqueue(value++);
-        },
-        [&]() { /* setup */ },
+        "spsc_enqueue", [&]() { spsc_queue.try_enqueue(value++); }, [&]() { /* setup */ },
         [&]() {
             while (spsc_queue.try_dequeue()) {}
             value = 0;
         },
-        SLOSpec{.name = "spsc_enqueue", .p50_ns = 50, .p99_ns = 500}
-    );
+        SLOSpec{.name = "spsc_enqueue", .p50_ns = 50, .p99_ns = 500});
 
     suite.add_benchmark(
         "spsc_dequeue",
@@ -147,9 +136,7 @@ void run_queue_benchmarks() {
                 spsc_queue.try_enqueue(i);
             }
         },
-        [&]() { /* teardown */ },
-        SLOSpec{.name = "spsc_dequeue", .p50_ns = 50, .p99_ns = 500}
-    );
+        [&]() { /* teardown */ }, SLOSpec{.name = "spsc_dequeue", .p50_ns = 50, .p99_ns = 500});
 
     suite.add_benchmark(
         "spsc_enqueue_dequeue_cycle",
@@ -158,24 +145,18 @@ void run_queue_benchmarks() {
             auto result = spsc_queue.try_dequeue();
             DoNotOptimize(result);
         },
-        SLOSpec{.name = "spsc_cycle", .p50_ns = 100, .p99_ns = 1000}
-    );
+        SLOSpec{.name = "spsc_cycle", .p50_ns = 100, .p99_ns = 1000});
 
     // MPMC Queue
     BoundedMPMCQueue<uint64_t> mpmc_queue(4096);
 
     suite.add_benchmark(
-        "mpmc_enqueue",
-        [&]() {
-            mpmc_queue.try_enqueue(value++);
-        },
-        [&]() { /* setup */ },
+        "mpmc_enqueue", [&]() { mpmc_queue.try_enqueue(value++); }, [&]() { /* setup */ },
         [&]() {
             while (mpmc_queue.try_dequeue()) {}
             value = 0;
         },
-        SLOSpec{.name = "mpmc_enqueue", .p50_ns = 100, .p99_ns = 1000}
-    );
+        SLOSpec{.name = "mpmc_enqueue", .p50_ns = 100, .p99_ns = 1000});
 
     suite.add_benchmark(
         "mpmc_dequeue",
@@ -188,12 +169,10 @@ void run_queue_benchmarks() {
                 mpmc_queue.try_enqueue(i);
             }
         },
-        [&]() { /* teardown */ },
-        SLOSpec{.name = "mpmc_dequeue", .p50_ns = 100, .p99_ns = 1000}
-    );
+        [&]() { /* teardown */ }, SLOSpec{.name = "mpmc_dequeue", .p50_ns = 100, .p99_ns = 1000});
 
     BenchmarkConfig config;
-    config.iterations = ITERATIONS;
+    config.iterations        = ITERATIONS;
     config.warmup_iterations = WARMUP;
 
     suite.run(config);
@@ -207,10 +186,8 @@ void run_rate_limiter_benchmarks() {
     BenchmarkSuite suite("Rate Limiter");
 
     // Token bucket - high rate (should mostly allow)
-    TokenBucket fast_bucket(RateLimitConfig{
-        .rate_per_second = 1000000,  // 1M/s
-        .burst_size = 10000
-    });
+    TokenBucket fast_bucket(RateLimitConfig{.rate_per_second = 1000000,  // 1M/s
+                                            .burst_size      = 10000});
 
     suite.add_benchmark(
         "token_bucket_try_acquire_allowed",
@@ -218,14 +195,10 @@ void run_rate_limiter_benchmarks() {
             bool result = fast_bucket.try_acquire();
             DoNotOptimize(result);
         },
-        SLOSpec{.name = "bucket_allowed", .p50_ns = 50, .p99_ns = 500}
-    );
+        SLOSpec{.name = "bucket_allowed", .p50_ns = 50, .p99_ns = 500});
 
     // Token bucket - rate limited
-    TokenBucket slow_bucket(RateLimitConfig{
-        .rate_per_second = 100,
-        .burst_size = 1
-    });
+    TokenBucket slow_bucket(RateLimitConfig{.rate_per_second = 100, .burst_size = 1});
 
     // Drain the bucket first
     while (slow_bucket.try_acquire()) {}
@@ -236,8 +209,7 @@ void run_rate_limiter_benchmarks() {
             bool result = slow_bucket.try_acquire();
             DoNotOptimize(result);
         },
-        SLOSpec{.name = "bucket_limited", .p50_ns = 50, .p99_ns = 500}
-    );
+        SLOSpec{.name = "bucket_limited", .p50_ns = 50, .p99_ns = 500});
 
     // Sliding window
     SlidingWindowLimiter sliding(100000);
@@ -248,11 +220,10 @@ void run_rate_limiter_benchmarks() {
             bool result = sliding.try_acquire();
             DoNotOptimize(result);
         },
-        SLOSpec{.name = "sliding", .p50_ns = 100, .p99_ns = 1000}
-    );
+        SLOSpec{.name = "sliding", .p50_ns = 100, .p99_ns = 1000});
 
     BenchmarkConfig config;
-    config.iterations = ITERATIONS;
+    config.iterations        = ITERATIONS;
     config.warmup_iterations = WARMUP;
 
     suite.run(config);
@@ -270,30 +241,28 @@ void run_backpressure_benchmarks() {
     BenchmarkSuite suite("Backpressure Controller");
 
     // Controller with throttle strategy
-    BackpressureController throttle_ctrl(BackpressureConfig{
-        .strategy = BackpressureStrategy::THROTTLE,
-        .low_watermark = 0.9,   // Start late to avoid throttling
-        .high_watermark = 0.95,
-        .critical_watermark = 0.99
-    });
+    BackpressureController throttle_ctrl(
+        BackpressureConfig{.strategy           = BackpressureStrategy::THROTTLE,
+                           .low_watermark      = 0.9,  // Start late to avoid throttling
+                           .high_watermark     = 0.95,
+                           .critical_watermark = 0.99});
 
     suite.add_benchmark(
         "backpressure_should_accept_no_pressure",
         [&]() {
             bool result = throttle_ctrl.should_accept();
             DoNotOptimize(result);
-            if (result) throttle_ctrl.item_processed();
+            if (result)
+                throttle_ctrl.item_processed();
         },
-        SLOSpec{.name = "bp_no_pressure", .p50_ns = 50, .p99_ns = 500}
-    );
+        SLOSpec{.name = "bp_no_pressure", .p50_ns = 50, .p99_ns = 500});
 
     // Controller under pressure
-    BackpressureController pressure_ctrl(BackpressureConfig{
-        .strategy = BackpressureStrategy::DROP_NEWEST,
-        .low_watermark = 0.1,
-        .high_watermark = 0.2,
-        .critical_watermark = 0.3
-    });
+    BackpressureController pressure_ctrl(
+        BackpressureConfig{.strategy           = BackpressureStrategy::DROP_NEWEST,
+                           .low_watermark      = 0.1,
+                           .high_watermark     = 0.2,
+                           .critical_watermark = 0.3});
     pressure_ctrl.update_queue(90, 100);  // 90% full
 
     suite.add_benchmark(
@@ -302,8 +271,7 @@ void run_backpressure_benchmarks() {
             bool result = pressure_ctrl.should_accept();
             DoNotOptimize(result);
         },
-        SLOSpec{.name = "bp_pressure", .p50_ns = 100, .p99_ns = 1000}
-    );
+        SLOSpec{.name = "bp_pressure", .p50_ns = 100, .p99_ns = 1000});
 
     // Pressure sensor
     PressureSensor sensor;
@@ -316,11 +284,10 @@ void run_backpressure_benchmarks() {
             auto level = sensor.level();
             DoNotOptimize(level);
         },
-        SLOSpec{.name = "sensor", .p50_ns = 50, .p99_ns = 500}
-    );
+        SLOSpec{.name = "sensor", .p50_ns = 50, .p99_ns = 500});
 
     BenchmarkConfig config;
-    config.iterations = ITERATIONS;
+    config.iterations        = ITERATIONS;
     config.warmup_iterations = WARMUP;
 
     suite.run(config);
@@ -338,18 +305,13 @@ void run_cache_benchmarks() {
     uint64_t counter = 0;
 
     suite.add_benchmark(
-        "prefetch_buffer_push",
-        [&]() {
-            prefetch_buf.push(counter++);
-        },
-        [&]() { /* setup */ },
+        "prefetch_buffer_push", [&]() { prefetch_buf.push(counter++); }, [&]() { /* setup */ },
         [&]() {
             uint64_t v;
             while (prefetch_buf.pop(v)) {}
             counter = 0;
         },
-        SLOSpec{.name = "prefetch_push", .p50_ns = 50, .p99_ns = 500}
-    );
+        SLOSpec{.name = "prefetch_push", .p50_ns = 50, .p99_ns = 500});
 
     suite.add_benchmark(
         "prefetch_buffer_pop",
@@ -363,28 +325,21 @@ void run_cache_benchmarks() {
                 prefetch_buf.push(i);
             }
         },
-        [&]() { /* teardown */ }
-    );
+        [&]() { /* teardown */ });
 
     // Cache-aligned value
     CacheAligned<uint64_t> aligned_val{0};
     uint64_t regular_val = 0;
 
-    suite.add_benchmark(
-        "cache_aligned_increment",
-        [&]() {
-            aligned_val.value++;
-            DoNotOptimize(aligned_val.value);
-        }
-    );
+    suite.add_benchmark("cache_aligned_increment", [&]() {
+        aligned_val.value++;
+        DoNotOptimize(aligned_val.value);
+    });
 
-    suite.add_benchmark(
-        "regular_increment",
-        [&]() {
-            regular_val++;
-            DoNotOptimize(regular_val);
-        }
-    );
+    suite.add_benchmark("regular_increment", [&]() {
+        regular_val++;
+        DoNotOptimize(regular_val);
+    });
 
     // Batch processor
     std::vector<uint64_t> data(10000);
@@ -393,31 +348,22 @@ void run_cache_benchmarks() {
     suite.add_benchmark(
         "batch_processor_transform",
         [&]() {
-            BatchProcessor<uint64_t>::process(
-                data.data(), data.size(),
-                [](uint64_t& v) { v *= 2; }
-            );
+            BatchProcessor<uint64_t>::process(data.data(), data.size(),
+                                              [](uint64_t& v) { v *= 2; });
             DoNotOptimize(data[0]);
         },
-        [&]() {
-            std::iota(data.begin(), data.end(), 0);
-        },
-        [&]() { /* teardown */ }
-    );
+        [&]() { std::iota(data.begin(), data.end(), 0); }, [&]() { /* teardown */ });
 
     // Per-CPU data
     PerCPUData<uint64_t> per_cpu_counter(0);
 
-    suite.add_benchmark(
-        "per_cpu_local_increment",
-        [&]() {
-            per_cpu_counter.local()++;
-            DoNotOptimize(per_cpu_counter.local());
-        }
-    );
+    suite.add_benchmark("per_cpu_local_increment", [&]() {
+        per_cpu_counter.local()++;
+        DoNotOptimize(per_cpu_counter.local());
+    });
 
     BenchmarkConfig config;
-    config.iterations = ITERATIONS;
+    config.iterations        = ITERATIONS;
     config.warmup_iterations = WARMUP;
 
     suite.run(config);
@@ -448,15 +394,10 @@ void run_contention_benchmarks() {
         });
     }
 
-    suite.add_benchmark(
-        "mpmc_contended_enqueue",
-        [&]() {
-            contended_queue.try_enqueue(42);
-        }
-    );
+    suite.add_benchmark("mpmc_contended_enqueue", [&]() { contended_queue.try_enqueue(42); });
 
     BenchmarkConfig config;
-    config.iterations = 50000;  // Fewer iterations for contended test
+    config.iterations        = 50000;  // Fewer iterations for contended test
     config.warmup_iterations = 100;
 
     suite.run(config);
@@ -470,7 +411,7 @@ void run_contention_benchmarks() {
     std::cout << "Consumer ops completed: " << ops_completed.load() << "\n";
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 int main(int argc, char** argv) {
     std::cout << "========================================\n";

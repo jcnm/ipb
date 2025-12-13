@@ -40,22 +40,22 @@ namespace ipb::common {
  * @brief Backpressure strategy enumeration
  */
 enum class BackpressureStrategy {
-    DROP_OLDEST,    // Drop oldest items when queue is full
-    DROP_NEWEST,    // Reject new items when queue is full
-    BLOCK,          // Block producer until space available
-    SAMPLE,         // Keep every Nth item
-    THROTTLE        // Dynamically slow down producer
+    DROP_OLDEST,  // Drop oldest items when queue is full
+    DROP_NEWEST,  // Reject new items when queue is full
+    BLOCK,        // Block producer until space available
+    SAMPLE,       // Keep every Nth item
+    THROTTLE      // Dynamically slow down producer
 };
 
 /**
  * @brief Pressure level indicators
  */
 enum class PressureLevel : uint8_t {
-    NONE = 0,       // No pressure - operating normally
-    LOW = 1,        // Low pressure - minor congestion
-    MEDIUM = 2,     // Medium pressure - noticeable delays
-    HIGH = 3,       // High pressure - approaching limits
-    CRITICAL = 4    // Critical pressure - system overloaded
+    NONE     = 0,  // No pressure - operating normally
+    LOW      = 1,  // Low pressure - minor congestion
+    MEDIUM   = 2,  // Medium pressure - noticeable delays
+    HIGH     = 3,  // High pressure - approaching limits
+    CRITICAL = 4   // Critical pressure - system overloaded
 };
 
 /**
@@ -65,28 +65,28 @@ struct BackpressureConfig {
     BackpressureStrategy strategy{BackpressureStrategy::THROTTLE};
 
     // Queue-based thresholds (as percentage of capacity)
-    double low_watermark{0.5};      // 50% - start mild throttling
-    double high_watermark{0.8};     // 80% - aggressive throttling
-    double critical_watermark{0.95}; // 95% - maximum throttling/dropping
+    double low_watermark{0.5};        // 50% - start mild throttling
+    double high_watermark{0.8};       // 80% - aggressive throttling
+    double critical_watermark{0.95};  // 95% - maximum throttling/dropping
 
     // Latency-based thresholds (nanoseconds)
-    int64_t target_latency_ns{1000000};      // 1ms target
-    int64_t max_latency_ns{10000000};        // 10ms max before critical
+    int64_t target_latency_ns{1000000};  // 1ms target
+    int64_t max_latency_ns{10000000};    // 10ms max before critical
 
     // Memory-based thresholds (bytes)
-    size_t target_memory_bytes{0};           // 0 = disabled
-    size_t max_memory_bytes{0};              // 0 = disabled
+    size_t target_memory_bytes{0};  // 0 = disabled
+    size_t max_memory_bytes{0};     // 0 = disabled
 
     // Sampling rate for SAMPLE strategy
     size_t sample_rate{10};  // Keep 1 in N items
 
     // Throttle parameters
-    double min_throughput_factor{0.1};  // Minimum 10% of normal rate
-    int64_t throttle_step_ns{100000};   // 100μs throttle increments
-    int64_t max_throttle_ns{100000000}; // 100ms max throttle delay
+    double min_throughput_factor{0.1};   // Minimum 10% of normal rate
+    int64_t throttle_step_ns{100000};    // 100μs throttle increments
+    int64_t max_throttle_ns{100000000};  // 100ms max throttle delay
 
     // Recovery parameters
-    double recovery_factor{0.9};  // Drop to 90% of threshold to recover
+    double recovery_factor{0.9};        // Drop to 90% of threshold to recover
     int64_t hysteresis_ns{1000000000};  // 1s hysteresis to avoid oscillation
 };
 
@@ -105,13 +105,13 @@ struct BackpressureStats {
     alignas(IPB_CACHE_LINE_SIZE) std::atomic<uint64_t> pressure_changes{0};
 
     double drop_rate() const noexcept {
-        auto total = items_received.load(std::memory_order_relaxed);
+        auto total   = items_received.load(std::memory_order_relaxed);
         auto dropped = items_dropped.load(std::memory_order_relaxed);
         return total > 0 ? static_cast<double>(dropped) / total * 100.0 : 0.0;
     }
 
     double throughput_factor() const noexcept {
-        auto received = items_received.load(std::memory_order_relaxed);
+        auto received  = items_received.load(std::memory_order_relaxed);
         auto processed = items_processed.load(std::memory_order_relaxed);
         return received > 0 ? static_cast<double>(processed) / received : 1.0;
     }
@@ -136,9 +136,7 @@ struct BackpressureStats {
  */
 class alignas(IPB_CACHE_LINE_SIZE) PressureSensor {
 public:
-    explicit PressureSensor(const BackpressureConfig& config = {})
-        : config_(config)
-    {}
+    explicit PressureSensor(const BackpressureConfig& config = {}) : config_(config) {}
 
     /**
      * @brief Update queue fill level
@@ -146,7 +144,8 @@ public:
      * @param capacity Maximum queue capacity
      */
     void update_queue_fill(size_t current, size_t capacity) noexcept {
-        if (capacity == 0) return;
+        if (capacity == 0)
+            return;
         double fill = static_cast<double>(current) / capacity;
         queue_fill_.store(fill, std::memory_order_relaxed);
     }
@@ -174,9 +173,9 @@ public:
      * @brief Get current pressure level
      */
     PressureLevel level() const noexcept {
-        double fill = queue_fill_.load(std::memory_order_relaxed);
+        double fill     = queue_fill_.load(std::memory_order_relaxed);
         int64_t latency = latency_ema_ns_.load(std::memory_order_relaxed);
-        size_t memory = memory_bytes_.load(std::memory_order_relaxed);
+        size_t memory   = memory_bytes_.load(std::memory_order_relaxed);
 
         // Queue-based pressure
         PressureLevel queue_pressure = PressureLevel::NONE;
@@ -219,8 +218,8 @@ public:
 
         // Return maximum pressure across all signals
         auto max_val = static_cast<uint8_t>(queue_pressure);
-        max_val = std::max(max_val, static_cast<uint8_t>(latency_pressure));
-        max_val = std::max(max_val, static_cast<uint8_t>(memory_pressure));
+        max_val      = std::max(max_val, static_cast<uint8_t>(latency_pressure));
+        max_val      = std::max(max_val, static_cast<uint8_t>(memory_pressure));
         return static_cast<PressureLevel>(max_val);
     }
 
@@ -230,11 +229,16 @@ public:
     double pressure_value() const noexcept {
         auto lvl = level();
         switch (lvl) {
-            case PressureLevel::NONE: return 0.0;
-            case PressureLevel::LOW: return 0.25;
-            case PressureLevel::MEDIUM: return 0.5;
-            case PressureLevel::HIGH: return 0.75;
-            case PressureLevel::CRITICAL: return 1.0;
+            case PressureLevel::NONE:
+                return 0.0;
+            case PressureLevel::LOW:
+                return 0.25;
+            case PressureLevel::MEDIUM:
+                return 0.5;
+            case PressureLevel::HIGH:
+                return 0.75;
+            case PressureLevel::CRITICAL:
+                return 1.0;
         }
         return 0.0;
     }
@@ -256,16 +260,12 @@ private:
  */
 class BackpressureController {
 public:
-    using DropCallback = std::function<void(size_t dropped_count)>;
+    using DropCallback     = std::function<void(size_t dropped_count)>;
     using PressureCallback = std::function<void(PressureLevel level)>;
 
     explicit BackpressureController(const BackpressureConfig& config = {})
-        : config_(config)
-        , sensor_(config)
-        , current_level_(PressureLevel::NONE)
-        , sample_counter_(0)
-        , throttle_ns_(0)
-    {}
+        : config_(config), sensor_(config), current_level_(PressureLevel::NONE), sample_counter_(0),
+          throttle_ns_(0) {}
 
     /**
      * @brief Check if item should be accepted
@@ -331,23 +331,17 @@ public:
     /**
      * @brief Update sensor with latency metric
      */
-    void update_latency(int64_t latency_ns) noexcept {
-        sensor_.update_latency(latency_ns);
-    }
+    void update_latency(int64_t latency_ns) noexcept { sensor_.update_latency(latency_ns); }
 
     /**
      * @brief Update sensor with memory metric
      */
-    void update_memory(size_t bytes) noexcept {
-        sensor_.update_memory(bytes);
-    }
+    void update_memory(size_t bytes) noexcept { sensor_.update_memory(bytes); }
 
     /**
      * @brief Set callback for dropped items
      */
-    void set_drop_callback(DropCallback callback) {
-        drop_callback_ = std::move(callback);
-    }
+    void set_drop_callback(DropCallback callback) { drop_callback_ = std::move(callback); }
 
     /**
      * @brief Set callback for pressure level changes
@@ -396,8 +390,8 @@ private:
 
         // Apply hysteresis
         auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()
-        ).count();
+                          std::chrono::steady_clock::now().time_since_epoch())
+                          .count();
 
         int64_t last_change = last_level_change_ns_.load(std::memory_order_relaxed);
         if (now_ns - last_change < config_.hysteresis_ns) {
@@ -432,15 +426,13 @@ private:
 
         stats_.block_events.fetch_add(1, std::memory_order_relaxed);
 
-        auto start = std::chrono::steady_clock::now();
+        auto start           = std::chrono::steady_clock::now();
         int64_t max_block_ns = config_.max_throttle_ns;
 
         // Spin/sleep until pressure reduces
         while (sensor_.level() >= PressureLevel::HIGH) {
-            auto elapsed = std::chrono::steady_clock::now() - start;
-            auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                elapsed
-            ).count();
+            auto elapsed    = std::chrono::steady_clock::now() - start;
+            auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
 
             if (elapsed_ns >= max_block_ns) {
                 // Timeout - drop item
@@ -456,8 +448,7 @@ private:
         auto elapsed = std::chrono::steady_clock::now() - start;
         stats_.total_block_ns.fetch_add(
             std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count(),
-            std::memory_order_relaxed
-        );
+            std::memory_order_relaxed);
 
         return true;
     }
@@ -515,8 +506,8 @@ private:
 
             if (delay_ns < 10000) {
                 // Spin for very short delays
-                auto deadline = std::chrono::steady_clock::now() +
-                               std::chrono::nanoseconds(delay_ns);
+                auto deadline =
+                    std::chrono::steady_clock::now() + std::chrono::nanoseconds(delay_ns);
                 while (std::chrono::steady_clock::now() < deadline) {
                     IPB_CPU_PAUSE();
                 }
@@ -534,15 +525,13 @@ private:
  *
  * Wraps a processing stage with automatic backpressure handling.
  */
-template<typename Input, typename Output>
+template <typename Input, typename Output>
 class BackpressureStage {
 public:
     using Processor = std::function<std::optional<Output>(const Input&)>;
 
     BackpressureStage(const BackpressureConfig& config, Processor processor)
-        : controller_(config)
-        , processor_(std::move(processor))
-    {}
+        : controller_(config), processor_(std::move(processor)) {}
 
     /**
      * @brief Process input with backpressure control
@@ -560,8 +549,7 @@ public:
 
         auto elapsed = std::chrono::steady_clock::now() - start;
         controller_.update_latency(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count()
-        );
+            std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count());
 
         if (result) {
             controller_.item_processed();
@@ -620,9 +608,7 @@ public:
     /**
      * @brief Check if any stage is under critical pressure
      */
-    bool is_critical() const {
-        return max_pressure() >= PressureLevel::CRITICAL;
-    }
+    bool is_critical() const { return max_pressure() >= PressureLevel::CRITICAL; }
 
     /**
      * @brief Get aggregated statistics
@@ -632,22 +618,14 @@ public:
 
         for (const auto* stage : stages_) {
             const auto& s = stage->stats();
-            total.items_received.fetch_add(
-                s.items_received.load(std::memory_order_relaxed),
-                std::memory_order_relaxed
-            );
-            total.items_processed.fetch_add(
-                s.items_processed.load(std::memory_order_relaxed),
-                std::memory_order_relaxed
-            );
-            total.items_dropped.fetch_add(
-                s.items_dropped.load(std::memory_order_relaxed),
-                std::memory_order_relaxed
-            );
-            total.throttle_events.fetch_add(
-                s.throttle_events.load(std::memory_order_relaxed),
-                std::memory_order_relaxed
-            );
+            total.items_received.fetch_add(s.items_received.load(std::memory_order_relaxed),
+                                           std::memory_order_relaxed);
+            total.items_processed.fetch_add(s.items_processed.load(std::memory_order_relaxed),
+                                            std::memory_order_relaxed);
+            total.items_dropped.fetch_add(s.items_dropped.load(std::memory_order_relaxed),
+                                          std::memory_order_relaxed);
+            total.throttle_events.fetch_add(s.throttle_events.load(std::memory_order_relaxed),
+                                            std::memory_order_relaxed);
         }
     }
 
@@ -656,4 +634,4 @@ private:
     std::vector<BackpressureController*> stages_;
 };
 
-} // namespace ipb::common
+}  // namespace ipb::common

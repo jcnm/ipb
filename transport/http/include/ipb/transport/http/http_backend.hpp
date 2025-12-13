@@ -11,15 +11,15 @@
  * - Native (future, minimal dependencies)
  */
 
+#include <chrono>
 #include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
-#include <functional>
-#include <chrono>
-#include <memory>
-#include <span>
-#include <optional>
-#include <map>
 #include <vector>
 
 namespace ipb::transport::http {
@@ -38,9 +38,9 @@ struct HTTPConfig;
  * @brief Available HTTP backend implementations
  */
 enum class BackendType {
-    CURL,       ///< libcurl (default, portable)
-    BEAST,      ///< Boost.Beast (high-performance)
-    NATIVE      ///< Native implementation (future)
+    CURL,   ///< libcurl (default, portable)
+    BEAST,  ///< Boost.Beast (high-performance)
+    NATIVE  ///< Native implementation (future)
 };
 
 /**
@@ -48,10 +48,14 @@ enum class BackendType {
  */
 constexpr std::string_view backend_type_name(BackendType type) noexcept {
     switch (type) {
-        case BackendType::CURL: return "curl";
-        case BackendType::BEAST: return "beast";
-        case BackendType::NATIVE: return "native";
-        default: return "unknown";
+        case BackendType::CURL:
+            return "curl";
+        case BackendType::BEAST:
+            return "beast";
+        case BackendType::NATIVE:
+            return "native";
+        default:
+            return "unknown";
     }
 }
 
@@ -62,29 +66,29 @@ constexpr std::string_view backend_type_name(BackendType type) noexcept {
 /**
  * @brief HTTP methods
  */
-enum class Method : uint8_t {
-    GET,
-    POST,
-    PUT,
-    PATCH,
-    DELETE_,
-    HEAD,
-    OPTIONS
-};
+enum class Method : uint8_t { GET, POST, PUT, PATCH, DELETE_, HEAD, OPTIONS };
 
 /**
  * @brief Get HTTP method string
  */
 constexpr std::string_view method_to_string(Method method) noexcept {
     switch (method) {
-        case Method::GET: return "GET";
-        case Method::POST: return "POST";
-        case Method::PUT: return "PUT";
-        case Method::PATCH: return "PATCH";
-        case Method::DELETE_: return "DELETE";
-        case Method::HEAD: return "HEAD";
-        case Method::OPTIONS: return "OPTIONS";
-        default: return "GET";
+        case Method::GET:
+            return "GET";
+        case Method::POST:
+            return "POST";
+        case Method::PUT:
+            return "PUT";
+        case Method::PATCH:
+            return "PATCH";
+        case Method::DELETE_:
+            return "DELETE";
+        case Method::HEAD:
+            return "HEAD";
+        case Method::OPTIONS:
+            return "OPTIONS";
+        default:
+            return "GET";
     }
 }
 
@@ -103,10 +107,14 @@ enum class StatusCategory : uint8_t {
  * @brief Get status category from code
  */
 constexpr StatusCategory status_category(int code) noexcept {
-    if (code >= 100 && code < 200) return StatusCategory::INFORMATIONAL;
-    if (code >= 200 && code < 300) return StatusCategory::SUCCESS;
-    if (code >= 300 && code < 400) return StatusCategory::REDIRECTION;
-    if (code >= 400 && code < 500) return StatusCategory::CLIENT_ERROR;
+    if (code >= 100 && code < 200)
+        return StatusCategory::INFORMATIONAL;
+    if (code >= 200 && code < 300)
+        return StatusCategory::SUCCESS;
+    if (code >= 300 && code < 400)
+        return StatusCategory::REDIRECTION;
+    if (code >= 400 && code < 500)
+        return StatusCategory::CLIENT_ERROR;
     return StatusCategory::SERVER_ERROR;
 }
 
@@ -137,23 +145,17 @@ struct Request {
 
     // Follow redirects
     bool follow_redirects = true;
-    int max_redirects = 10;
+    int max_redirects     = 10;
 
     // HTTP version
     bool use_http2 = true;
 
     // Helper methods
-    void set_json_content() {
-        headers["Content-Type"] = "application/json";
-    }
+    void set_json_content() { headers["Content-Type"] = "application/json"; }
 
-    void set_form_content() {
-        headers["Content-Type"] = "application/x-www-form-urlencoded";
-    }
+    void set_form_content() { headers["Content-Type"] = "application/x-www-form-urlencoded"; }
 
-    void set_body(std::string_view data) {
-        body.assign(data.begin(), data.end());
-    }
+    void set_body(std::string_view data) { body.assign(data.begin(), data.end()); }
 };
 
 /**
@@ -173,25 +175,15 @@ struct Response {
     std::string error_message;
 
     // Helper methods
-    bool is_success() const noexcept {
-        return status_code >= 200 && status_code < 300;
-    }
+    bool is_success() const noexcept { return status_code >= 200 && status_code < 300; }
 
-    bool is_redirect() const noexcept {
-        return status_code >= 300 && status_code < 400;
-    }
+    bool is_redirect() const noexcept { return status_code >= 300 && status_code < 400; }
 
-    bool is_client_error() const noexcept {
-        return status_code >= 400 && status_code < 500;
-    }
+    bool is_client_error() const noexcept { return status_code >= 400 && status_code < 500; }
 
-    bool is_server_error() const noexcept {
-        return status_code >= 500;
-    }
+    bool is_server_error() const noexcept { return status_code >= 500; }
 
-    std::string body_string() const {
-        return std::string(body.begin(), body.end());
-    }
+    std::string body_string() const { return std::string(body.begin(), body.end()); }
 
     std::string_view get_header(const std::string& name) const {
         auto it = headers.find(name);
@@ -219,10 +211,8 @@ using ResponseCallback = std::function<void(Response response)>;
  * @param upload_now Bytes uploaded so far
  * @return true to continue, false to abort
  */
-using ProgressCallback = std::function<bool(
-    size_t download_total, size_t download_now,
-    size_t upload_total, size_t upload_now
-)>;
+using ProgressCallback = std::function<bool(size_t download_total, size_t download_now,
+                                            size_t upload_total, size_t upload_now)>;
 
 //=============================================================================
 // Backend Statistics
@@ -232,21 +222,21 @@ using ProgressCallback = std::function<bool(
  * @brief Backend statistics
  */
 struct BackendStats {
-    uint64_t requests_sent = 0;
+    uint64_t requests_sent      = 0;
     uint64_t responses_received = 0;
-    uint64_t requests_failed = 0;
-    uint64_t bytes_sent = 0;
-    uint64_t bytes_received = 0;
+    uint64_t requests_failed    = 0;
+    uint64_t bytes_sent         = 0;
+    uint64_t bytes_received     = 0;
 
     // Timing statistics
     uint64_t total_request_time_us = 0;
 
     constexpr void reset() noexcept {
-        requests_sent = 0;
-        responses_received = 0;
-        requests_failed = 0;
-        bytes_sent = 0;
-        bytes_received = 0;
+        requests_sent         = 0;
+        responses_received    = 0;
+        requests_failed       = 0;
+        bytes_sent            = 0;
+        bytes_received        = 0;
         total_request_time_us = 0;
     }
 
@@ -358,4 +348,4 @@ BackendType default_backend_type() noexcept;
  */
 bool is_backend_available(BackendType type) noexcept;
 
-} // namespace ipb::transport::http
+}  // namespace ipb::transport::http

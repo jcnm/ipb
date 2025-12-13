@@ -254,7 +254,7 @@ jobs:
       - name: Check Formatting
         run: |
           find core sinks scoops apps transport \
-            -name '*.cpp' -o -name '*.hpp' | \
+            \( -name '*.cpp' -o -name '*.hpp' \) -type f | \
             xargs clang-format-18 --dry-run --Werror
 
       - name: Run cppcheck
@@ -791,7 +791,7 @@ jobs:
       - name: Run clang-tidy
         run: |
           find core sinks scoops apps transport \
-            -name '*.cpp' | head -50 | \
+            -name '*.cpp' -type f | head -50 | \
             xargs -P $(nproc) -I{} \
             clang-tidy-18 -p build {} 2>&1 | tee clang-tidy-report.txt
         continue-on-error: true

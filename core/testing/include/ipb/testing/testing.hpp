@@ -60,8 +60,7 @@ public:
     TempDirectory() {
         // Create unique temp directory
         auto now = std::chrono::system_clock::now().time_since_epoch().count();
-        path_ = std::filesystem::temp_directory_path() /
-                ("ipb_test_" + std::to_string(now));
+        path_    = std::filesystem::temp_directory_path() / ("ipb_test_" + std::to_string(now));
         std::filesystem::create_directories(path_);
     }
 
@@ -73,12 +72,10 @@ public:
 
     const std::filesystem::path& path() const { return path_; }
 
-    std::filesystem::path file(const std::string& name) const {
-        return path_ / name;
-    }
+    std::filesystem::path file(const std::string& name) const { return path_ / name; }
 
     // Non-copyable
-    TempDirectory(const TempDirectory&) = delete;
+    TempDirectory(const TempDirectory&)            = delete;
     TempDirectory& operator=(const TempDirectory&) = delete;
 
 private:
@@ -91,7 +88,7 @@ private:
 class WaitCondition {
 public:
     bool wait_for(std::function<bool()> condition,
-                  std::chrono::milliseconds timeout = std::chrono::seconds(5),
+                  std::chrono::milliseconds timeout       = std::chrono::seconds(5),
                   std::chrono::milliseconds poll_interval = std::chrono::milliseconds(10)) {
         auto deadline = std::chrono::steady_clock::now() + timeout;
 
@@ -109,14 +106,12 @@ public:
 /**
  * @brief Test mock for simple function mocking
  */
-template<typename Ret, typename... Args>
+template <typename Ret, typename... Args>
 class MockFunction {
 public:
     using FuncType = std::function<Ret(Args...)>;
 
-    void set(FuncType func) {
-        func_ = std::move(func);
-    }
+    void set(FuncType func) { func_ = std::move(func); }
 
     Ret operator()(Args... args) {
         ++call_count_;
@@ -132,7 +127,7 @@ public:
 
     void reset() {
         call_count_ = 0;
-        func_ = nullptr;
+        func_       = nullptr;
     }
 
 private:
@@ -171,11 +166,10 @@ private:
 class TestBenchmark {
 public:
     explicit TestBenchmark(const std::string& name)
-        : name_(name)
-        , start_(std::chrono::high_resolution_clock::now()) {}
+        : name_(name), start_(std::chrono::high_resolution_clock::now()) {}
 
     ~TestBenchmark() {
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end      = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start_);
         std::cout << "[BENCH] " << name_ << ": " << duration.count() << "us\n";
     }
@@ -185,8 +179,7 @@ private:
     std::chrono::high_resolution_clock::time_point start_;
 };
 
-#define BENCHMARK_SCOPE(name) \
-    ::ipb::testing::TestBenchmark benchmark_##__LINE__(name)
+#define BENCHMARK_SCOPE(name) ::ipb::testing::TestBenchmark benchmark_##__LINE__(name)
 
 //=============================================================================
 // Test Data Generators
@@ -207,7 +200,7 @@ public:
     }
 
     // Generate random vector
-    template<typename T>
+    template <typename T>
     static std::vector<T> random_vector(size_t size, T min, T max) {
         RandomGen rng;
         std::vector<T> result(size);
@@ -219,17 +212,17 @@ public:
 
     // Generate lorem ipsum text
     static std::string lorem_ipsum(size_t words = 50) {
-        static const char* lorem[] = {
-            "lorem", "ipsum", "dolor", "sit", "amet", "consectetur",
-            "adipiscing", "elit", "sed", "do", "eiusmod", "tempor",
-            "incididunt", "ut", "labore", "et", "dolore", "magna", "aliqua"
-        };
+        static const char* lorem[] = {"lorem",       "ipsum",      "dolor",      "sit",   "amet",
+                                      "consectetur", "adipiscing", "elit",       "sed",   "do",
+                                      "eiusmod",     "tempor",     "incididunt", "ut",    "labore",
+                                      "et",          "dolore",     "magna",      "aliqua"};
 
         RandomGen rng;
         std::ostringstream oss;
         for (size_t i = 0; i < words; ++i) {
-            if (i > 0) oss << " ";
-            oss << lorem[rng.integer<size_t>(0, sizeof(lorem)/sizeof(lorem[0]) - 1)];
+            if (i > 0)
+                oss << " ";
+            oss << lorem[rng.integer<size_t>(0, sizeof(lorem) / sizeof(lorem[0]) - 1)];
         }
         return oss.str();
     }
@@ -240,12 +233,19 @@ public:
         std::ostringstream oss;
         oss << "{";
         for (size_t i = 0; i < fields; ++i) {
-            if (i > 0) oss << ",";
+            if (i > 0)
+                oss << ",";
             oss << "\"field" << i << "\":";
             switch (rng.integer(0, 2)) {
-                case 0: oss << rng.integer<int>(-1000, 1000); break;
-                case 1: oss << "\"" << rng.string(5, 20) << "\""; break;
-                case 2: oss << (rng.boolean() ? "true" : "false"); break;
+                case 0:
+                    oss << rng.integer<int>(-1000, 1000);
+                    break;
+                case 1:
+                    oss << "\"" << rng.string(5, 20) << "\"";
+                    break;
+                case 2:
+                    oss << (rng.boolean() ? "true" : "false");
+                    break;
             }
         }
         oss << "}";
@@ -253,4 +253,4 @@ public:
     }
 };
 
-} // namespace ipb::testing
+}  // namespace ipb::testing

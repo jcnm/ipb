@@ -1,14 +1,16 @@
-#include "ipb/gate/orchestrator.hpp"
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <vector>
 #include <csignal>
 #include <cstdlib>
-#include <getopt.h>
-#include <unistd.h>
-#include <sys/stat.h>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <vector>
+
 #include <fcntl.h>
+#include <getopt.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "ipb/gate/orchestrator.hpp"
 
 namespace {
 
@@ -121,10 +123,10 @@ bool create_pid_file(const std::string& pid_file_path) {
         std::cerr << "Error: Cannot create PID file: " << pid_file_path << std::endl;
         return false;
     }
-    
+
     pid_file << getpid() << std::endl;
     pid_file.close();
-    
+
     return true;
 }
 
@@ -142,51 +144,51 @@ void remove_pid_file(const std::string& pid_file_path) {
  */
 bool daemonize() {
     pid_t pid = fork();
-    
+
     if (pid < 0) {
         std::cerr << "Error: Fork failed" << std::endl;
         return false;
     }
-    
+
     if (pid > 0) {
         // Parent process exits
         std::exit(0);
     }
-    
+
     // Child process continues
     if (setsid() < 0) {
         std::cerr << "Error: setsid failed" << std::endl;
         return false;
     }
-    
+
     // Second fork to ensure we're not a session leader
     pid = fork();
-    
+
     if (pid < 0) {
         std::cerr << "Error: Second fork failed" << std::endl;
         return false;
     }
-    
+
     if (pid > 0) {
         std::exit(0);
     }
-    
+
     // Change working directory to root
     if (chdir("/") < 0) {
         std::cerr << "Error: chdir failed" << std::endl;
         return false;
     }
-    
+
     // Close standard file descriptors
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
-    
+
     // Redirect to /dev/null
-    open("/dev/null", O_RDONLY); // stdin
-    open("/dev/null", O_WRONLY); // stdout
-    open("/dev/null", O_WRONLY); // stderr
-    
+    open("/dev/null", O_RDONLY);  // stdin
+    open("/dev/null", O_WRONLY);  // stdout
+    open("/dev/null", O_WRONLY);  // stderr
+
     return true;
 }
 
@@ -206,8 +208,8 @@ int test_configuration(const std::string& config_file_path) {
 
         auto init_result = orchestrator->initialize();
         if (!init_result.is_success()) {
-            std::cerr << "Error: Configuration validation failed: "
-                      << init_result.message() << std::endl;
+            std::cerr << "Error: Configuration validation failed: " << init_result.message()
+                      << std::endl;
             return 1;
         }
 
@@ -218,8 +220,11 @@ int test_configuration(const std::string& config_file_path) {
         std::cout << "\nConfiguration Summary:" << std::endl;
         std::cout << "  Instance ID: " << config.instance_id << std::endl;
         std::cout << "  Log level: " << config.logging.level << std::endl;
-        std::cout << "  Real-time scheduling: " << (config.scheduler.enable_realtime_priority ? "enabled" : "disabled") << std::endl;
-        std::cout << "  Hot reload: " << (config.hot_reload.enabled ? "enabled" : "disabled") << std::endl;
+        std::cout << "  Real-time scheduling: "
+                  << (config.scheduler.enable_realtime_priority ? "enabled" : "disabled")
+                  << std::endl;
+        std::cout << "  Hot reload: " << (config.hot_reload.enabled ? "enabled" : "disabled")
+                  << std::endl;
 
         return 0;
 
@@ -247,8 +252,7 @@ int show_status(const std::string& config_file_path) {
 
         auto init_result = orchestrator->initialize();
         if (!init_result.is_success()) {
-            std::cerr << "Error: Cannot load configuration: "
-                      << init_result.message() << std::endl;
+            std::cerr << "Error: Cannot load configuration: " << init_result.message() << std::endl;
             return 1;
         }
 
@@ -274,15 +278,15 @@ int show_status(const std::string& config_file_path) {
 int show_metrics(const std::string& config_file_path) {
     std::cout << "IPB Gate Performance Metrics" << std::endl;
     std::cout << "============================" << std::endl;
-    
+
     // TODO: Connect to running instance to get real metrics
     std::cout << "Note: To get runtime metrics, the service must be running." << std::endl;
     std::cout << "Metrics would be available via Prometheus endpoint or IPC." << std::endl;
-    
+
     return 0;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 /**
  * @brief Main entry point
@@ -292,13 +296,13 @@ int main(int argc, char* argv[]) {
     std::string config_file_path;
     std::string pid_file_path;
     std::string log_level;
-    bool daemon_mode = false;
-    bool verbose = false;
-    bool quiet = false;
-    bool test_config = false;
-    bool show_status_flag = false;
+    bool daemon_mode       = false;
+    bool verbose           = false;
+    bool quiet             = false;
+    bool test_config       = false;
+    bool show_status_flag  = false;
     bool show_metrics_flag = false;
-    
+
     // Parse command line arguments
     static struct option long_options[] = {
         {"config",      required_argument, 0, 'c'},
@@ -311,13 +315,13 @@ int main(int argc, char* argv[]) {
         {"status",      no_argument,       0, 's'},
         {"metrics",     no_argument,       0, 'm'},
         {"help",        no_argument,       0, 'h'},
-        {"version",     no_argument,       0, 0},
-        {0, 0, 0, 0}
+        {"version",     no_argument,       0, 0  },
+        {0,             0,                 0, 0  }
     };
-    
+
     int option_index = 0;
     int c;
-    
+
     while ((c = getopt_long(argc, argv, "c:dp:l:vqtsmh", long_options, &option_index)) != -1) {
         switch (c) {
             case 'c':
@@ -351,7 +355,7 @@ int main(int argc, char* argv[]) {
                 print_usage(argv[0]);
                 return 0;
             case 0:
-                if (option_index == 10) { // --version
+                if (option_index == 10) {  // --version
                     print_version();
                     return 0;
                 }
@@ -363,48 +367,48 @@ int main(int argc, char* argv[]) {
                 break;
         }
     }
-    
+
     // Validate required arguments
     if (config_file_path.empty()) {
         std::cerr << "Error: Configuration file is required. Use -c option." << std::endl;
         print_usage(argv[0]);
         return 1;
     }
-    
+
     // Check if configuration file exists
     if (!file_exists_and_readable(config_file_path)) {
-        std::cerr << "Error: Configuration file not found or not readable: " 
-                  << config_file_path << std::endl;
+        std::cerr << "Error: Configuration file not found or not readable: " << config_file_path
+                  << std::endl;
         return 1;
     }
-    
+
     // Handle special modes
     if (test_config) {
         return test_configuration(config_file_path);
     }
-    
+
     if (show_status_flag) {
         return show_status(config_file_path);
     }
-    
+
     if (show_metrics_flag) {
         return show_metrics(config_file_path);
     }
-    
+
     // Setup signal handlers
     setup_signal_handlers();
-    
+
     // Daemonize if requested
     if (daemon_mode) {
         if (!quiet) {
             std::cout << "Starting IPB Gate in daemon mode..." << std::endl;
         }
-        
+
         if (!daemonize()) {
             std::cerr << "Error: Failed to daemonize" << std::endl;
             return 1;
         }
-        
+
         // Create PID file
         if (!pid_file_path.empty()) {
             if (!create_pid_file(pid_file_path)) {
@@ -412,7 +416,7 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    
+
     try {
         // Create orchestrator
         g_orchestrator = ipb::gate::OrchestratorFactory::create(config_file_path);
@@ -420,25 +424,25 @@ int main(int argc, char* argv[]) {
             std::cerr << "Error: Failed to create orchestrator" << std::endl;
             return 1;
         }
-        
+
         if (!quiet) {
             std::cout << "IPB Gate starting..." << std::endl;
             std::cout << "Configuration: " << config_file_path << std::endl;
         }
-        
+
         // Initialize orchestrator
         auto init_result = g_orchestrator->initialize();
         if (!init_result.is_success()) {
-            std::cerr << "Error: Failed to initialize orchestrator: "
-                      << init_result.message() << std::endl;
+            std::cerr << "Error: Failed to initialize orchestrator: " << init_result.message()
+                      << std::endl;
             return 1;
         }
 
         // Start orchestrator
         auto start_result = g_orchestrator->start();
         if (!start_result.is_success()) {
-            std::cerr << "Error: Failed to start orchestrator: "
-                      << start_result.message() << std::endl;
+            std::cerr << "Error: Failed to start orchestrator: " << start_result.message()
+                      << std::endl;
             return 1;
         }
 
@@ -447,9 +451,15 @@ int main(int argc, char* argv[]) {
             if (verbose) {
                 auto metrics = g_orchestrator->get_metrics();
                 std::cout << "System metrics:" << std::endl;
-                std::cout << "  Messages processed: " << metrics.messages_processed.load() << std::endl;
-                std::cout << "  Router threads: " << g_orchestrator->get_config().router.worker_threads << std::endl;
-                std::cout << "  RT scheduling: " << (g_orchestrator->get_config().scheduler.enable_realtime_priority ? "enabled" : "disabled") << std::endl;
+                std::cout << "  Messages processed: " << metrics.messages_processed.load()
+                          << std::endl;
+                std::cout << "  Router threads: "
+                          << g_orchestrator->get_config().router.worker_threads << std::endl;
+                std::cout << "  RT scheduling: "
+                          << (g_orchestrator->get_config().scheduler.enable_realtime_priority
+                                  ? "enabled"
+                                  : "disabled")
+                          << std::endl;
             }
         }
 
@@ -460,7 +470,7 @@ int main(int argc, char* argv[]) {
             // Periodic health check in verbose mode
             if (verbose && !daemon_mode) {
                 static auto last_health_check = std::chrono::steady_clock::now();
-                auto now = std::chrono::steady_clock::now();
+                auto now                      = std::chrono::steady_clock::now();
 
                 if (now - last_health_check > std::chrono::seconds(10)) {
                     bool health = g_orchestrator->is_healthy();
@@ -477,40 +487,38 @@ int main(int argc, char* argv[]) {
         // Stop orchestrator
         auto stop_result = g_orchestrator->stop();
         if (!stop_result.is_success()) {
-            std::cerr << "Warning: Error during shutdown: "
-                      << stop_result.message() << std::endl;
+            std::cerr << "Warning: Error during shutdown: " << stop_result.message() << std::endl;
         }
 
         // Final shutdown
         auto shutdown_result = g_orchestrator->shutdown();
         if (!shutdown_result.is_success()) {
-            std::cerr << "Warning: Error during final shutdown: "
-                      << shutdown_result.message() << std::endl;
+            std::cerr << "Warning: Error during final shutdown: " << shutdown_result.message()
+                      << std::endl;
         }
-        
+
         if (!quiet) {
             std::cout << "IPB Gate stopped" << std::endl;
         }
-        
+
     } catch (const std::exception& e) {
         std::cerr << "Error: Exception caught: " << e.what() << std::endl;
-        
+
         // Cleanup PID file
         remove_pid_file(pid_file_path);
-        
+
         return 1;
     } catch (...) {
         std::cerr << "Error: Unknown exception caught" << std::endl;
-        
+
         // Cleanup PID file
         remove_pid_file(pid_file_path);
-        
+
         return 1;
     }
-    
+
     // Cleanup PID file
     remove_pid_file(pid_file_path);
-    
+
     return 0;
 }
-

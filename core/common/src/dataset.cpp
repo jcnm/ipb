@@ -1,12 +1,11 @@
 #include <ipb/common/dataset.hpp>
+
 #include <algorithm>
 
 namespace ipb {
 namespace common {
 
-DataSet::DataSet(const std::vector<DataPoint>& data_points)
-    : data_points_(data_points) {
-}
+DataSet::DataSet(const std::vector<DataPoint>& data_points) : data_points_(data_points) {}
 
 // void DataSet::add_data_point(const DataPoint& data_point) {
 //     std::lock_guard<std::mutex> lock(mutex_);
@@ -47,24 +46,24 @@ DataSet::DataSet(const std::vector<DataPoint>& data_points)
 // std::vector<DataPoint> DataSet::filter_by_protocol(const std::string& protocol_id) const {
 //     std::lock_guard<std::mutex> lock(mutex_);
 //     std::vector<DataPoint> filtered;
-    
+
 //     std::copy_if(data_points_.begin(), data_points_.end(), std::back_inserter(filtered),
 //         [&protocol_id](const DataPoint& dp) {
 //             return dp.get_protocol_id() == protocol_id;
 //         });
-    
+
 //     return filtered;
 // }
 
 // std::vector<DataPoint> DataSet::filter_by_quality(DataQuality quality) const {
 //     std::lock_guard<std::mutex> lock(mutex_);
 //     std::vector<DataPoint> filtered;
-    
+
 //     std::copy_if(data_points_.begin(), data_points_.end(), std::back_inserter(filtered),
 //         [quality](const DataPoint& dp) {
 //             return dp.get_quality() == quality;
 //         });
-    
+
 //     return filtered;
 // }
 
@@ -76,6 +75,5 @@ DataSet::DataSet(const std::vector<DataPoint>& data_points)
 //     timestamp_ = timestamp;
 // }
 
-} // namespace common
-} // namespace ipb
-
+}  // namespace common
+}  // namespace ipb

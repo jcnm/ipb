@@ -51,13 +51,20 @@ enum class AuthResult {
 
 inline std::string auth_result_string(AuthResult result) {
     switch (result) {
-        case AuthResult::SUCCESS: return "success";
-        case AuthResult::INVALID_CREDENTIALS: return "invalid_credentials";
-        case AuthResult::EXPIRED_TOKEN: return "expired_token";
-        case AuthResult::REVOKED_TOKEN: return "revoked_token";
-        case AuthResult::RATE_LIMITED: return "rate_limited";
-        case AuthResult::MISSING_CREDENTIALS: return "missing_credentials";
-        case AuthResult::INTERNAL_ERROR: return "internal_error";
+        case AuthResult::SUCCESS:
+            return "success";
+        case AuthResult::INVALID_CREDENTIALS:
+            return "invalid_credentials";
+        case AuthResult::EXPIRED_TOKEN:
+            return "expired_token";
+        case AuthResult::REVOKED_TOKEN:
+            return "revoked_token";
+        case AuthResult::RATE_LIMITED:
+            return "rate_limited";
+        case AuthResult::MISSING_CREDENTIALS:
+            return "missing_credentials";
+        case AuthResult::INTERNAL_ERROR:
+            return "internal_error";
     }
     return "unknown";
 }
@@ -65,13 +72,7 @@ inline std::string auth_result_string(AuthResult result) {
 /**
  * @brief Authentication method
  */
-enum class AuthMethod {
-    API_KEY,
-    BEARER_TOKEN,
-    BASIC,
-    CERTIFICATE,
-    NONE
-};
+enum class AuthMethod { API_KEY, BEARER_TOKEN, BASIC, CERTIFICATE, NONE };
 
 /**
  * @brief Authenticated identity
@@ -85,9 +86,7 @@ struct Identity {
     std::chrono::system_clock::time_point expires_at;
     std::unordered_map<std::string, std::string> metadata;
 
-    bool is_expired() const {
-        return std::chrono::system_clock::now() > expires_at;
-    }
+    bool is_expired() const { return std::chrono::system_clock::now() > expires_at; }
 
     bool has_role(std::string_view role) const {
         return std::find(roles.begin(), roles.end(), role) != roles.end();
@@ -192,22 +191,19 @@ public:
     /**
      * @brief Generate API key
      */
-    static std::string generate_api_key(size_t length = 32) {
-        return generate_salt(length);
-    }
+    static std::string generate_api_key(size_t length = 32) { return generate_salt(length); }
 
     /**
      * @brief Generate session token
      */
-    static std::string generate_token(size_t length = 64) {
-        return generate_salt(length);
-    }
+    static std::string generate_token(size_t length = 64) { return generate_salt(length); }
 
     /**
      * @brief Constant-time string comparison (timing-attack safe)
      */
     static bool secure_compare(std::string_view a, std::string_view b) {
-        if (a.size() != b.size()) return false;
+        if (a.size() != b.size())
+            return false;
 
         volatile int result = 0;
         for (size_t i = 0; i < a.size(); ++i) {
@@ -230,20 +226,20 @@ public:
      * @brief Register new API key
      */
     std::string register_key(const std::string& owner_id,
-                              const std::vector<std::string>& roles = {},
-                              std::chrono::hours validity = std::chrono::hours(8760),  // 1 year
-                              const std::string& description = "") {
-        std::string raw_key = SecureHash::generate_api_key();
-        std::string key_id = SecureHash::generate_salt(8);
+                             const std::vector<std::string>& roles = {},
+                             std::chrono::hours validity    = std::chrono::hours(8760),  // 1 year
+                             const std::string& description = "") {
+        std::string raw_key  = SecureHash::generate_api_key();
+        std::string key_id   = SecureHash::generate_salt(8);
         std::string key_hash = SecureHash::sha256(raw_key);
 
         ApiKeyCredential cred;
-        cred.key_id = key_id;
-        cred.key_hash = key_hash;
-        cred.owner_id = owner_id;
-        cred.roles = roles;
-        cred.created_at = std::chrono::system_clock::now();
-        cred.expires_at = cred.created_at + validity;
+        cred.key_id      = key_id;
+        cred.key_hash    = key_hash;
+        cred.owner_id    = owner_id;
+        cred.roles       = roles;
+        cred.created_at  = std::chrono::system_clock::now();
+        cred.expires_at  = cred.created_at + validity;
         cred.description = description;
 
         {
@@ -265,7 +261,7 @@ public:
         // Parse key format: key_id.raw_key
         auto dot_pos = api_key.find('.');
         if (dot_pos == std::string_view::npos) {
-            ctx.result = AuthResult::INVALID_CREDENTIALS;
+            ctx.result        = AuthResult::INVALID_CREDENTIALS;
             ctx.error_message = "Invalid API key format";
             return ctx;
         }
@@ -277,7 +273,7 @@ public:
         std::shared_lock lock(mutex_);
         auto it = keys_.find(key_id);
         if (it == keys_.end()) {
-            ctx.result = AuthResult::INVALID_CREDENTIALS;
+            ctx.result        = AuthResult::INVALID_CREDENTIALS;
             ctx.error_message = "API key not found";
             return ctx;
         }
@@ -286,7 +282,7 @@ public:
 
         // Verify hash (constant-time)
         if (!SecureHash::secure_compare(key_hash, cred.key_hash)) {
-            ctx.result = AuthResult::INVALID_CREDENTIALS;
+            ctx.result        = AuthResult::INVALID_CREDENTIALS;
             ctx.error_message = "Invalid API key";
             return ctx;
         }
@@ -294,32 +290,32 @@ public:
         // Check expiration
         auto now = std::chrono::system_clock::now();
         if (now > cred.expires_at) {
-            ctx.result = AuthResult::EXPIRED_TOKEN;
+            ctx.result        = AuthResult::EXPIRED_TOKEN;
             ctx.error_message = "API key expired";
             return ctx;
         }
 
         // Check revocation
         if (cred.revoked) {
-            ctx.result = AuthResult::REVOKED_TOKEN;
+            ctx.result        = AuthResult::REVOKED_TOKEN;
             ctx.error_message = "API key revoked";
             return ctx;
         }
 
         // Success - build identity
         Identity identity;
-        identity.id = cred.owner_id;
-        identity.name = cred.description;
-        identity.method = AuthMethod::API_KEY;
-        identity.roles = cred.roles;
-        identity.authenticated_at = now;
-        identity.expires_at = cred.expires_at;
+        identity.id                 = cred.owner_id;
+        identity.name               = cred.description;
+        identity.method             = AuthMethod::API_KEY;
+        identity.roles              = cred.roles;
+        identity.authenticated_at   = now;
+        identity.expires_at         = cred.expires_at;
         identity.metadata["key_id"] = key_id;
 
-        ctx.result = AuthResult::SUCCESS;
+        ctx.result   = AuthResult::SUCCESS;
         ctx.identity = std::move(identity);
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end    = std::chrono::high_resolution_clock::now();
         ctx.latency = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         return ctx;
@@ -379,23 +375,23 @@ public:
      * @brief Create new session
      */
     std::string create_session(const std::string& identity_id,
-                                const std::vector<std::string>& roles = {},
-                                std::chrono::hours validity = std::chrono::hours(24),
-                                const std::string& ip_address = "",
-                                const std::string& user_agent = "") {
-        std::string raw_token = SecureHash::generate_token();
-        std::string token_id = SecureHash::generate_salt(16);
+                               const std::vector<std::string>& roles = {},
+                               std::chrono::hours validity           = std::chrono::hours(24),
+                               const std::string& ip_address         = "",
+                               const std::string& user_agent         = "") {
+        std::string raw_token  = SecureHash::generate_token();
+        std::string token_id   = SecureHash::generate_salt(16);
         std::string token_hash = SecureHash::sha256(raw_token);
 
         SessionToken session;
-        session.token_id = token_id;
-        session.token_hash = token_hash;
+        session.token_id    = token_id;
+        session.token_hash  = token_hash;
         session.identity_id = identity_id;
-        session.roles = roles;
-        session.created_at = std::chrono::system_clock::now();
-        session.expires_at = session.created_at + validity;
-        session.ip_address = ip_address;
-        session.user_agent = user_agent;
+        session.roles       = roles;
+        session.created_at  = std::chrono::system_clock::now();
+        session.expires_at  = session.created_at + validity;
+        session.ip_address  = ip_address;
+        session.user_agent  = user_agent;
 
         {
             std::unique_lock lock(mutex_);
@@ -426,7 +422,7 @@ public:
         }
 
         if (!found) {
-            ctx.result = AuthResult::INVALID_CREDENTIALS;
+            ctx.result        = AuthResult::INVALID_CREDENTIALS;
             ctx.error_message = "Invalid session token";
             return ctx;
         }
@@ -434,30 +430,30 @@ public:
         auto now = std::chrono::system_clock::now();
 
         if (now > found->expires_at) {
-            ctx.result = AuthResult::EXPIRED_TOKEN;
+            ctx.result        = AuthResult::EXPIRED_TOKEN;
             ctx.error_message = "Session expired";
             return ctx;
         }
 
         if (found->revoked) {
-            ctx.result = AuthResult::REVOKED_TOKEN;
+            ctx.result        = AuthResult::REVOKED_TOKEN;
             ctx.error_message = "Session revoked";
             return ctx;
         }
 
         Identity identity;
-        identity.id = found->identity_id;
-        identity.method = AuthMethod::BEARER_TOKEN;
-        identity.roles = found->roles;
-        identity.authenticated_at = found->created_at;
-        identity.expires_at = found->expires_at;
-        identity.metadata["token_id"] = found->token_id;
+        identity.id                     = found->identity_id;
+        identity.method                 = AuthMethod::BEARER_TOKEN;
+        identity.roles                  = found->roles;
+        identity.authenticated_at       = found->created_at;
+        identity.expires_at             = found->expires_at;
+        identity.metadata["token_id"]   = found->token_id;
         identity.metadata["ip_address"] = found->ip_address;
 
-        ctx.result = AuthResult::SUCCESS;
+        ctx.result   = AuthResult::SUCCESS;
         ctx.identity = std::move(identity);
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end    = std::chrono::high_resolution_clock::now();
         ctx.latency = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
         return ctx;
@@ -530,9 +526,8 @@ private:
 class AuthenticationService {
 public:
     AuthenticationService()
-        : api_key_auth_(std::make_unique<ApiKeyAuthenticator>())
-        , session_mgr_(std::make_unique<SessionManager>())
-    {}
+        : api_key_auth_(std::make_unique<ApiKeyAuthenticator>()),
+          session_mgr_(std::make_unique<SessionManager>()) {}
 
     /**
      * @brief Authenticate request
@@ -562,4 +557,4 @@ private:
     std::unique_ptr<SessionManager> session_mgr_;
 };
 
-} // namespace ipb::security
+}  // namespace ipb::security

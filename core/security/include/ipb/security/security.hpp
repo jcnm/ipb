@@ -40,9 +40,9 @@
  * @endcode
  */
 
+#include "audit.hpp"
 #include "authentication.hpp"
 #include "authorization.hpp"
-#include "audit.hpp"
 #include "security_utils.hpp"
 
 namespace ipb::security {
@@ -77,7 +77,7 @@ struct SecurityContext {
         if (result.identity) {
             ctx.identity = *result.identity;
         }
-        ctx.request_time = std::chrono::system_clock::now();
+        ctx.request_time   = std::chrono::system_clock::now();
         ctx.correlation_id = SecureRandom::uuid();
         return ctx;
     }
@@ -86,16 +86,14 @@ struct SecurityContext {
      * @brief Check if context has a specific role
      */
     bool has_role(std::string_view role) const {
-        return std::find(identity.roles.begin(), identity.roles.end(), role)
-               != identity.roles.end();
+        return std::find(identity.roles.begin(), identity.roles.end(), role) !=
+               identity.roles.end();
     }
 
     /**
      * @brief Check if context is an admin
      */
-    bool is_admin() const {
-        return has_role("admin");
-    }
+    bool is_admin() const { return has_role("admin"); }
 };
 
 //=============================================================================
@@ -112,20 +110,17 @@ public:
     /**
      * @brief Initialize with default configuration
      */
-    SecurityManager() {
-        authz_.setup_default_roles();
-    }
+    SecurityManager() { authz_.setup_default_roles(); }
 
     // Authentication
 
     /**
      * @brief Register API key and return the full key string
      */
-    std::string register_api_key(std::string_view owner_id,
-                                 std::vector<std::string> roles = {},
+    std::string register_api_key(std::string_view owner_id, std::vector<std::string> roles = {},
                                  std::string_view description = "") {
-        return api_auth_.register_key(std::string(owner_id), roles,
-                                       std::chrono::hours(8760), std::string(description));
+        return api_auth_.register_key(std::string(owner_id), roles, std::chrono::hours(8760),
+                                      std::string(description));
     }
 
     /**
@@ -138,19 +133,17 @@ public:
     /**
      * @brief Authenticate with API key
      */
-    SecurityContext authenticate_api_key(std::string_view key,
-                                         std::string_view source_ip = "") {
+    SecurityContext authenticate_api_key(std::string_view key, std::string_view source_ip = "") {
         auto result = api_auth_.authenticate(key);
 
         SecurityContext ctx = SecurityContext::from_auth(result);
-        ctx.source_ip = std::string(source_ip);
+        ctx.source_ip       = std::string(source_ip);
 
         if (result.result == AuthResult::SUCCESS && result.identity) {
             AUDIT_AUTH_SUCCESS(*result.identity, "api_key");
         } else {
-            std::string key_preview = key.length() > 8
-                ? std::string(key.substr(0, 8)) + "..."
-                : std::string(key);
+            std::string key_preview =
+                key.length() > 8 ? std::string(key.substr(0, 8)) + "..." : std::string(key);
             AUDIT_AUTH_FAILURE(key_preview, result.error_message);
         }
 
@@ -163,7 +156,7 @@ public:
     std::string create_session(const Identity& identity,
                                std::chrono::seconds duration = std::chrono::seconds(86400)) {
         return sessions_.create_session(identity.id, identity.roles,
-                                         std::chrono::duration_cast<std::chrono::hours>(duration));
+                                        std::chrono::duration_cast<std::chrono::hours>(duration));
     }
 
     /**
@@ -174,10 +167,11 @@ public:
         auto result = sessions_.validate(session_token);
 
         SecurityContext ctx = SecurityContext::from_auth(result);
-        ctx.source_ip = std::string(source_ip);
+        ctx.source_ip       = std::string(source_ip);
         if (result.identity) {
             ctx.session_id = result.identity->metadata.count("token_id")
-                ? result.identity->metadata.at("token_id") : "";
+                               ? result.identity->metadata.at("token_id")
+                               : "";
         }
 
         return ctx;
@@ -188,23 +182,17 @@ public:
     /**
      * @brief Register custom role
      */
-    void register_role(Role role) {
-        authz_.register_role(std::move(role));
-    }
+    void register_role(Role role) { authz_.register_role(std::move(role)); }
 
     /**
      * @brief Add authorization policy
      */
-    void add_policy(Policy policy) {
-        authz_.add_policy(std::move(policy));
-    }
+    void add_policy(Policy policy) { authz_.add_policy(std::move(policy)); }
 
     /**
      * @brief Check authorization
      */
-    AuthzDecision authorize(const SecurityContext& ctx,
-                            const Resource& resource,
-                            Action action) {
+    AuthzDecision authorize(const SecurityContext& ctx, const Resource& resource, Action action) {
         if (!ctx.authenticated) {
             AuthzDecision decision;
             decision.result = AuthzResult::DENIED;
@@ -216,12 +204,11 @@ public:
 
         // Audit
         if (decision.is_allowed()) {
-            get_audit_logger().log_access_granted(
-                ctx.identity, resource.to_string(), action_string(action));
+            get_audit_logger().log_access_granted(ctx.identity, resource.to_string(),
+                                                  action_string(action));
         } else {
-            get_audit_logger().log_access_denied(
-                ctx.identity, resource.to_string(),
-                action_string(action), decision.reason);
+            get_audit_logger().log_access_denied(ctx.identity, resource.to_string(),
+                                                 action_string(action), decision.reason);
         }
 
         return decision;
@@ -230,15 +217,14 @@ public:
     /**
      * @brief Quick permission check
      */
-    bool can(const SecurityContext& ctx,
-             std::string_view resource_type,
-             std::string_view resource_id,
-             Action action) {
-        if (!ctx.authenticated) return false;
+    bool can(const SecurityContext& ctx, std::string_view resource_type,
+             std::string_view resource_id, Action action) {
+        if (!ctx.authenticated)
+            return false;
 
         Resource resource;
-        resource.type = std::string(resource_type);
-        resource.id = std::string(resource_id);
+        resource.type  = std::string(resource_type);
+        resource.id    = std::string(resource_id);
         resource.scope = "*";
 
         return authorize(ctx, resource, action).is_allowed();
@@ -249,9 +235,7 @@ public:
     /**
      * @brief Get audit logger
      */
-    AuditLogger& audit() {
-        return get_audit_logger();
-    }
+    AuditLogger& audit() { return get_audit_logger(); }
 
     /**
      * @brief Configure audit logger
@@ -273,9 +257,7 @@ public:
     /**
      * @brief Generate new API key
      */
-    static std::string generate_api_key() {
-        return TokenUtils::generate_api_key();
-    }
+    static std::string generate_api_key() { return TokenUtils::generate_api_key(); }
 
     /**
      * @brief Validate input
@@ -297,21 +279,13 @@ public:
 
     // Statistics
 
-    size_t active_sessions() const {
-        return sessions_.session_count();
-    }
+    size_t active_sessions() const { return sessions_.session_count(); }
 
-    size_t registered_keys() const {
-        return api_auth_.key_count();
-    }
+    size_t registered_keys() const { return api_auth_.key_count(); }
 
-    size_t registered_roles() const {
-        return authz_.role_count();
-    }
+    size_t registered_roles() const { return authz_.role_count(); }
 
-    size_t registered_policies() const {
-        return authz_.policy_count();
-    }
+    size_t registered_policies() const { return authz_.policy_count(); }
 
 private:
     ApiKeyAuthenticator api_auth_;
@@ -328,18 +302,11 @@ private:
  */
 class RequestGuard {
 public:
-    RequestGuard(SecurityManager& manager,
-                 const SecurityContext& ctx,
-                 const Resource& resource,
+    RequestGuard(SecurityManager& manager, const SecurityContext& ctx, const Resource& resource,
                  Action action)
-        : manager_(manager)
-        , ctx_(ctx)
-        , resource_(resource)
-        , action_(action)
-        , allowed_(false) {
-
+        : manager_(manager), ctx_(ctx), resource_(resource), action_(action), allowed_(false) {
         auto decision = manager_.authorize(ctx_, resource_, action_);
-        allowed_ = decision.is_allowed();
+        allowed_      = decision.is_allowed();
     }
 
     ~RequestGuard() {
@@ -386,4 +353,4 @@ inline std::optional<std::string> extract_bearer_token(std::string_view auth_hea
     return std::nullopt;
 }
 
-} // namespace ipb::security
+}  // namespace ipb::security

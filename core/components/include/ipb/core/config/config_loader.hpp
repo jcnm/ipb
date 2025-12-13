@@ -8,8 +8,8 @@
  * from YAML (default) or JSON files.
  */
 
-#include <ipb/core/config/config_types.hpp>
 #include <ipb/common/error.hpp>
+#include <ipb/core/config/config_types.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -57,8 +57,7 @@ public:
      * @return Application configuration or error
      */
     virtual common::Result<ApplicationConfig> load_application(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+        const std::filesystem::path& path, ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Load Scoop configuration from file
@@ -66,9 +65,8 @@ public:
      * @param format Format override
      * @return Scoop configuration or error
      */
-    virtual common::Result<ScoopConfig> load_scoop(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<ScoopConfig> load_scoop(const std::filesystem::path& path,
+                                                   ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Load Sink configuration from file
@@ -76,9 +74,8 @@ public:
      * @param format Format override
      * @return Sink configuration or error
      */
-    virtual common::Result<SinkConfig> load_sink(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<SinkConfig> load_sink(const std::filesystem::path& path,
+                                                 ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Load Router configuration from file
@@ -86,9 +83,8 @@ public:
      * @param format Format override
      * @return Router configuration or error
      */
-    virtual common::Result<RouterConfig> load_router(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<RouterConfig> load_router(const std::filesystem::path& path,
+                                                     ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Load multiple Scoop configurations from directory
@@ -97,8 +93,7 @@ public:
      * @return Vector of Scoop configurations
      */
     virtual common::Result<std::vector<ScoopConfig>> load_scoops_from_directory(
-        const std::filesystem::path& dir_path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+        const std::filesystem::path& dir_path, ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Load multiple Sink configurations from directory
@@ -107,8 +102,7 @@ public:
      * @return Vector of Sink configurations
      */
     virtual common::Result<std::vector<SinkConfig>> load_sinks_from_directory(
-        const std::filesystem::path& dir_path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+        const std::filesystem::path& dir_path, ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     // ========================================================================
     // STRING PARSING
@@ -121,8 +115,7 @@ public:
      * @return Application configuration or error
      */
     virtual common::Result<ApplicationConfig> parse_application(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+        std::string_view content, ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Parse Scoop configuration from string
@@ -130,9 +123,8 @@ public:
      * @param format Format of content
      * @return Scoop configuration or error
      */
-    virtual common::Result<ScoopConfig> parse_scoop(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<ScoopConfig> parse_scoop(std::string_view content,
+                                                    ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Parse Sink configuration from string
@@ -140,9 +132,8 @@ public:
      * @param format Format of content
      * @return Sink configuration or error
      */
-    virtual common::Result<SinkConfig> parse_sink(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<SinkConfig> parse_sink(std::string_view content,
+                                                  ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Parse Router configuration from string
@@ -150,9 +141,8 @@ public:
      * @param format Format of content
      * @return Router configuration or error
      */
-    virtual common::Result<RouterConfig> parse_router(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<RouterConfig> parse_router(std::string_view content,
+                                                      ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     // ========================================================================
     // SERIALIZATION
@@ -165,8 +155,7 @@ public:
      * @return Serialized configuration or error
      */
     virtual common::Result<std::string> serialize_application(
-        const ApplicationConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) = 0;
+        const ApplicationConfig& config, ConfigFormat format = ConfigFormat::YAML) = 0;
 
     /**
      * @brief Serialize Scoop configuration to string
@@ -175,8 +164,7 @@ public:
      * @return Serialized configuration or error
      */
     virtual common::Result<std::string> serialize_scoop(
-        const ScoopConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) = 0;
+        const ScoopConfig& config, ConfigFormat format = ConfigFormat::YAML) = 0;
 
     /**
      * @brief Serialize Sink configuration to string
@@ -185,8 +173,7 @@ public:
      * @return Serialized configuration or error
      */
     virtual common::Result<std::string> serialize_sink(
-        const SinkConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) = 0;
+        const SinkConfig& config, ConfigFormat format = ConfigFormat::YAML) = 0;
 
     /**
      * @brief Serialize Router configuration to string
@@ -195,8 +182,7 @@ public:
      * @return Serialized configuration or error
      */
     virtual common::Result<std::string> serialize_router(
-        const RouterConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) = 0;
+        const RouterConfig& config, ConfigFormat format = ConfigFormat::YAML) = 0;
 
     // ========================================================================
     // FILE SAVING
@@ -209,10 +195,9 @@ public:
      * @param format Format (AUTO to detect from extension)
      * @return Success or error
      */
-    virtual common::Result<void> save_application(
-        const ApplicationConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<void> save_application(const ApplicationConfig& config,
+                                                  const std::filesystem::path& path,
+                                                  ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Save Scoop configuration to file
@@ -221,10 +206,9 @@ public:
      * @param format Format (AUTO to detect from extension)
      * @return Success or error
      */
-    virtual common::Result<void> save_scoop(
-        const ScoopConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<void> save_scoop(const ScoopConfig& config,
+                                            const std::filesystem::path& path,
+                                            ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     /**
      * @brief Save Sink configuration to file
@@ -233,10 +217,9 @@ public:
      * @param format Format (AUTO to detect from extension)
      * @return Success or error
      */
-    virtual common::Result<void> save_sink(
-        const SinkConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) = 0;
+    virtual common::Result<void> save_sink(const SinkConfig& config,
+                                           const std::filesystem::path& path,
+                                           ConfigFormat format = ConfigFormat::AUTO) = 0;
 
     // ========================================================================
     // VALIDATION
@@ -286,83 +269,64 @@ std::unique_ptr<ConfigLoader> create_config_loader();
  */
 class ConfigLoaderImpl : public ConfigLoader {
 public:
-    ConfigLoaderImpl() = default;
+    ConfigLoaderImpl()           = default;
     ~ConfigLoaderImpl() override = default;
 
     // File loading
     common::Result<ApplicationConfig> load_application(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+        const std::filesystem::path& path, ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<ScoopConfig> load_scoop(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<ScoopConfig> load_scoop(const std::filesystem::path& path,
+                                           ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<SinkConfig> load_sink(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<SinkConfig> load_sink(const std::filesystem::path& path,
+                                         ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<RouterConfig> load_router(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<RouterConfig> load_router(const std::filesystem::path& path,
+                                             ConfigFormat format = ConfigFormat::AUTO) override;
 
     common::Result<std::vector<ScoopConfig>> load_scoops_from_directory(
-        const std::filesystem::path& dir_path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+        const std::filesystem::path& dir_path, ConfigFormat format = ConfigFormat::AUTO) override;
 
     common::Result<std::vector<SinkConfig>> load_sinks_from_directory(
-        const std::filesystem::path& dir_path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+        const std::filesystem::path& dir_path, ConfigFormat format = ConfigFormat::AUTO) override;
 
     // String parsing
     common::Result<ApplicationConfig> parse_application(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+        std::string_view content, ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<ScoopConfig> parse_scoop(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<ScoopConfig> parse_scoop(std::string_view content,
+                                            ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<SinkConfig> parse_sink(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<SinkConfig> parse_sink(std::string_view content,
+                                          ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<RouterConfig> parse_router(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<RouterConfig> parse_router(std::string_view content,
+                                              ConfigFormat format = ConfigFormat::AUTO) override;
 
     // Serialization
     common::Result<std::string> serialize_application(
-        const ApplicationConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) override;
+        const ApplicationConfig& config, ConfigFormat format = ConfigFormat::YAML) override;
 
-    common::Result<std::string> serialize_scoop(
-        const ScoopConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) override;
+    common::Result<std::string> serialize_scoop(const ScoopConfig& config,
+                                                ConfigFormat format = ConfigFormat::YAML) override;
 
-    common::Result<std::string> serialize_sink(
-        const SinkConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) override;
+    common::Result<std::string> serialize_sink(const SinkConfig& config,
+                                               ConfigFormat format = ConfigFormat::YAML) override;
 
-    common::Result<std::string> serialize_router(
-        const RouterConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) override;
+    common::Result<std::string> serialize_router(const RouterConfig& config,
+                                                 ConfigFormat format = ConfigFormat::YAML) override;
 
     // File saving
-    common::Result<void> save_application(
-        const ApplicationConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<void> save_application(const ApplicationConfig& config,
+                                          const std::filesystem::path& path,
+                                          ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<void> save_scoop(
-        const ScoopConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<void> save_scoop(const ScoopConfig& config, const std::filesystem::path& path,
+                                    ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<void> save_sink(
-        const SinkConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<void> save_sink(const SinkConfig& config, const std::filesystem::path& path,
+                                   ConfigFormat format = ConfigFormat::AUTO) override;
 
     // Validation
     common::Result<void> validate(const ApplicationConfig& config) override;
@@ -377,4 +341,4 @@ private:
     ConfigFormat resolve_format(const std::filesystem::path& path, ConfigFormat format);
 };
 
-} // namespace ipb::core::config
+}  // namespace ipb::core::config

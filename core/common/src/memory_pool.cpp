@@ -12,10 +12,8 @@ namespace ipb::common {
 // ============================================================================
 
 TieredMemoryPool::TieredMemoryPool(size_t initial_capacity_per_tier)
-    : small_pool_(initial_capacity_per_tier)
-    , medium_pool_(initial_capacity_per_tier)
-    , large_pool_(initial_capacity_per_tier) {
-}
+    : small_pool_(initial_capacity_per_tier), medium_pool_(initial_capacity_per_tier),
+      large_pool_(initial_capacity_per_tier) {}
 
 TieredMemoryPool::~TieredMemoryPool() = default;
 
@@ -47,7 +45,8 @@ void* TieredMemoryPool::allocate(size_t size) {
 }
 
 void TieredMemoryPool::deallocate(void* ptr, size_t size) {
-    if (ptr == nullptr) return;
+    if (ptr == nullptr)
+        return;
 
     if (size <= SMALL_SIZE) {
         auto* block = reinterpret_cast<SmallBlock*>(ptr);
@@ -84,4 +83,4 @@ TieredMemoryPool& GlobalMemoryPool::instance() {
     return pool;
 }
 
-} // namespace ipb::common
+}  // namespace ipb::common

@@ -65,11 +65,11 @@ struct EmbeddedConfigConstraints {
  * @brief Memory statistics for embedded config loading
  */
 struct EmbeddedConfigStats {
-    size_t peak_memory_usage = 0;
+    size_t peak_memory_usage    = 0;
     size_t current_memory_usage = 0;
-    size_t parse_time_us = 0;
-    size_t file_size = 0;
-    bool constraints_exceeded = false;
+    size_t parse_time_us        = 0;
+    size_t file_size            = 0;
+    bool constraints_exceeded   = false;
     std::string constraint_error;
 };
 
@@ -79,18 +79,16 @@ struct EmbeddedConfigStats {
  * Allows integration with custom memory pools or arena allocators.
  */
 struct EmbeddedAllocator {
-    using AllocFunc = std::function<void*(size_t)>;
-    using FreeFunc = std::function<void(void*)>;
+    using AllocFunc   = std::function<void*(size_t)>;
+    using FreeFunc    = std::function<void(void*)>;
     using ReallocFunc = std::function<void*(void*, size_t)>;
 
-    AllocFunc alloc = nullptr;
-    FreeFunc free = nullptr;
+    AllocFunc alloc     = nullptr;
+    FreeFunc free       = nullptr;
     ReallocFunc realloc = nullptr;
 
     /// Check if custom allocator is configured
-    bool is_configured() const {
-        return alloc != nullptr && free != nullptr;
-    }
+    bool is_configured() const { return alloc != nullptr && free != nullptr; }
 };
 
 // ============================================================================
@@ -130,14 +128,13 @@ public:
      * @param constraints Memory constraints
      * @param allocator Custom memory allocator
      */
-    EmbeddedConfigLoader(
-        const EmbeddedConfigConstraints& constraints,
-        const EmbeddedAllocator& allocator);
+    EmbeddedConfigLoader(const EmbeddedConfigConstraints& constraints,
+                         const EmbeddedAllocator& allocator);
 
     ~EmbeddedConfigLoader() override;
 
     // Non-copyable, movable
-    EmbeddedConfigLoader(const EmbeddedConfigLoader&) = delete;
+    EmbeddedConfigLoader(const EmbeddedConfigLoader&)            = delete;
     EmbeddedConfigLoader& operator=(const EmbeddedConfigLoader&) = delete;
     EmbeddedConfigLoader(EmbeddedConfigLoader&&) noexcept;
     EmbeddedConfigLoader& operator=(EmbeddedConfigLoader&&) noexcept;
@@ -189,78 +186,59 @@ public:
 
     // File loading
     common::Result<ApplicationConfig> load_application(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+        const std::filesystem::path& path, ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<ScoopConfig> load_scoop(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<ScoopConfig> load_scoop(const std::filesystem::path& path,
+                                           ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<SinkConfig> load_sink(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<SinkConfig> load_sink(const std::filesystem::path& path,
+                                         ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<RouterConfig> load_router(
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<RouterConfig> load_router(const std::filesystem::path& path,
+                                             ConfigFormat format = ConfigFormat::AUTO) override;
 
     common::Result<std::vector<ScoopConfig>> load_scoops_from_directory(
-        const std::filesystem::path& dir_path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+        const std::filesystem::path& dir_path, ConfigFormat format = ConfigFormat::AUTO) override;
 
     common::Result<std::vector<SinkConfig>> load_sinks_from_directory(
-        const std::filesystem::path& dir_path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+        const std::filesystem::path& dir_path, ConfigFormat format = ConfigFormat::AUTO) override;
 
     // String parsing
     common::Result<ApplicationConfig> parse_application(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+        std::string_view content, ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<ScoopConfig> parse_scoop(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<ScoopConfig> parse_scoop(std::string_view content,
+                                            ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<SinkConfig> parse_sink(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<SinkConfig> parse_sink(std::string_view content,
+                                          ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<RouterConfig> parse_router(
-        std::string_view content,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<RouterConfig> parse_router(std::string_view content,
+                                              ConfigFormat format = ConfigFormat::AUTO) override;
 
     // Serialization (minimal support for embedded)
     common::Result<std::string> serialize_application(
-        const ApplicationConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) override;
+        const ApplicationConfig& config, ConfigFormat format = ConfigFormat::YAML) override;
 
-    common::Result<std::string> serialize_scoop(
-        const ScoopConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) override;
+    common::Result<std::string> serialize_scoop(const ScoopConfig& config,
+                                                ConfigFormat format = ConfigFormat::YAML) override;
 
-    common::Result<std::string> serialize_sink(
-        const SinkConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) override;
+    common::Result<std::string> serialize_sink(const SinkConfig& config,
+                                               ConfigFormat format = ConfigFormat::YAML) override;
 
-    common::Result<std::string> serialize_router(
-        const RouterConfig& config,
-        ConfigFormat format = ConfigFormat::YAML) override;
+    common::Result<std::string> serialize_router(const RouterConfig& config,
+                                                 ConfigFormat format = ConfigFormat::YAML) override;
 
     // File saving
-    common::Result<void> save_application(
-        const ApplicationConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<void> save_application(const ApplicationConfig& config,
+                                          const std::filesystem::path& path,
+                                          ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<void> save_scoop(
-        const ScoopConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<void> save_scoop(const ScoopConfig& config, const std::filesystem::path& path,
+                                    ConfigFormat format = ConfigFormat::AUTO) override;
 
-    common::Result<void> save_sink(
-        const SinkConfig& config,
-        const std::filesystem::path& path,
-        ConfigFormat format = ConfigFormat::AUTO) override;
+    common::Result<void> save_sink(const SinkConfig& config, const std::filesystem::path& path,
+                                   ConfigFormat format = ConfigFormat::AUTO) override;
 
     // Validation
     common::Result<void> validate(const ApplicationConfig& config) override;
@@ -308,28 +286,27 @@ std::unique_ptr<ConfigLoader> create_embedded_config_loader(
  * @param constraints Optional constraints for embedded platforms
  */
 std::unique_ptr<ConfigLoader> create_config_loader_for_platform(
-    common::DeploymentPlatform platform,
-    const EmbeddedConfigConstraints& constraints = {});
+    common::DeploymentPlatform platform, const EmbeddedConfigConstraints& constraints = {});
 
 // ============================================================================
 // COMPILE-TIME PLATFORM SELECTION
 // ============================================================================
 
 #if defined(IPB_MODE_EMBEDDED)
-    // Use embedded loader for EMBEDDED build mode
-    inline std::unique_ptr<ConfigLoader> create_platform_config_loader() {
-        return create_embedded_config_loader();
-    }
+// Use embedded loader for EMBEDDED build mode
+inline std::unique_ptr<ConfigLoader> create_platform_config_loader() {
+    return create_embedded_config_loader();
+}
 #elif defined(IPB_MODE_EDGE)
-    // Use standard loader for EDGE build mode
-    inline std::unique_ptr<ConfigLoader> create_platform_config_loader() {
-        return create_config_loader();
-    }
+// Use standard loader for EDGE build mode
+inline std::unique_ptr<ConfigLoader> create_platform_config_loader() {
+    return create_config_loader();
+}
 #else
-    // Use standard loader for SERVER build mode (default)
-    inline std::unique_ptr<ConfigLoader> create_platform_config_loader() {
-        return create_config_loader();
-    }
+// Use standard loader for SERVER build mode (default)
+inline std::unique_ptr<ConfigLoader> create_platform_config_loader() {
+    return create_config_loader();
+}
 #endif
 
-} // namespace ipb::core::config
+}  // namespace ipb::core::config

@@ -1,8 +1,7 @@
 #include "ipb/core/scheduler/edf_scheduler.hpp"
-#include "ipb/core/scheduler/task_queue.hpp"
 
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <condition_variable>
@@ -12,13 +11,15 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "ipb/core/scheduler/task_queue.hpp"
+
 namespace ipb::core {
 
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::SCHEDULER;
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::SCHEDULER;
+}  // anonymous namespace
 
 // ============================================================================
 // EDFSchedulerImpl - Private Implementation
@@ -27,16 +28,13 @@ namespace {
 class EDFSchedulerImpl {
 public:
     explicit EDFSchedulerImpl(const EDFSchedulerConfig& config)
-        : config_(config)
-        , task_queue_(config.max_queue_size) {
+        : config_(config), task_queue_(config.max_queue_size) {
         if (config_.worker_threads == 0) {
             config_.worker_threads = std::thread::hardware_concurrency();
         }
     }
 
-    ~EDFSchedulerImpl() {
-        stop_immediate();
-    }
+    ~EDFSchedulerImpl() { stop_immediate(); }
 
     bool start() {
         IPB_SPAN_CAT("EDFScheduler::start", LOG_CAT);
@@ -48,38 +46,34 @@ public:
 
         stop_requested_.store(false);
 
-        IPB_LOG_INFO(LOG_CAT, "Starting EDFScheduler with " << config_.worker_threads << " workers");
+        IPB_LOG_INFO(LOG_CAT,
+                     "Starting EDFScheduler with " << config_.worker_threads << " workers");
 
         // Start worker threads
         for (size_t i = 0; i < config_.worker_threads; ++i) {
-            workers_.emplace_back([this, i]() {
-                worker_loop(i);
-            });
+            workers_.emplace_back([this, i]() { worker_loop(i); });
 
             // Set CPU affinity if configured
             if (config_.cpu_affinity_start >= 0) {
-                IPB_LOG_DEBUG(LOG_CAT, "Setting CPU affinity for worker " << i
-                             << " to CPU " << (config_.cpu_affinity_start + static_cast<int>(i)));
+                IPB_LOG_DEBUG(LOG_CAT, "Setting CPU affinity for worker "
+                                           << i << " to CPU "
+                                           << (config_.cpu_affinity_start + static_cast<int>(i)));
                 common::rt::CPUAffinity::set_thread_affinity(
-                    workers_.back().get_id(),
-                    config_.cpu_affinity_start + static_cast<int>(i));
+                    workers_.back().get_id(), config_.cpu_affinity_start + static_cast<int>(i));
             }
 
             // Set real-time priority if configured
             if (config_.enable_realtime) {
                 IPB_LOG_DEBUG(LOG_CAT, "Setting real-time priority " << config_.realtime_priority
-                             << " for worker " << i);
-                common::rt::ThreadPriority::set_realtime_priority(
-                    workers_.back().get_id(),
-                    config_.realtime_priority);
+                                                                     << " for worker " << i);
+                common::rt::ThreadPriority::set_realtime_priority(workers_.back().get_id(),
+                                                                  config_.realtime_priority);
             }
         }
 
         // Start deadline checker thread
         IPB_LOG_DEBUG(LOG_CAT, "Starting deadline checker thread");
-        deadline_checker_ = std::thread([this]() {
-            deadline_check_loop();
-        });
+        deadline_checker_ = std::thread([this]() { deadline_check_loop(); });
 
         IPB_LOG_INFO(LOG_CAT, "EDFScheduler started successfully");
         return true;
@@ -140,9 +134,7 @@ public:
         }
     }
 
-    bool is_running() const noexcept {
-        return running_.load(std::memory_order_acquire);
-    }
+    bool is_running() const noexcept { return running_.load(std::memory_order_acquire); }
 
     SubmitResult submit(ScheduledTask task) {
         SubmitResult result;
@@ -153,9 +145,9 @@ public:
             return result;
         }
 
-        task.id = next_task_id_.fetch_add(1, std::memory_order_relaxed);
+        task.id           = next_task_id_.fetch_add(1, std::memory_order_relaxed);
         task.arrival_time = common::Timestamp::now();
-        task.state = TaskState::PENDING;
+        task.state        = TaskState::PENDING;
 
         IPB_LOG_TRACE(LOG_CAT, "Submitting task id=" << task.id << " name=\"" << task.name << "\"");
 
@@ -174,7 +166,7 @@ public:
                 task.completion_callback(TaskState::DEADLINE_MISSED, std::chrono::nanoseconds(0));
             }
 
-            result.task_id = task.id;
+            result.task_id       = task.id;
             result.error_message = "Deadline already passed";
             return result;
         }
@@ -214,7 +206,7 @@ public:
 
     SubmitResult submit(std::function<void()> func, common::Timestamp deadline) {
         ScheduledTask task;
-        task.deadline = deadline;
+        task.deadline      = deadline;
         task.task_function = std::move(func);
         return submit(std::move(task));
     }
@@ -231,37 +223,30 @@ public:
     SubmitResult submit_named(std::string name, std::function<void()> func,
                               common::Timestamp deadline) {
         ScheduledTask task;
-        task.name = std::move(name);
-        task.deadline = deadline;
+        task.name          = std::move(name);
+        task.deadline      = deadline;
         task.task_function = std::move(func);
         return submit(std::move(task));
     }
 
     SubmitResult submit_with_callback(
-            std::function<void()> func,
-            common::Timestamp deadline,
-            std::function<void(TaskState, std::chrono::nanoseconds)> callback) {
+        std::function<void()> func, common::Timestamp deadline,
+        std::function<void(TaskState, std::chrono::nanoseconds)> callback) {
         ScheduledTask task;
-        task.deadline = deadline;
-        task.task_function = std::move(func);
+        task.deadline            = deadline;
+        task.task_function       = std::move(func);
         task.completion_callback = std::move(callback);
         return submit(std::move(task));
     }
 
-    uint64_t submit_periodic(std::function<void()> func,
-                            std::chrono::nanoseconds period,
-                            TaskPriority priority) {
+    uint64_t submit_periodic(std::function<void()> func, std::chrono::nanoseconds period,
+                             TaskPriority priority) {
         uint64_t periodic_id = next_periodic_id_.fetch_add(1, std::memory_order_relaxed);
 
         {
             std::lock_guard lock(periodic_mutex_);
-            periodic_tasks_[periodic_id] = PeriodicTask{
-                periodic_id,
-                std::move(func),
-                period,
-                priority,
-                true
-            };
+            periodic_tasks_[periodic_id] =
+                PeriodicTask{periodic_id, std::move(func), period, priority, true};
         }
 
         // Submit first occurrence
@@ -293,9 +278,7 @@ public:
         return std::nullopt;
     }
 
-    size_t pending_count() const noexcept {
-        return task_queue_.size();
-    }
+    size_t pending_count() const noexcept { return task_queue_.size(); }
 
     std::optional<common::Timestamp> nearest_deadline() const {
         return task_queue_.nearest_deadline();
@@ -310,17 +293,11 @@ public:
         return stats_.deadlines_missed.load(std::memory_order_relaxed);
     }
 
-    const EDFSchedulerStats& stats() const noexcept {
-        return stats_;
-    }
+    const EDFSchedulerStats& stats() const noexcept { return stats_; }
 
-    void reset_stats() {
-        stats_.reset();
-    }
+    void reset_stats() { stats_.reset(); }
 
-    const EDFSchedulerConfig& config() const noexcept {
-        return config_;
-    }
+    const EDFSchedulerConfig& config() const noexcept { return config_; }
 
     void set_default_deadline_offset(std::chrono::nanoseconds offset) {
         default_deadline_offset_.store(offset, std::memory_order_relaxed);
@@ -341,8 +318,7 @@ private:
             {
                 std::unique_lock lock(task_mutex_);
                 task_cv_.wait_for(lock, config_.check_interval, [this]() {
-                    return stop_requested_.load(std::memory_order_acquire) ||
-                           !task_queue_.empty();
+                    return stop_requested_.load(std::memory_order_acquire) || !task_queue_.empty();
                 });
             }
 
@@ -360,7 +336,7 @@ private:
             IPB_LOG_TRACE(LOG_CAT, "Worker " << worker_id << " executing task " << task.id);
 
             // Check deadline before execution
-            auto now = common::Timestamp::now();
+            auto now     = common::Timestamp::now();
             auto latency = now - task.arrival_time;
 
             if (IPB_UNLIKELY(now > task.deadline)) {
@@ -394,23 +370,25 @@ private:
             } catch (const std::exception& e) {
                 task.state = TaskState::FAILED;
                 stats_.tasks_failed.fetch_add(1, std::memory_order_relaxed);
-                IPB_LOG_ERROR(LOG_CAT, "Task " << task.id << " failed with exception: " << e.what());
+                IPB_LOG_ERROR(LOG_CAT,
+                              "Task " << task.id << " failed with exception: " << e.what());
             } catch (...) {
                 task.state = TaskState::FAILED;
                 stats_.tasks_failed.fetch_add(1, std::memory_order_relaxed);
                 IPB_LOG_ERROR(LOG_CAT, "Task " << task.id << " failed with unknown exception");
             }
 
-            auto exec_time = exec_timer.elapsed();
+            auto exec_time      = exec_timer.elapsed();
             task.execution_time = exec_time;
 
             // Check if deadline was met
-            auto finish_time = common::Timestamp::now();
+            auto finish_time  = common::Timestamp::now();
             task.deadline_met = finish_time <= task.deadline;
 
             if (IPB_LIKELY(task.deadline_met)) {
                 stats_.deadlines_met.fetch_add(1, std::memory_order_relaxed);
-                IPB_LOG_TRACE(LOG_CAT, "Task " << task.id << " completed in " << exec_time.count() / 1000.0 << "us");
+                IPB_LOG_TRACE(LOG_CAT, "Task " << task.id << " completed in "
+                                               << exec_time.count() / 1000.0 << "us");
             } else {
                 stats_.deadlines_missed.fetch_add(1, std::memory_order_relaxed);
                 IPB_LOG_WARN(LOG_CAT, "Task " << task.id << " missed deadline during execution");
@@ -445,7 +423,7 @@ private:
             // Check for imminent deadlines and wake workers if needed
             auto nearest = task_queue_.nearest_deadline();
             if (nearest) {
-                auto now = common::Timestamp::now();
+                auto now        = common::Timestamp::now();
                 auto time_until = *nearest - now;
 
                 if (time_until.count() < config_.check_interval.count() * 1000) {
@@ -465,12 +443,12 @@ private:
         }
 
         auto& periodic = it->second;
-        auto deadline = common::Timestamp::now() + periodic.period;
+        auto deadline  = common::Timestamp::now() + periodic.period;
 
         // Create task that reschedules itself
         ScheduledTask task;
-        task.deadline = deadline;
-        task.priority = periodic.priority;
+        task.deadline      = deadline;
+        task.priority      = periodic.priority;
         task.task_function = [this, periodic_id, func = periodic.task_function]() {
             func();
             schedule_periodic_instance(periodic_id);  // Reschedule
@@ -558,15 +536,14 @@ private:
 // EDFScheduler Public Interface
 // ============================================================================
 
-EDFScheduler::EDFScheduler()
-    : impl_(std::make_unique<EDFSchedulerImpl>(EDFSchedulerConfig{})) {}
+EDFScheduler::EDFScheduler() : impl_(std::make_unique<EDFSchedulerImpl>(EDFSchedulerConfig{})) {}
 
 EDFScheduler::EDFScheduler(const EDFSchedulerConfig& config)
     : impl_(std::make_unique<EDFSchedulerImpl>(config)) {}
 
 EDFScheduler::~EDFScheduler() = default;
 
-EDFScheduler::EDFScheduler(EDFScheduler&&) noexcept = default;
+EDFScheduler::EDFScheduler(EDFScheduler&&) noexcept            = default;
 EDFScheduler& EDFScheduler::operator=(EDFScheduler&&) noexcept = default;
 
 bool EDFScheduler::start() {
@@ -598,16 +575,14 @@ SubmitResult EDFScheduler::submit(std::function<void()> task) {
     return impl_->submit(std::move(task));
 }
 
-SubmitResult EDFScheduler::submit_named(std::string name,
-                                        std::function<void()> task,
+SubmitResult EDFScheduler::submit_named(std::string name, std::function<void()> task,
                                         common::Timestamp deadline) {
     return impl_->submit_named(std::move(name), std::move(task), deadline);
 }
 
 SubmitResult EDFScheduler::submit_with_callback(
-        std::function<void()> task,
-        common::Timestamp deadline,
-        std::function<void(TaskState, std::chrono::nanoseconds)> callback) {
+    std::function<void()> task, common::Timestamp deadline,
+    std::function<void(TaskState, std::chrono::nanoseconds)> callback) {
     return impl_->submit_with_callback(std::move(task), deadline, std::move(callback));
 }
 
@@ -615,8 +590,7 @@ SubmitResult EDFScheduler::submit(ScheduledTask task) {
     return impl_->submit(std::move(task));
 }
 
-uint64_t EDFScheduler::submit_periodic(std::function<void()> task,
-                                       std::chrono::nanoseconds period,
+uint64_t EDFScheduler::submit_periodic(std::function<void()> task, std::chrono::nanoseconds period,
                                        TaskPriority priority) {
     return impl_->submit_periodic(std::move(task), period, priority);
 }
@@ -669,4 +643,4 @@ std::chrono::nanoseconds EDFScheduler::get_default_deadline_offset() const noexc
     return impl_->get_default_deadline_offset();
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

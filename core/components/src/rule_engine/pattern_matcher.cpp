@@ -1,9 +1,11 @@
 #include "ipb/core/rule_engine/pattern_matcher.hpp"
-#include "ipb/core/rule_engine/compiled_pattern_cache.hpp"
+
 #include <algorithm>
+#include <optional>
 #include <regex>
 #include <unordered_map>
-#include <optional>
+
+#include "ipb/core/rule_engine/compiled_pattern_cache.hpp"
 
 namespace ipb::core {
 
@@ -11,8 +13,7 @@ namespace ipb::core {
 // ExactMatcher Implementation
 // ============================================================================
 
-ExactMatcher::ExactMatcher(std::string pattern)
-    : pattern_(std::move(pattern)) {}
+ExactMatcher::ExactMatcher(std::string pattern) : pattern_(std::move(pattern)) {}
 
 bool ExactMatcher::matches(std::string_view input) const noexcept {
     return input == pattern_;
@@ -28,8 +29,7 @@ PatternMatchResult ExactMatcher::match_with_groups(std::string_view input) const
 // PrefixMatcher Implementation
 // ============================================================================
 
-PrefixMatcher::PrefixMatcher(std::string prefix)
-    : prefix_(std::move(prefix)) {}
+PrefixMatcher::PrefixMatcher(std::string prefix) : prefix_(std::move(prefix)) {}
 
 bool PrefixMatcher::matches(std::string_view input) const noexcept {
     if (input.size() < prefix_.size()) {
@@ -51,8 +51,7 @@ PatternMatchResult PrefixMatcher::match_with_groups(std::string_view input) cons
 // WildcardMatcher Implementation
 // ============================================================================
 
-WildcardMatcher::WildcardMatcher(std::string pattern)
-    : pattern_(std::move(pattern)) {}
+WildcardMatcher::WildcardMatcher(std::string pattern) : pattern_(std::move(pattern)) {}
 
 bool WildcardMatcher::matches(std::string_view input) const noexcept {
     return match_impl(pattern_.c_str(), input.data());
@@ -61,7 +60,7 @@ bool WildcardMatcher::matches(std::string_view input) const noexcept {
 bool WildcardMatcher::match_impl(const char* pattern, const char* input) const noexcept {
     // Optimized wildcard matching using two-pointer technique
     const char* star = nullptr;
-    const char* ss = nullptr;
+    const char* ss   = nullptr;
 
     while (*input) {
         // Match single character or ?
@@ -74,14 +73,14 @@ bool WildcardMatcher::match_impl(const char* pattern, const char* input) const n
         // Star found - save position
         if (*pattern == '*') {
             star = pattern++;
-            ss = input;
+            ss   = input;
             continue;
         }
 
         // Mismatch but we have a star - backtrack
         if (star) {
             pattern = star + 1;
-            input = ++ss;
+            input   = ++ss;
             continue;
         }
 
@@ -110,15 +109,12 @@ PatternMatchResult WildcardMatcher::match_with_groups(std::string_view input) co
 class RegexMatcher::Impl {
 public:
     explicit Impl(const std::string& pattern)
-        : pattern_(pattern)
-        , cached_regex_(nullptr)
-        , valid_(false) {
-
+        : pattern_(pattern), cached_regex_(nullptr), valid_(false) {
         // Use global pattern cache for ReDoS protection and efficiency
         auto result = CompiledPatternCache::global_instance().get_or_compile(pattern);
         if (result) {
             cached_regex_ = result.value();
-            valid_ = true;
+            valid_        = true;
         } else {
             error_ = result.message();
             valid_ = false;
@@ -168,8 +164,7 @@ private:
     std::string error_;
 };
 
-RegexMatcher::RegexMatcher(std::string pattern)
-    : pattern_(std::move(pattern)) {
+RegexMatcher::RegexMatcher(std::string pattern) : pattern_(std::move(pattern)) {
     impl_ = std::make_unique<Impl>(pattern_);
 }
 
@@ -207,8 +202,7 @@ class FastPatternMatcher::Impl {
 public:
     Impl() = default;
 
-    bool add_pattern(std::string_view pattern, uint32_t rule_id,
-                    PatternType type) {
+    bool add_pattern(std::string_view pattern, uint32_t rule_id, PatternType type) {
         if (type == PatternType::AUTO) {
             type = FastPatternMatcher::detect_type(pattern);
         }
@@ -235,10 +229,8 @@ public:
             }
 
             case PatternType::WILDCARD: {
-                wildcard_patterns_.emplace_back(
-                    std::make_unique<WildcardMatcher>(pattern_str),
-                    rule_id
-                );
+                wildcard_patterns_.emplace_back(std::make_unique<WildcardMatcher>(pattern_str),
+                                                rule_id);
                 wildcard_count_++;
                 pattern_types_[pattern_str] = type;
                 return true;
@@ -246,8 +238,7 @@ public:
 
             case PatternType::REGEX: {
                 // Validate and pre-compile via cache
-                auto result = CompiledPatternCache::global_instance()
-                    .get_or_compile(pattern);
+                auto result = CompiledPatternCache::global_instance().get_or_compile(pattern);
                 if (!result) {
                     return false;  // Invalid pattern
                 }
@@ -289,7 +280,8 @@ public:
             }
 
             case PatternType::WILDCARD: {
-                auto wit = std::find_if(wildcard_patterns_.begin(), wildcard_patterns_.end(),
+                auto wit = std::find_if(
+                    wildcard_patterns_.begin(), wildcard_patterns_.end(),
                     [&pattern_str](const auto& p) { return p.first->pattern() == pattern_str; });
                 if (wit != wildcard_patterns_.end()) {
                     wildcard_patterns_.erase(wit);
@@ -299,8 +291,9 @@ public:
             }
 
             case PatternType::REGEX: {
-                auto rit = std::find_if(regex_patterns_.begin(), regex_patterns_.end(),
-                    [&pattern_str](const auto& p) { return p.first == pattern_str; });
+                auto rit =
+                    std::find_if(regex_patterns_.begin(), regex_patterns_.end(),
+                                 [&pattern_str](const auto& p) { return p.first == pattern_str; });
                 if (rit != regex_patterns_.end()) {
                     regex_patterns_.erase(rit);
                     regex_count_--;
@@ -367,22 +360,22 @@ public:
         wildcard_patterns_.clear();
         regex_patterns_.clear();
         pattern_types_.clear();
-        exact_count_ = 0;
-        prefix_count_ = 0;
+        exact_count_    = 0;
+        prefix_count_   = 0;
         wildcard_count_ = 0;
-        regex_count_ = 0;
+        regex_count_    = 0;
     }
 
     FastPatternMatcher::Stats stats() const noexcept {
         FastPatternMatcher::Stats s;
-        s.exact_patterns = exact_count_;
-        s.prefix_patterns = prefix_count_;
+        s.exact_patterns    = exact_count_;
+        s.prefix_patterns   = prefix_count_;
         s.wildcard_patterns = wildcard_count_;
-        s.regex_patterns = regex_count_;
+        s.regex_patterns    = regex_count_;
 
         auto trie_stats = trie_.stats();
-        s.trie_nodes = trie_stats.node_count;
-        s.memory_bytes = trie_stats.memory_bytes;
+        s.trie_nodes    = trie_stats.node_count;
+        s.memory_bytes  = trie_stats.memory_bytes;
 
         // Add wildcard and regex memory
         s.memory_bytes += wildcard_patterns_.size() * 64;
@@ -397,19 +390,18 @@ private:
     std::vector<std::pair<std::string, uint32_t>> regex_patterns_;
     std::unordered_map<std::string, PatternType> pattern_types_;
 
-    size_t exact_count_ = 0;
-    size_t prefix_count_ = 0;
+    size_t exact_count_    = 0;
+    size_t prefix_count_   = 0;
     size_t wildcard_count_ = 0;
-    size_t regex_count_ = 0;
+    size_t regex_count_    = 0;
 };
 
 FastPatternMatcher::FastPatternMatcher() : impl_(std::make_unique<Impl>()) {}
-FastPatternMatcher::~FastPatternMatcher() = default;
-FastPatternMatcher::FastPatternMatcher(FastPatternMatcher&&) noexcept = default;
+FastPatternMatcher::~FastPatternMatcher()                                        = default;
+FastPatternMatcher::FastPatternMatcher(FastPatternMatcher&&) noexcept            = default;
 FastPatternMatcher& FastPatternMatcher::operator=(FastPatternMatcher&&) noexcept = default;
 
-bool FastPatternMatcher::add_pattern(std::string_view pattern, uint32_t rule_id,
-                                     PatternType type) {
+bool FastPatternMatcher::add_pattern(std::string_view pattern, uint32_t rule_id, PatternType type) {
     return impl_->add_pattern(pattern, rule_id, type);
 }
 
@@ -438,16 +430,16 @@ FastPatternMatcher::PatternType FastPatternMatcher::detect_type(std::string_view
         return PatternType::EXACT;
     }
 
-    bool has_star = false;
-    bool has_question = false;
-    bool has_regex_chars = false;
+    bool has_star         = false;
+    bool has_question     = false;
+    bool has_regex_chars  = false;
     bool star_at_end_only = false;
 
     for (size_t i = 0; i < pattern.size(); ++i) {
         char c = pattern[i];
         switch (c) {
             case '*':
-                has_star = true;
+                has_star         = true;
                 star_at_end_only = (i == pattern.size() - 1);
                 break;
             case '?':
@@ -501,8 +493,8 @@ FastPatternMatcher::PatternType FastPatternMatcher::detect_type(std::string_view
  */
 struct TrieNode {
     std::unordered_map<char, std::unique_ptr<TrieNode>> children;
-    std::optional<uint32_t> exact_rule_id;      // Rule ID if this is end of exact pattern
-    std::vector<uint32_t> prefix_rule_ids;       // Rule IDs for prefix patterns ending here
+    std::optional<uint32_t> exact_rule_id;  // Rule ID if this is end of exact pattern
+    std::vector<uint32_t> prefix_rule_ids;  // Rule IDs for prefix patterns ending here
 
     bool is_end_of_pattern() const noexcept {
         return exact_rule_id.has_value() || !prefix_rule_ids.empty();
@@ -643,7 +635,7 @@ public:
         // Clean up empty nodes (bottom-up)
         for (auto it = path.rbegin(); it != path.rend(); ++it) {
             TrieNode* parent = it->first;
-            char c = it->second;
+            char c           = it->second;
 
             auto child_it = parent->children.find(c);
             if (child_it != parent->children.end()) {
@@ -661,9 +653,9 @@ public:
     }
 
     void clear() {
-        root_ = std::make_unique<TrieNode>();
+        root_          = std::make_unique<TrieNode>();
         pattern_count_ = 0;
-        node_count_ = 1;
+        node_count_    = 1;
     }
 
     size_t size() const noexcept { return pattern_count_; }
@@ -672,7 +664,7 @@ public:
     TrieMatcher::Stats stats() const noexcept {
         TrieMatcher::Stats s;
         s.pattern_count = pattern_count_;
-        s.node_count = node_count_;
+        s.node_count    = node_count_;
         // Approximate memory: each node has map overhead + pointers
         s.memory_bytes = node_count_ * (sizeof(TrieNode) + 64);  // 64 for map overhead
         return s;
@@ -685,8 +677,8 @@ private:
 };
 
 TrieMatcher::TrieMatcher() : impl_(std::make_unique<Impl>()) {}
-TrieMatcher::~TrieMatcher() = default;
-TrieMatcher::TrieMatcher(TrieMatcher&&) noexcept = default;
+TrieMatcher::~TrieMatcher()                                 = default;
+TrieMatcher::TrieMatcher(TrieMatcher&&) noexcept            = default;
 TrieMatcher& TrieMatcher::operator=(TrieMatcher&&) noexcept = default;
 
 void TrieMatcher::add_exact(std::string_view pattern, uint32_t rule_id) {
@@ -734,8 +726,7 @@ TrieMatcher::Stats TrieMatcher::stats() const noexcept {
 // ============================================================================
 
 #ifdef IPB_HAS_CTRE
-CTREMatcher::CTREMatcher(std::string pattern)
-    : pattern_(std::move(pattern)) {
+CTREMatcher::CTREMatcher(std::string pattern) : pattern_(std::move(pattern)) {
     // For runtime patterns, we fall back to std::regex
     // True CTRE patterns must be known at compile time
     fallback_ = std::make_unique<RegexMatcher>(pattern_);
@@ -748,19 +739,24 @@ bool CTREMatcher::matches(std::string_view input) const noexcept {
     // Fast path: try common industrial patterns
     if (pattern_.starts_with("ns=")) {
         auto m = patterns::match_opcua(input);
-        if (m) return true;
+        if (m)
+            return true;
     } else if (pattern_.starts_with("MB:")) {
         auto m = patterns::match_modbus(input);
-        if (m) return true;
+        if (m)
+            return true;
     } else if (pattern_.starts_with("spBv1.0")) {
         auto m = patterns::match_sparkplug(input);
-        if (m) return true;
+        if (m)
+            return true;
     } else if (pattern_.starts_with("sensors/")) {
         auto m = patterns::match_sensor(input);
-        if (m) return true;
+        if (m)
+            return true;
     } else if (pattern_.starts_with("alarms/")) {
         auto m = patterns::match_alarm(input);
-        if (m) return true;
+        if (m)
+            return true;
     }
 
     // Fallback to runtime regex
@@ -770,16 +766,14 @@ bool CTREMatcher::matches(std::string_view input) const noexcept {
 PatternMatchResult CTREMatcher::match_with_groups(std::string_view input) const {
     return fallback_->match_with_groups(input);
 }
-#endif // IPB_HAS_CTRE
+#endif  // IPB_HAS_CTRE
 
 // ============================================================================
 // PatternMatcherFactory Implementation
 // ============================================================================
 
-std::unique_ptr<IPatternMatcher> PatternMatcherFactory::create(
-        std::string_view pattern,
-        MatcherType type) {
-
+std::unique_ptr<IPatternMatcher> PatternMatcherFactory::create(std::string_view pattern,
+                                                               MatcherType type) {
     if (type == MatcherType::AUTO) {
         type = analyze_pattern(pattern);
     }
@@ -811,14 +805,14 @@ std::unique_ptr<IPatternMatcher> PatternMatcherFactory::create(
     }
 }
 
-PatternMatcherFactory::MatcherType
-PatternMatcherFactory::analyze_pattern(std::string_view pattern) noexcept {
+PatternMatcherFactory::MatcherType PatternMatcherFactory::analyze_pattern(
+    std::string_view pattern) noexcept {
     if (pattern.empty()) {
         return MatcherType::EXACT;
     }
 
-    bool has_star = false;
-    bool has_question = false;
+    bool has_star        = false;
+    bool has_question    = false;
     bool has_regex_chars = false;
 
     for (char c : pattern) {
@@ -854,8 +848,7 @@ PatternMatcherFactory::analyze_pattern(std::string_view pattern) noexcept {
     // Simple wildcard only (no regex metacharacters)
     if ((has_star || has_question) && !has_regex_chars) {
         // Check for simple prefix pattern: "prefix*"
-        if (has_star && !has_question &&
-            pattern.find('*') == pattern.size() - 1) {
+        if (has_star && !has_question && pattern.find('*') == pattern.size() - 1) {
             return MatcherType::PREFIX;
         }
         return MatcherType::WILDCARD;
@@ -869,4 +862,4 @@ PatternMatcherFactory::analyze_pattern(std::string_view pattern) noexcept {
 #endif
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

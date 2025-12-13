@@ -1,7 +1,8 @@
 #include "ipb/core/scoop_registry/scoop_registry.hpp"
+
+#include <ipb/common/debug.hpp>
 #include <ipb/common/endpoint.hpp>
 #include <ipb/common/error.hpp>
-#include <ipb/common/debug.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <algorithm>
@@ -14,8 +15,8 @@ namespace ipb::core {
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::PROTOCOL;  // Scoops are protocol sources
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::PROTOCOL;  // Scoops are protocol sources
+}  // anonymous namespace
 
 // ============================================================================
 // AggregatedSubscription Implementation
@@ -26,26 +27,24 @@ AggregatedSubscription::~AggregatedSubscription() {
 }
 
 AggregatedSubscription::AggregatedSubscription(AggregatedSubscription&& other) noexcept
-    : sources_(std::move(other.sources_))
-    , registry_(std::move(other.registry_))
-    , id_(other.id_) {
+    : sources_(std::move(other.sources_)), registry_(std::move(other.registry_)), id_(other.id_) {
     other.id_ = 0;
 }
 
 AggregatedSubscription& AggregatedSubscription::operator=(AggregatedSubscription&& other) noexcept {
     if (this != &other) {
         cancel();
-        sources_ = std::move(other.sources_);
+        sources_  = std::move(other.sources_);
         registry_ = std::move(other.registry_);
-        id_ = other.id_;
+        id_       = other.id_;
         other.id_ = 0;
     }
     return *this;
 }
 
 bool AggregatedSubscription::is_active() const noexcept {
-    return !sources_.empty() && std::any_of(sources_.begin(), sources_.end(),
-        [](const auto& s) { return s.active; });
+    return !sources_.empty() &&
+           std::any_of(sources_.begin(), sources_.end(), [](const auto& s) { return s.active; });
 }
 
 void AggregatedSubscription::cancel() {
@@ -56,8 +55,7 @@ void AggregatedSubscription::cancel() {
 }
 
 size_t AggregatedSubscription::source_count() const noexcept {
-    return std::count_if(sources_.begin(), sources_.end(),
-        [](const auto& s) { return s.active; });
+    return std::count_if(sources_.begin(), sources_.end(), [](const auto& s) { return s.active; });
 }
 
 // ============================================================================
@@ -66,12 +64,9 @@ size_t AggregatedSubscription::source_count() const noexcept {
 
 class ScoopRegistryImpl : public std::enable_shared_from_this<ScoopRegistryImpl> {
 public:
-    explicit ScoopRegistryImpl(const ScoopRegistryConfig& config)
-        : config_(config) {}
+    explicit ScoopRegistryImpl(const ScoopRegistryConfig& config) : config_(config) {}
 
-    ~ScoopRegistryImpl() {
-        stop();
-    }
+    ~ScoopRegistryImpl() { stop(); }
 
     bool start() {
         IPB_SPAN_CAT("ScoopRegistry::start", LOG_CAT);
@@ -85,16 +80,12 @@ public:
 
         if (config_.enable_health_check) {
             IPB_LOG_DEBUG(LOG_CAT, "Starting health check thread");
-            health_check_thread_ = std::thread([this]() {
-                health_check_loop();
-            });
+            health_check_thread_ = std::thread([this]() { health_check_loop(); });
         }
 
         if (config_.enable_auto_reconnect) {
             IPB_LOG_DEBUG(LOG_CAT, "Starting auto-reconnect thread");
-            reconnect_thread_ = std::thread([this]() {
-                reconnect_loop();
-            });
+            reconnect_thread_ = std::thread([this]() { reconnect_loop(); });
         }
 
         IPB_LOG_INFO(LOG_CAT, "ScoopRegistry started");
@@ -124,12 +115,10 @@ public:
         IPB_LOG_INFO(LOG_CAT, "ScoopRegistry stopped");
     }
 
-    bool is_running() const noexcept {
-        return running_.load(std::memory_order_acquire);
-    }
+    bool is_running() const noexcept { return running_.load(std::memory_order_acquire); }
 
     bool register_scoop(std::string_view id, std::shared_ptr<common::IProtocolSource> scoop,
-                       bool is_primary, uint32_t priority) {
+                        bool is_primary, uint32_t priority) {
         IPB_PRECONDITION(!id.empty());
         IPB_PRECONDITION(scoop != nullptr);
 
@@ -141,21 +130,22 @@ public:
             return false;
         }
 
-        auto info = std::make_shared<ScoopInfo>();
-        info->id = id_str;
-        info->scoop = std::move(scoop);
+        auto info        = std::make_shared<ScoopInfo>();
+        info->id         = id_str;
+        info->scoop      = std::move(scoop);
         info->is_primary = is_primary;
-        info->priority = priority;
-        info->type = std::string(info->scoop->protocol_name());
-        info->health = ScoopHealth::UNKNOWN;
+        info->priority   = priority;
+        info->type       = std::string(info->scoop->protocol_name());
+        info->health     = ScoopHealth::UNKNOWN;
 
         // Capture type before moving info
         std::string scoop_type = info->type;
-        scoops_[id_str] = std::move(info);
+        scoops_[id_str]        = std::move(info);
         stats_.active_scoops.fetch_add(1, std::memory_order_relaxed);
 
         IPB_LOG_INFO(LOG_CAT, "Registered scoop: " << id << " (type=" << scoop_type
-                    << ", primary=" << is_primary << ", priority=" << priority << ")");
+                                                   << ", primary=" << is_primary
+                                                   << ", priority=" << priority << ")");
         return true;
     }
 
@@ -208,13 +198,13 @@ public:
         }
 
         ScoopInfo copy;
-        copy.id = it->second->id;
-        copy.type = it->second->type;
+        copy.id         = it->second->id;
+        copy.type       = it->second->type;
         copy.is_primary = it->second->is_primary;
-        copy.priority = it->second->priority;
-        copy.enabled = it->second->enabled;
-        copy.health = it->second->health;
-        copy.connected = it->second->connected;
+        copy.priority   = it->second->priority;
+        copy.enabled    = it->second->enabled;
+        copy.health     = it->second->health;
+        copy.connected  = it->second->connected;
 
         return copy;
     }
@@ -273,9 +263,8 @@ public:
         return true;
     }
 
-    ScoopSelectionResult select_scoop(
-            const std::vector<std::string>& candidate_ids,
-            ReadStrategy strategy) {
+    ScoopSelectionResult select_scoop(const std::vector<std::string>& candidate_ids,
+                                      ReadStrategy strategy) {
         ScoopSelectionResult result;
 
         std::vector<const ScoopInfo*> candidates;
@@ -313,13 +302,12 @@ public:
             case ReadStrategy::FAILOVER: {
                 // Sort by priority (lower = higher priority)
                 std::vector<const ScoopInfo*> sorted = candidates;
-                std::sort(sorted.begin(), sorted.end(),
-                    [](const ScoopInfo* a, const ScoopInfo* b) {
-                        if (a->is_primary != b->is_primary) {
-                            return a->is_primary;
-                        }
-                        return a->priority < b->priority;
-                    });
+                std::sort(sorted.begin(), sorted.end(), [](const ScoopInfo* a, const ScoopInfo* b) {
+                    if (a->is_primary != b->is_primary) {
+                        return a->is_primary;
+                    }
+                    return a->priority < b->priority;
+                });
 
                 for (const auto* scoop : sorted) {
                     if (scoop->connected && scoop->health == ScoopHealth::HEALTHY) {
@@ -351,13 +339,13 @@ public:
 
             case ReadStrategy::FASTEST_RESPONSE: {
                 const ScoopInfo* fastest = nullptr;
-                double min_latency = std::numeric_limits<double>::max();
+                double min_latency       = std::numeric_limits<double>::max();
 
                 for (const auto* scoop : candidates) {
                     double latency = scoop->avg_latency_us();
                     if (latency < min_latency || (latency == 0 && fastest == nullptr)) {
                         min_latency = latency;
-                        fastest = scoop;
+                        fastest     = scoop;
                     }
                 }
 
@@ -372,16 +360,14 @@ public:
         return result;
     }
 
-    common::Result<common::DataSet> read_from(
-            const std::vector<std::string>& candidate_ids,
-            ReadStrategy strategy) {
+    common::Result<common::DataSet> read_from(const std::vector<std::string>& candidate_ids,
+                                              ReadStrategy strategy) {
         auto selection = select_scoop(candidate_ids, strategy);
 
         if (!selection.success) {
             stats_.failed_reads.fetch_add(1, std::memory_order_relaxed);
-            return common::Result<common::DataSet>(
-                common::ErrorCode::INVALID_ARGUMENT,
-                selection.error_message);
+            return common::Result<common::DataSet>(common::ErrorCode::INVALID_ARGUMENT,
+                                                   selection.error_message);
         }
 
         stats_.total_reads.fetch_add(1, std::memory_order_relaxed);
@@ -401,9 +387,8 @@ public:
         }
 
         stats_.failed_reads.fetch_add(1, std::memory_order_relaxed);
-        return common::Result<common::DataSet>(
-            common::ErrorCode::UNKNOWN_ERROR,
-            "All scoops failed to read");
+        return common::Result<common::DataSet>(common::ErrorCode::UNKNOWN_ERROR,
+                                               "All scoops failed to read");
     }
 
     common::Result<common::DataSet> read_from_scoop(std::string_view scoop_id) {
@@ -414,30 +399,27 @@ public:
 
             auto it = scoops_.find(std::string(scoop_id));
             if (it == scoops_.end()) {
-                return common::Result<common::DataSet>(
-                    common::ErrorCode::INVALID_ARGUMENT,
-                    "Scoop not found");
+                return common::Result<common::DataSet>(common::ErrorCode::INVALID_ARGUMENT,
+                                                       "Scoop not found");
             }
 
             info = it->second;
         }
 
         if (!info->enabled) {
-            return common::Result<common::DataSet>(
-                common::ErrorCode::INVALID_ARGUMENT,
-                "Scoop is disabled");
+            return common::Result<common::DataSet>(common::ErrorCode::INVALID_ARGUMENT,
+                                                   "Scoop is disabled");
         }
 
         info->reads_attempted.fetch_add(1, std::memory_order_relaxed);
 
         common::rt::HighResolutionTimer timer;
-        auto result = info->scoop->read();
+        auto result  = info->scoop->read();
         auto elapsed = timer.elapsed();
 
         if (result.is_success()) {
             info->reads_successful.fetch_add(1, std::memory_order_relaxed);
-            info->data_points_received.fetch_add(
-                result.value().size(), std::memory_order_relaxed);
+            info->data_points_received.fetch_add(result.value().size(), std::memory_order_relaxed);
             info->total_latency_ns.fetch_add(elapsed.count(), std::memory_order_relaxed);
             stats_.successful_reads.fetch_add(1, std::memory_order_relaxed);
         } else {
@@ -464,13 +446,12 @@ public:
         return common::Result<common::DataSet>(std::move(merged));
     }
 
-    AggregatedSubscription subscribe(
-            const std::vector<std::string>& scoop_ids,
-            AggregatedSubscription::DataCallback data_callback,
-            AggregatedSubscription::ErrorCallback error_callback) {
+    AggregatedSubscription subscribe(const std::vector<std::string>& scoop_ids,
+                                     AggregatedSubscription::DataCallback data_callback,
+                                     AggregatedSubscription::ErrorCallback error_callback) {
         AggregatedSubscription sub;
         sub.registry_ = shared_from_this();
-        sub.id_ = next_subscription_id_.fetch_add(1, std::memory_order_relaxed);
+        sub.id_       = next_subscription_id_.fetch_add(1, std::memory_order_relaxed);
 
         std::shared_lock lock(scoops_mutex_);
 
@@ -484,9 +465,7 @@ public:
 
             // Subscribe to scoop
             auto result = info->scoop->subscribe(
-                [data_callback, id](common::DataSet data) {
-                    data_callback(data, id);
-                },
+                [data_callback, id](common::DataSet data) { data_callback(data, id); },
                 [error_callback, id](common::ErrorCode code, std::string_view msg) {
                     if (error_callback) {
                         error_callback(id, code, msg);
@@ -496,7 +475,7 @@ public:
             if (result.is_success()) {
                 AggregatedSubscription::SourceSubscription source;
                 source.scoop_id = id;
-                source.active = true;
+                source.active   = true;
                 sub.sources_.push_back(std::move(source));
             }
         }
@@ -514,8 +493,7 @@ public:
 
             auto it = scoops_.find(std::string(id));
             if (it == scoops_.end()) {
-                return common::Result<>(common::ErrorCode::INVALID_ARGUMENT,
-                                       "Scoop not found");
+                return common::Result<>(common::ErrorCode::INVALID_ARGUMENT, "Scoop not found");
             }
 
             info = it->second;
@@ -524,9 +502,9 @@ public:
         auto result = info->scoop->connect();
 
         if (result.is_success()) {
-            info->connected = true;
+            info->connected         = true;
             info->last_connect_time = common::Timestamp::now();
-            info->health = ScoopHealth::HEALTHY;
+            info->health            = ScoopHealth::HEALTHY;
             stats_.connected_scoops.fetch_add(1, std::memory_order_relaxed);
         }
 
@@ -541,8 +519,7 @@ public:
 
             auto it = scoops_.find(std::string(id));
             if (it == scoops_.end()) {
-                return common::Result<>(common::ErrorCode::INVALID_ARGUMENT,
-                                       "Scoop not found");
+                return common::Result<>(common::ErrorCode::INVALID_ARGUMENT, "Scoop not found");
             }
 
             info = it->second;
@@ -550,9 +527,9 @@ public:
 
         auto result = info->scoop->disconnect();
 
-        info->connected = false;
+        info->connected            = false;
         info->last_disconnect_time = common::Timestamp::now();
-        info->health = ScoopHealth::DISCONNECTED;
+        info->health               = ScoopHealth::DISCONNECTED;
         stats_.connected_scoops.fetch_sub(1, std::memory_order_relaxed);
 
         return result;
@@ -611,13 +588,13 @@ public:
         }
 
         if (!info->scoop->is_running()) {
-            info->health = ScoopHealth::UNHEALTHY;
+            info->health         = ScoopHealth::UNHEALTHY;
             info->health_message = "Scoop is not running";
         } else if (!info->scoop->is_connected()) {
-            info->health = ScoopHealth::DISCONNECTED;
+            info->health         = ScoopHealth::DISCONNECTED;
             info->health_message = "Scoop is disconnected";
         } else if (!info->scoop->is_healthy()) {
-            info->health = ScoopHealth::DEGRADED;
+            info->health         = ScoopHealth::DEGRADED;
             info->health_message = info->scoop->get_health_status();
         } else {
             info->health = ScoopHealth::HEALTHY;
@@ -662,8 +639,8 @@ public:
 
         auto it = scoops_.find(std::string(id));
         if (it != scoops_.end()) {
-            it->second->health = ScoopHealth::UNHEALTHY;
-            it->second->health_message = std::string(reason);
+            it->second->health            = ScoopHealth::UNHEALTHY;
+            it->second->health_message    = std::string(reason);
             it->second->last_health_check = common::Timestamp::now();
         }
 
@@ -722,9 +699,7 @@ public:
         return it->second->scoop->get_addresses();
     }
 
-    const ScoopRegistryStats& stats() const noexcept {
-        return stats_;
-    }
+    const ScoopRegistryStats& stats() const noexcept { return stats_; }
 
     void reset_stats() {
         stats_.reset();
@@ -746,13 +721,13 @@ public:
         std::unordered_map<std::string, ScoopInfo> result;
         for (const auto& [id, info] : scoops_) {
             ScoopInfo copy;
-            copy.id = info->id;
-            copy.type = info->type;
+            copy.id         = info->id;
+            copy.type       = info->type;
             copy.is_primary = info->is_primary;
-            copy.priority = info->priority;
-            copy.enabled = info->enabled;
-            copy.health = info->health;
-            copy.connected = info->connected;
+            copy.priority   = info->priority;
+            copy.enabled    = info->enabled;
+            copy.health     = info->health;
+            copy.connected  = info->connected;
 
             result[id] = copy;
         }
@@ -760,9 +735,7 @@ public:
         return result;
     }
 
-    const ScoopRegistryConfig& config() const noexcept {
-        return config_;
-    }
+    const ScoopRegistryConfig& config() const noexcept { return config_; }
 
 private:
     void health_check_loop() {
@@ -809,10 +782,12 @@ private:
         uint64_t healthy = 0, connected = 0, unhealthy = 0;
 
         for (const auto& [_, info] : scoops_) {
-            if (info->health == ScoopHealth::HEALTHY) ++healthy;
-            if (info->connected) ++connected;
-            if (info->health == ScoopHealth::UNHEALTHY ||
-                info->health == ScoopHealth::DISCONNECTED) ++unhealthy;
+            if (info->health == ScoopHealth::HEALTHY)
+                ++healthy;
+            if (info->connected)
+                ++connected;
+            if (info->health == ScoopHealth::UNHEALTHY || info->health == ScoopHealth::DISCONNECTED)
+                ++unhealthy;
         }
 
         stats_.healthy_scoops.store(healthy, std::memory_order_relaxed);
@@ -848,12 +823,18 @@ ScoopRegistry::ScoopRegistry(const ScoopRegistryConfig& config)
 
 ScoopRegistry::~ScoopRegistry() = default;
 
-ScoopRegistry::ScoopRegistry(ScoopRegistry&&) noexcept = default;
+ScoopRegistry::ScoopRegistry(ScoopRegistry&&) noexcept            = default;
 ScoopRegistry& ScoopRegistry::operator=(ScoopRegistry&&) noexcept = default;
 
-bool ScoopRegistry::start() { return impl_->start(); }
-void ScoopRegistry::stop() { impl_->stop(); }
-bool ScoopRegistry::is_running() const noexcept { return impl_->is_running(); }
+bool ScoopRegistry::start() {
+    return impl_->start();
+}
+void ScoopRegistry::stop() {
+    impl_->stop();
+}
+bool ScoopRegistry::is_running() const noexcept {
+    return impl_->is_running();
+}
 
 bool ScoopRegistry::register_scoop(std::string_view id,
                                    std::shared_ptr<common::IProtocolSource> scoop) {
@@ -867,8 +848,8 @@ bool ScoopRegistry::register_scoop(std::string_view id,
 }
 
 bool ScoopRegistry::register_scoop(std::string_view id,
-                                   std::shared_ptr<common::IProtocolSource> scoop,
-                                   bool is_primary, uint32_t priority) {
+                                   std::shared_ptr<common::IProtocolSource> scoop, bool is_primary,
+                                   uint32_t priority) {
     return impl_->register_scoop(id, std::move(scoop), is_primary, priority);
 }
 
@@ -908,15 +889,13 @@ bool ScoopRegistry::set_scoop_priority(std::string_view id, uint32_t priority) {
     return impl_->set_scoop_priority(id, priority);
 }
 
-ScoopSelectionResult ScoopRegistry::select_scoop(
-        const std::vector<std::string>& candidate_ids,
-        ReadStrategy strategy) {
+ScoopSelectionResult ScoopRegistry::select_scoop(const std::vector<std::string>& candidate_ids,
+                                                 ReadStrategy strategy) {
     return impl_->select_scoop(candidate_ids, strategy);
 }
 
 common::Result<common::DataSet> ScoopRegistry::read_from(
-        const std::vector<std::string>& candidate_ids,
-        ReadStrategy strategy) {
+    const std::vector<std::string>& candidate_ids, ReadStrategy strategy) {
     return impl_->read_from(candidate_ids, strategy);
 }
 
@@ -925,20 +904,19 @@ common::Result<common::DataSet> ScoopRegistry::read_from_scoop(std::string_view 
 }
 
 common::Result<common::DataSet> ScoopRegistry::read_merged(
-        const std::vector<std::string>& scoop_ids) {
+    const std::vector<std::string>& scoop_ids) {
     return impl_->read_merged(scoop_ids);
 }
 
 AggregatedSubscription ScoopRegistry::subscribe(
-        const std::vector<std::string>& scoop_ids,
-        AggregatedSubscription::DataCallback data_callback,
-        AggregatedSubscription::ErrorCallback error_callback) {
+    const std::vector<std::string>& scoop_ids, AggregatedSubscription::DataCallback data_callback,
+    AggregatedSubscription::ErrorCallback error_callback) {
     return impl_->subscribe(scoop_ids, std::move(data_callback), std::move(error_callback));
 }
 
 AggregatedSubscription ScoopRegistry::subscribe_all(
-        AggregatedSubscription::DataCallback data_callback,
-        AggregatedSubscription::ErrorCallback error_callback) {
+    AggregatedSubscription::DataCallback data_callback,
+    AggregatedSubscription::ErrorCallback error_callback) {
     return impl_->subscribe(get_scoop_ids(), std::move(data_callback), std::move(error_callback));
 }
 
@@ -950,8 +928,12 @@ common::Result<> ScoopRegistry::disconnect_scoop(std::string_view id) {
     return impl_->disconnect_scoop(id);
 }
 
-void ScoopRegistry::connect_all() { impl_->connect_all(); }
-void ScoopRegistry::disconnect_all() { impl_->disconnect_all(); }
+void ScoopRegistry::connect_all() {
+    impl_->connect_all();
+}
+void ScoopRegistry::disconnect_all() {
+    impl_->disconnect_all();
+}
 
 std::vector<std::string> ScoopRegistry::get_connected_scoops() const {
     return impl_->get_connected_scoops();
@@ -1011,4 +993,4 @@ const ScoopRegistryConfig& ScoopRegistry::config() const noexcept {
     return impl_->config();
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

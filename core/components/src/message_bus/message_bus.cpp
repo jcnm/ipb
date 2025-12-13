@@ -1,8 +1,7 @@
 #include "ipb/core/message_bus/message_bus.hpp"
-#include "ipb/core/message_bus/channel.hpp"
 
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <algorithm>
@@ -12,13 +11,15 @@
 #include <thread>
 #include <unordered_map>
 
+#include "ipb/core/message_bus/channel.hpp"
+
 namespace ipb::core {
 
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::MESSAGING;
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::MESSAGING;
+}  // anonymous namespace
 
 // ============================================================================
 // Subscription Implementation
@@ -49,16 +50,13 @@ void Subscription::cancel() {
 
 class MessageBusImpl {
 public:
-    explicit MessageBusImpl(const MessageBusConfig& config)
-        : config_(config) {
+    explicit MessageBusImpl(const MessageBusConfig& config) : config_(config) {
         if (config_.dispatcher_threads == 0) {
             config_.dispatcher_threads = std::thread::hardware_concurrency();
         }
     }
 
-    ~MessageBusImpl() {
-        stop();
-    }
+    ~MessageBusImpl() { stop(); }
 
     bool start() {
         IPB_SPAN_CAT("MessageBus::start", LOG_CAT);
@@ -70,13 +68,12 @@ public:
 
         stop_requested_.store(false);
 
-        IPB_LOG_INFO(LOG_CAT, "Starting MessageBus with " << config_.dispatcher_threads << " dispatcher threads");
+        IPB_LOG_INFO(LOG_CAT, "Starting MessageBus with " << config_.dispatcher_threads
+                                                          << " dispatcher threads");
 
         // Start dispatcher threads
         for (size_t i = 0; i < config_.dispatcher_threads; ++i) {
-            dispatcher_threads_.emplace_back([this, i]() {
-                dispatcher_loop(i);
-            });
+            dispatcher_threads_.emplace_back([this, i]() { dispatcher_loop(i); });
 
             // Set CPU affinity if configured
             if (config_.cpu_affinity >= 0) {
@@ -88,8 +85,7 @@ public:
             // Set real-time priority if configured
             if (config_.realtime_priority > 0) {
                 common::rt::ThreadPriority::set_realtime_priority(
-                    dispatcher_threads_.back().get_id(),
-                    config_.realtime_priority);
+                    dispatcher_threads_.back().get_id(), config_.realtime_priority);
             }
         }
 
@@ -120,9 +116,7 @@ public:
         IPB_LOG_INFO(LOG_CAT, "MessageBus stopped");
     }
 
-    bool is_running() const noexcept {
-        return running_.load(std::memory_order_acquire);
-    }
+    bool is_running() const noexcept { return running_.load(std::memory_order_acquire); }
 
     bool publish(std::string_view topic, Message msg) {
         IPB_PRECONDITION(!topic.empty());
@@ -134,7 +128,7 @@ public:
             return false;
         }
 
-        msg.topic = std::string(topic);
+        msg.topic    = std::string(topic);
         bool success = channel->publish(std::move(msg));
 
         if (IPB_LIKELY(success)) {
@@ -168,7 +162,7 @@ public:
     }
 
     bool publish_deadline(std::string_view topic, Message msg, common::Timestamp deadline) {
-        msg.type = Message::Type::DEADLINE_TASK;
+        msg.type        = Message::Type::DEADLINE_TASK;
         msg.deadline_ns = deadline.nanoseconds();
         return publish(topic, std::move(msg));
     }
@@ -197,10 +191,9 @@ public:
         return Subscription(id, channel);
     }
 
-    Subscription subscribe_filtered(
-            std::string_view topic_pattern,
-            std::function<bool(const Message&)> filter,
-            SubscriberCallback callback) {
+    Subscription subscribe_filtered(std::string_view topic_pattern,
+                                    std::function<bool(const Message&)> filter,
+                                    SubscriberCallback callback) {
         if (TopicMatcher::has_wildcards(topic_pattern)) {
             return subscribe_wildcard(topic_pattern, std::move(callback), std::move(filter));
         }
@@ -239,12 +232,13 @@ public:
 
         // Check capacity
         if (IPB_UNLIKELY(channels_.size() >= config_.max_channels)) {
-            IPB_LOG_ERROR(LOG_CAT, "Max channels reached (" << config_.max_channels
-                         << "), cannot create channel: " << topic);
+            IPB_LOG_ERROR(LOG_CAT, "Max channels reached ("
+                                       << config_.max_channels
+                                       << "), cannot create channel: " << topic);
             return nullptr;
         }
 
-        auto channel = std::make_shared<Channel>(topic_str);
+        auto channel         = std::make_shared<Channel>(topic_str);
         channels_[topic_str] = channel;
         stats_.active_channels.fetch_add(1, std::memory_order_relaxed);
 
@@ -269,17 +263,11 @@ public:
         return topics;
     }
 
-    const MessageBusStats& stats() const noexcept {
-        return stats_;
-    }
+    const MessageBusStats& stats() const noexcept { return stats_; }
 
-    void reset_stats() {
-        stats_.reset();
-    }
+    void reset_stats() { stats_.reset(); }
 
-    const MessageBusConfig& config() const noexcept {
-        return config_;
-    }
+    const MessageBusConfig& config() const noexcept { return config_; }
 
 private:
     void dispatcher_loop(size_t thread_id) {
@@ -301,7 +289,8 @@ private:
 
             if (IPB_LIKELY(total_dispatched > 0)) {
                 stats_.messages_delivered.fetch_add(total_dispatched, std::memory_order_relaxed);
-                IPB_LOG_TRACE(LOG_CAT, "Thread " << thread_id << " dispatched " << total_dispatched << " messages");
+                IPB_LOG_TRACE(LOG_CAT, "Thread " << thread_id << " dispatched " << total_dispatched
+                                                 << " messages");
             } else {
                 // No messages - wait for notification
                 std::unique_lock lock(dispatch_mutex_);
@@ -312,19 +301,13 @@ private:
         IPB_LOG_DEBUG(LOG_CAT, "Dispatcher thread " << thread_id << " stopped");
     }
 
-    Subscription subscribe_wildcard(
-            std::string_view pattern,
-            SubscriberCallback callback,
-            std::function<bool(const Message&)> filter) {
+    Subscription subscribe_wildcard(std::string_view pattern, SubscriberCallback callback,
+                                    std::function<bool(const Message&)> filter) {
         uint64_t id = next_wildcard_id_.fetch_add(1, std::memory_order_relaxed);
 
         std::unique_lock lock(wildcards_mutex_);
-        wildcard_subscriptions_.push_back({
-            id,
-            std::string(pattern),
-            std::move(callback),
-            std::move(filter)
-        });
+        wildcard_subscriptions_.push_back(
+            {id, std::string(pattern), std::move(callback), std::move(filter)});
 
         stats_.active_subscriptions.fetch_add(1, std::memory_order_relaxed);
 
@@ -381,15 +364,14 @@ private:
 // MessageBus Public Interface
 // ============================================================================
 
-MessageBus::MessageBus()
-    : impl_(std::make_unique<MessageBusImpl>(MessageBusConfig{})) {}
+MessageBus::MessageBus() : impl_(std::make_unique<MessageBusImpl>(MessageBusConfig{})) {}
 
 MessageBus::MessageBus(const MessageBusConfig& config)
     : impl_(std::make_unique<MessageBusImpl>(config)) {}
 
 MessageBus::~MessageBus() = default;
 
-MessageBus::MessageBus(MessageBus&&) noexcept = default;
+MessageBus::MessageBus(MessageBus&&) noexcept            = default;
 MessageBus& MessageBus::operator=(MessageBus&&) noexcept = default;
 
 bool MessageBus::start() {
@@ -428,10 +410,9 @@ Subscription MessageBus::subscribe(std::string_view topic_pattern, SubscriberCal
     return impl_->subscribe(topic_pattern, std::move(callback));
 }
 
-Subscription MessageBus::subscribe_filtered(
-        std::string_view topic_pattern,
-        std::function<bool(const Message&)> filter,
-        SubscriberCallback callback) {
+Subscription MessageBus::subscribe_filtered(std::string_view topic_pattern,
+                                            std::function<bool(const Message&)> filter,
+                                            SubscriberCallback callback) {
     return impl_->subscribe_filtered(topic_pattern, std::move(filter), std::move(callback));
 }
 
@@ -459,4 +440,4 @@ const MessageBusConfig& MessageBus::config() const noexcept {
     return impl_->config();
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

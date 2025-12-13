@@ -47,14 +47,14 @@ namespace ipb::common::benchmark {
  * @brief Benchmark configuration
  */
 struct BenchmarkConfig {
-    size_t iterations{10000};         // Number of benchmark iterations
-    size_t warmup_iterations{100};    // Warmup iterations (not measured)
-    size_t min_duration_ms{100};      // Minimum benchmark duration
-    size_t max_duration_ms{60000};    // Maximum benchmark duration (timeout)
-    bool track_memory{false};         // Track memory allocations
-    bool track_cpu_cycles{false};     // Track CPU cycles (if available)
-    double outlier_threshold{3.0};    // Std deviations for outlier detection
-    bool remove_outliers{true};       // Remove outliers from statistics
+    size_t iterations{10000};       // Number of benchmark iterations
+    size_t warmup_iterations{100};  // Warmup iterations (not measured)
+    size_t min_duration_ms{100};    // Minimum benchmark duration
+    size_t max_duration_ms{60000};  // Maximum benchmark duration (timeout)
+    bool track_memory{false};       // Track memory allocations
+    bool track_cpu_cycles{false};   // Track CPU cycles (if available)
+    double outlier_threshold{3.0};  // Std deviations for outlier detection
+    bool remove_outliers{true};     // Remove outliers from statistics
 };
 
 /**
@@ -62,11 +62,11 @@ struct BenchmarkConfig {
  */
 struct SLOSpec {
     std::string name;
-    double p50_ns{0};     // Median latency target (0 = ignore)
-    double p95_ns{0};     // 95th percentile target
-    double p99_ns{0};     // 99th percentile target
-    double max_ns{0};     // Maximum latency target
-    double min_throughput{0}; // Minimum operations per second
+    double p50_ns{0};          // Median latency target (0 = ignore)
+    double p95_ns{0};          // 95th percentile target
+    double p99_ns{0};          // 99th percentile target
+    double max_ns{0};          // Maximum latency target
+    double min_throughput{0};  // Minimum operations per second
 };
 
 /**
@@ -255,9 +255,7 @@ public:
     }
 
     int64_t elapsed_ns() const noexcept {
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(
-            end_ - start_
-        ).count();
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(end_ - start_).count();
     }
 
     uint64_t elapsed_cycles() const noexcept {
@@ -268,9 +266,7 @@ public:
 #endif
     }
 
-    void set_track_cycles(bool track) noexcept {
-        track_cycles_ = track;
-    }
+    void set_track_cycles(bool track) noexcept { track_cycles_ = track; }
 
 private:
     std::chrono::high_resolution_clock::time_point start_;
@@ -282,7 +278,7 @@ private:
 #ifdef __x86_64__
     static inline uint64_t __rdtsc() noexcept {
         unsigned int lo, hi;
-        __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+        __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
         return ((uint64_t)hi << 32) | lo;
     }
 #endif
@@ -293,14 +289,11 @@ private:
  */
 class Benchmark {
 public:
-    using BenchFunc = std::function<void()>;
-    using SetupFunc = std::function<void()>;
+    using BenchFunc    = std::function<void()>;
+    using SetupFunc    = std::function<void()>;
     using TeardownFunc = std::function<void()>;
 
-    Benchmark(std::string name, BenchFunc func)
-        : name_(std::move(name))
-        , func_(std::move(func))
-    {}
+    Benchmark(std::string name, BenchFunc func) : name_(std::move(name)), func_(std::move(func)) {}
 
     void set_setup(SetupFunc setup) { setup_ = std::move(setup); }
     void set_teardown(TeardownFunc teardown) { teardown_ = std::move(teardown); }
@@ -311,7 +304,7 @@ public:
      */
     BenchmarkResults run(const BenchmarkConfig& config) {
         BenchmarkResults results;
-        results.name = name_;
+        results.name       = name_;
         results.iterations = config.iterations;
 
         std::vector<Measurement> measurements;
@@ -322,14 +315,16 @@ public:
 
         // Warmup phase
         for (size_t i = 0; i < config.warmup_iterations; ++i) {
-            if (setup_) setup_();
+            if (setup_)
+                setup_();
             func_();
-            if (teardown_) teardown_();
+            if (teardown_)
+                teardown_();
         }
 
         // Measurement phase
         auto overall_start = std::chrono::steady_clock::now();
-        auto deadline = overall_start + std::chrono::milliseconds(config.max_duration_ms);
+        auto deadline      = overall_start + std::chrono::milliseconds(config.max_duration_ms);
 
         for (size_t i = 0; i < config.iterations; ++i) {
             // Check timeout
@@ -337,24 +332,26 @@ public:
                 break;
             }
 
-            if (setup_) setup_();
+            if (setup_)
+                setup_();
 
             timer.start();
             func_();
             timer.stop();
 
-            if (teardown_) teardown_();
+            if (teardown_)
+                teardown_();
 
             Measurement m;
             m.duration_ns = timer.elapsed_ns();
-            m.cpu_cycles = timer.elapsed_cycles();
+            m.cpu_cycles  = timer.elapsed_cycles();
             measurements.push_back(m);
         }
 
         auto overall_end = std::chrono::steady_clock::now();
-        results.total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            overall_end - overall_start
-        ).count();
+        results.total_duration_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(overall_end - overall_start)
+                .count();
 
         // Extract latencies
         results.latencies_ns.reserve(measurements.size());
@@ -369,8 +366,7 @@ public:
 
         // CPU cycles per op
         if (config.track_cpu_cycles && results.valid_iterations > 0) {
-            results.cycles_per_op = static_cast<double>(total_cycles) /
-                                    results.valid_iterations;
+            results.cycles_per_op = static_cast<double>(total_cycles) / results.valid_iterations;
         }
 
         // Validate SLO
@@ -390,8 +386,7 @@ private:
     TeardownFunc teardown_;
     std::optional<SLOSpec> slo_;
 
-    void calculate_statistics(BenchmarkResults& results,
-                              const BenchmarkConfig& config) {
+    void calculate_statistics(BenchmarkResults& results, const BenchmarkConfig& config) {
         auto& latencies = results.latencies_ns;
 
         if (latencies.empty()) {
@@ -402,7 +397,7 @@ private:
         std::sort(latencies.begin(), latencies.end());
 
         // Calculate initial mean and stddev
-        double sum = std::accumulate(latencies.begin(), latencies.end(), 0.0);
+        double sum  = std::accumulate(latencies.begin(), latencies.end(), 0.0);
         double mean = sum / latencies.size();
 
         double sq_sum = 0;
@@ -430,7 +425,7 @@ private:
                 std::sort(latencies.begin(), latencies.end());
 
                 // Recalculate mean and stddev
-                sum = std::accumulate(latencies.begin(), latencies.end(), 0.0);
+                sum  = std::accumulate(latencies.begin(), latencies.end(), 0.0);
                 mean = sum / latencies.size();
 
                 sq_sum = 0;
@@ -442,18 +437,18 @@ private:
         }
 
         results.valid_iterations = latencies.size();
-        results.mean_ns = mean;
-        results.stddev_ns = stddev;
-        results.min_ns = latencies.front();
-        results.max_ns = latencies.back();
+        results.mean_ns          = mean;
+        results.stddev_ns        = stddev;
+        results.min_ns           = latencies.front();
+        results.max_ns           = latencies.back();
 
         // Percentiles
-        results.p50_ns = percentile(latencies, 0.50);
-        results.p75_ns = percentile(latencies, 0.75);
-        results.p90_ns = percentile(latencies, 0.90);
-        results.p95_ns = percentile(latencies, 0.95);
-        results.p99_ns = percentile(latencies, 0.99);
-        results.p999_ns = percentile(latencies, 0.999);
+        results.p50_ns    = percentile(latencies, 0.50);
+        results.p75_ns    = percentile(latencies, 0.75);
+        results.p90_ns    = percentile(latencies, 0.90);
+        results.p95_ns    = percentile(latencies, 0.95);
+        results.p99_ns    = percentile(latencies, 0.99);
+        results.p999_ns   = percentile(latencies, 0.999);
         results.median_ns = results.p50_ns;
 
         // Throughput
@@ -463,13 +458,15 @@ private:
     }
 
     static double percentile(const std::vector<int64_t>& sorted_values, double p) {
-        if (sorted_values.empty()) return 0;
-        if (sorted_values.size() == 1) return sorted_values[0];
+        if (sorted_values.empty())
+            return 0;
+        if (sorted_values.size() == 1)
+            return sorted_values[0];
 
         double index = p * (sorted_values.size() - 1);
         size_t lower = static_cast<size_t>(index);
         size_t upper = lower + 1;
-        double frac = index - lower;
+        double frac  = index - lower;
 
         if (upper >= sorted_values.size()) {
             return sorted_values.back();
@@ -479,48 +476,40 @@ private:
     }
 
     void validate_slo(BenchmarkResults& results) {
-        if (!slo_) return;
+        if (!slo_)
+            return;
 
         results.slo_passed = true;
 
         if (slo_->p50_ns > 0 && results.p50_ns > slo_->p50_ns) {
             results.slo_passed = false;
-            results.slo_violations.push_back(
-                "P50 " + std::to_string(results.p50_ns) + "ns > target " +
-                std::to_string(slo_->p50_ns) + "ns"
-            );
+            results.slo_violations.push_back("P50 " + std::to_string(results.p50_ns) +
+                                             "ns > target " + std::to_string(slo_->p50_ns) + "ns");
         }
 
         if (slo_->p95_ns > 0 && results.p95_ns > slo_->p95_ns) {
             results.slo_passed = false;
-            results.slo_violations.push_back(
-                "P95 " + std::to_string(results.p95_ns) + "ns > target " +
-                std::to_string(slo_->p95_ns) + "ns"
-            );
+            results.slo_violations.push_back("P95 " + std::to_string(results.p95_ns) +
+                                             "ns > target " + std::to_string(slo_->p95_ns) + "ns");
         }
 
         if (slo_->p99_ns > 0 && results.p99_ns > slo_->p99_ns) {
             results.slo_passed = false;
-            results.slo_violations.push_back(
-                "P99 " + std::to_string(results.p99_ns) + "ns > target " +
-                std::to_string(slo_->p99_ns) + "ns"
-            );
+            results.slo_violations.push_back("P99 " + std::to_string(results.p99_ns) +
+                                             "ns > target " + std::to_string(slo_->p99_ns) + "ns");
         }
 
         if (slo_->max_ns > 0 && results.max_ns > slo_->max_ns) {
             results.slo_passed = false;
-            results.slo_violations.push_back(
-                "Max " + std::to_string(results.max_ns) + "ns > target " +
-                std::to_string(slo_->max_ns) + "ns"
-            );
+            results.slo_violations.push_back("Max " + std::to_string(results.max_ns) +
+                                             "ns > target " + std::to_string(slo_->max_ns) + "ns");
         }
 
         if (slo_->min_throughput > 0 && results.ops_per_sec < slo_->min_throughput) {
             results.slo_passed = false;
-            results.slo_violations.push_back(
-                "Throughput " + std::to_string(results.ops_per_sec) +
-                " ops/s < target " + std::to_string(slo_->min_throughput) + " ops/s"
-            );
+            results.slo_violations.push_back("Throughput " + std::to_string(results.ops_per_sec) +
+                                             " ops/s < target " +
+                                             std::to_string(slo_->min_throughput) + " ops/s");
         }
     }
 };
@@ -530,15 +519,12 @@ private:
  */
 class BenchmarkSuite {
 public:
-    explicit BenchmarkSuite(std::string name)
-        : name_(std::move(name))
-    {}
+    explicit BenchmarkSuite(std::string name) : name_(std::move(name)) {}
 
     /**
      * @brief Add a benchmark
      */
-    void add_benchmark(const std::string& name,
-                       Benchmark::BenchFunc func,
+    void add_benchmark(const std::string& name, Benchmark::BenchFunc func,
                        const SLOSpec& slo = {}) {
         auto bench = std::make_unique<Benchmark>(name, std::move(func));
         if (!slo.name.empty() || slo.p50_ns > 0 || slo.p95_ns > 0) {
@@ -550,10 +536,8 @@ public:
     /**
      * @brief Add a benchmark with setup/teardown
      */
-    void add_benchmark(const std::string& name,
-                       Benchmark::BenchFunc func,
-                       Benchmark::SetupFunc setup,
-                       Benchmark::TeardownFunc teardown,
+    void add_benchmark(const std::string& name, Benchmark::BenchFunc func,
+                       Benchmark::SetupFunc setup, Benchmark::TeardownFunc teardown,
                        const SLOSpec& slo = {}) {
         auto bench = std::make_unique<Benchmark>(name, std::move(func));
         bench->set_setup(std::move(setup));
@@ -574,10 +558,10 @@ public:
 
         for (auto& bench : benchmarks_) {
             std::cout << "Running: " << bench->name() << "...\n";
-            auto result = bench->run(config);
+            auto result             = bench->run(config);
             results_[bench->name()] = result;
-            std::cout << "  Done (" << result.valid_iterations
-                      << " iterations in " << result.total_duration_ms << "ms)\n";
+            std::cout << "  Done (" << result.valid_iterations << " iterations in "
+                      << result.total_duration_ms << "ms)\n";
         }
 
         std::cout << "\n";
@@ -610,7 +594,8 @@ public:
 
         bool first = true;
         for (const auto& [name, result] : results_) {
-            if (!first) oss << ",\n";
+            if (!first)
+                oss << ",\n";
             first = false;
             oss << "    " << result.to_json();
         }
@@ -650,26 +635,23 @@ private:
 
     void print_summary_table() const {
         // Header
-        std::cout << std::left << std::setw(30) << "Benchmark"
-                  << std::right << std::setw(12) << "Mean"
-                  << std::setw(12) << "P99"
-                  << std::setw(15) << "Throughput"
-                  << std::setw(8) << "SLO"
-                  << "\n";
+        std::cout << std::left << std::setw(30) << "Benchmark" << std::right << std::setw(12)
+                  << "Mean" << std::setw(12) << "P99" << std::setw(15) << "Throughput"
+                  << std::setw(8) << "SLO" << "\n";
         std::cout << std::string(77, '-') << "\n";
 
         for (const auto& [name, result] : results_) {
-            std::cout << std::left << std::setw(30) << truncate(name, 29)
-                      << std::right << std::setw(12) << format_time_short(result.mean_ns)
-                      << std::setw(12) << format_time_short(result.p99_ns)
-                      << std::setw(15) << format_throughput_short(result.ops_per_sec)
-                      << std::setw(8) << (result.slo_passed ? "PASS" : "FAIL")
-                      << "\n";
+            std::cout << std::left << std::setw(30) << truncate(name, 29) << std::right
+                      << std::setw(12) << format_time_short(result.mean_ns) << std::setw(12)
+                      << format_time_short(result.p99_ns) << std::setw(15)
+                      << format_throughput_short(result.ops_per_sec) << std::setw(8)
+                      << (result.slo_passed ? "PASS" : "FAIL") << "\n";
         }
     }
 
     static std::string truncate(const std::string& s, size_t max_len) {
-        if (s.length() <= max_len) return s;
+        if (s.length() <= max_len)
+            return s;
         return s.substr(0, max_len - 3) + "...";
     }
 
@@ -703,8 +685,7 @@ private:
 /**
  * @brief Macro for easy benchmark definition
  */
-#define IPB_BENCHMARK(suite, name, code) \
-    suite.add_benchmark(name, [&]() { code; })
+#define IPB_BENCHMARK(suite, name, code) suite.add_benchmark(name, [&]() { code; })
 
 #define IPB_BENCHMARK_SLO(suite, name, slo_spec, code) \
     suite.add_benchmark(name, [&]() { code; }, slo_spec)
@@ -712,7 +693,7 @@ private:
 /**
  * @brief DoNotOptimize helper to prevent compiler optimization
  */
-template<typename T>
+template <typename T>
 inline void DoNotOptimize(T&& value) {
 #ifdef __GNUC__
     asm volatile("" : : "r,m"(value) : "memory");
@@ -732,4 +713,4 @@ inline void ClobberMemory() {
 #endif
 }
 
-} // namespace ipb::common::benchmark
+}  // namespace ipb::common::benchmark

@@ -11,8 +11,8 @@
  * - Hardware watchdog support
  */
 
-#include <ipb/common/error.hpp>
 #include <ipb/common/data_point.hpp>
+#include <ipb/common/error.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -31,14 +31,7 @@ class DataSink;
 /**
  * @brief Bridge operational state
  */
-enum class BridgeState : uint8_t {
-    STOPPED = 0,
-    INITIALIZING,
-    RUNNING,
-    PAUSED,
-    ERROR,
-    SHUTDOWN
-};
+enum class BridgeState : uint8_t { STOPPED = 0, INITIALIZING, RUNNING, PAUSED, ERROR, SHUTDOWN };
 
 /**
  * @brief Bridge statistics (lock-free)
@@ -55,13 +48,11 @@ struct BridgeStats {
     // Copy constructor for atomic members
     BridgeStats() = default;
     BridgeStats(const BridgeStats& other)
-        : messages_received(other.messages_received.load())
-        , messages_forwarded(other.messages_forwarded.load())
-        , messages_dropped(other.messages_dropped.load())
-        , errors(other.errors.load())
-        , uptime_seconds(other.uptime_seconds.load())
-        , active_sources(other.active_sources.load())
-        , active_sinks(other.active_sinks.load()) {}
+        : messages_received(other.messages_received.load()),
+          messages_forwarded(other.messages_forwarded.load()),
+          messages_dropped(other.messages_dropped.load()), errors(other.errors.load()),
+          uptime_seconds(other.uptime_seconds.load()), active_sources(other.active_sources.load()),
+          active_sinks(other.active_sinks.load()) {}
 };
 
 /**
@@ -71,10 +62,10 @@ class DataSource {
 public:
     virtual ~DataSource() = default;
 
-    virtual std::string id() const = 0;
+    virtual std::string id() const       = 0;
     virtual common::Result<void> start() = 0;
-    virtual void stop() = 0;
-    virtual bool is_running() const = 0;
+    virtual void stop()                  = 0;
+    virtual bool is_running() const      = 0;
 
     using DataCallback = std::function<void(const common::DataPoint&)>;
     virtual void set_callback(DataCallback callback) = 0;
@@ -87,13 +78,13 @@ class DataSink {
 public:
     virtual ~DataSink() = default;
 
-    virtual std::string id() const = 0;
+    virtual std::string id() const       = 0;
     virtual common::Result<void> start() = 0;
-    virtual void stop() = 0;
-    virtual bool is_running() const = 0;
+    virtual void stop()                  = 0;
+    virtual bool is_running() const      = 0;
 
     virtual common::Result<void> send(const common::DataPoint& data) = 0;
-    virtual common::Result<void> flush() = 0;
+    virtual common::Result<void> flush()                             = 0;
 };
 
 /**
@@ -112,7 +103,7 @@ public:
     ~Bridge();
 
     // Non-copyable, non-movable
-    Bridge(const Bridge&) = delete;
+    Bridge(const Bridge&)            = delete;
     Bridge& operator=(const Bridge&) = delete;
 
     /**
@@ -270,4 +261,4 @@ struct BridgeConfig {
     std::string log_level{"info"};
 };
 
-} // namespace ipb::bridge
+}  // namespace ipb::bridge

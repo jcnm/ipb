@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -32,7 +33,6 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-#include <list>
 
 namespace ipb::core {
 
@@ -43,7 +43,7 @@ struct PatternValidationResult {
     bool is_safe = false;
     std::string reason;
     size_t estimated_complexity = 0;
-    bool has_backreferences = false;
+    bool has_backreferences     = false;
     bool has_nested_quantifiers = false;
     size_t max_repetition_depth = 0;
 
@@ -70,7 +70,8 @@ struct PatternCacheStats {
 
     double avg_compilation_time_us() const noexcept {
         auto count = compilations.load();
-        return count > 0 ? static_cast<double>(total_compilation_time_ns.load()) / count / 1000.0 : 0.0;
+        return count > 0 ? static_cast<double>(total_compilation_time_ns.load()) / count / 1000.0
+                         : 0.0;
     }
 
     void reset() noexcept {
@@ -124,29 +125,27 @@ struct CachedPattern {
 
     // Custom move constructor (atomic requires special handling)
     CachedPattern(CachedPattern&& other) noexcept
-        : pattern_string(std::move(other.pattern_string))
-        , compiled(std::move(other.compiled))
-        , compiled_at(other.compiled_at)
-        , compilation_time(other.compilation_time)
-        , complexity_score(other.complexity_score)
-        , use_count(other.use_count.load(std::memory_order_relaxed))
-    {}
+        : pattern_string(std::move(other.pattern_string)), compiled(std::move(other.compiled)),
+          compiled_at(other.compiled_at), compilation_time(other.compilation_time),
+          complexity_score(other.complexity_score),
+          use_count(other.use_count.load(std::memory_order_relaxed)) {}
 
     // Custom move assignment
     CachedPattern& operator=(CachedPattern&& other) noexcept {
         if (this != &other) {
-            pattern_string = std::move(other.pattern_string);
-            compiled = std::move(other.compiled);
-            compiled_at = other.compiled_at;
+            pattern_string   = std::move(other.pattern_string);
+            compiled         = std::move(other.compiled);
+            compiled_at      = other.compiled_at;
             compilation_time = other.compilation_time;
             complexity_score = other.complexity_score;
-            use_count.store(other.use_count.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            use_count.store(other.use_count.load(std::memory_order_relaxed),
+                            std::memory_order_relaxed);
         }
         return *this;
     }
 
     // Non-copyable due to unique_ptr and atomic
-    CachedPattern(const CachedPattern&) = delete;
+    CachedPattern(const CachedPattern&)            = delete;
     CachedPattern& operator=(const CachedPattern&) = delete;
 };
 
@@ -167,9 +166,8 @@ public:
      * @param max_complexity Maximum allowed complexity score
      * @return Validation result with details
      */
-    static PatternValidationResult validate(
-        std::string_view pattern,
-        size_t max_complexity = 50) noexcept;
+    static PatternValidationResult validate(std::string_view pattern,
+                                            size_t max_complexity = 50) noexcept;
 
     /**
      * @brief Check if pattern contains nested quantifiers
@@ -238,7 +236,7 @@ public:
     ~CompiledPatternCache();
 
     // Non-copyable, movable
-    CompiledPatternCache(const CompiledPatternCache&) = delete;
+    CompiledPatternCache(const CompiledPatternCache&)            = delete;
     CompiledPatternCache& operator=(const CompiledPatternCache&) = delete;
     CompiledPatternCache(CompiledPatternCache&&) noexcept;
     CompiledPatternCache& operator=(CompiledPatternCache&&) noexcept;
@@ -395,4 +393,4 @@ private:
     std::string error_;
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

@@ -37,24 +37,24 @@ namespace ipb::common {
  * @brief Rate limiter configuration
  */
 struct RateLimitConfig {
-    double rate_per_second{1000.0};    // Sustained rate
-    size_t burst_size{100};             // Maximum burst
-    bool fair_queuing{false};           // Enable fair queuing
-    bool adaptive{false};               // Adapt to system load
-    double min_rate{10.0};              // Minimum rate when adapting
-    double max_rate{100000.0};          // Maximum rate when adapting
+    double rate_per_second{1000.0};  // Sustained rate
+    size_t burst_size{100};          // Maximum burst
+    bool fair_queuing{false};        // Enable fair queuing
+    bool adaptive{false};            // Adapt to system load
+    double min_rate{10.0};           // Minimum rate when adapting
+    double max_rate{100000.0};       // Maximum rate when adapting
 
     static RateLimitConfig unlimited() {
         RateLimitConfig config;
         config.rate_per_second = 1e12;  // Effectively unlimited
-        config.burst_size = SIZE_MAX / 2;
+        config.burst_size      = SIZE_MAX / 2;
         return config;
     }
 
     static RateLimitConfig strict(double rate) {
         RateLimitConfig config;
         config.rate_per_second = rate;
-        config.burst_size = 1;  // No burst allowed
+        config.burst_size      = 1;  // No burst allowed
         return config;
     }
 };
@@ -70,7 +70,7 @@ struct RateLimiterStats {
 
     double allow_rate() const noexcept {
         auto total = requests.load(std::memory_order_relaxed);
-        auto ok = allowed.load(std::memory_order_relaxed);
+        auto ok    = allowed.load(std::memory_order_relaxed);
         return total > 0 ? static_cast<double>(ok) / total * 100.0 : 100.0;
     }
 
@@ -96,20 +96,14 @@ public:
      * @param config Rate limit configuration
      */
     explicit TokenBucket(const RateLimitConfig& config = {})
-        : config_(config)
-        , tokens_(static_cast<double>(config.burst_size))
-        , last_refill_(std::chrono::steady_clock::now())
-    {
-        tokens_atomic_.store(
-            static_cast<int64_t>(config.burst_size * PRECISION),
-            std::memory_order_relaxed
-        );
+        : config_(config), tokens_(static_cast<double>(config.burst_size)),
+          last_refill_(std::chrono::steady_clock::now()) {
+        tokens_atomic_.store(static_cast<int64_t>(config.burst_size * PRECISION),
+                             std::memory_order_relaxed);
         last_refill_ns_.store(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(
-                last_refill_.time_since_epoch()
-            ).count(),
-            std::memory_order_relaxed
-        );
+            std::chrono::duration_cast<std::chrono::nanoseconds>(last_refill_.time_since_epoch())
+                .count(),
+            std::memory_order_relaxed);
     }
 
     /**
@@ -124,14 +118,13 @@ public:
         refill();
 
         // Try to consume tokens atomically
-        int64_t needed = static_cast<int64_t>(count * PRECISION);
+        int64_t needed  = static_cast<int64_t>(count * PRECISION);
         int64_t current = tokens_atomic_.load(std::memory_order_relaxed);
 
         while (current >= needed) {
-            if (tokens_atomic_.compare_exchange_weak(
-                    current, current - needed,
-                    std::memory_order_acquire,
-                    std::memory_order_relaxed)) {
+            if (tokens_atomic_.compare_exchange_weak(current, current - needed,
+                                                     std::memory_order_acquire,
+                                                     std::memory_order_relaxed)) {
                 stats_.allowed.fetch_add(1, std::memory_order_relaxed);
                 return true;
             }
@@ -148,7 +141,7 @@ public:
      * @param timeout Maximum wait time
      * @return true if acquired, false if timeout
      */
-    bool acquire(size_t count = 1,
+    bool acquire(size_t count                     = 1,
                  std::chrono::nanoseconds timeout = std::chrono::seconds(1)) noexcept {
         auto deadline = std::chrono::steady_clock::now() + timeout;
 
@@ -159,10 +152,8 @@ public:
             }
 
             // Calculate wait time for tokens
-            auto wait_ns = wait_time_ns(count);
-            auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                deadline - now
-            );
+            auto wait_ns   = wait_time_ns(count);
+            auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - now);
 
             if (wait_ns > remaining.count()) {
                 wait_ns = remaining.count();
@@ -194,13 +185,13 @@ public:
      */
     int64_t wait_time_ns(size_t count = 1) const noexcept {
         int64_t current = tokens_atomic_.load(std::memory_order_relaxed);
-        int64_t needed = static_cast<int64_t>(count * PRECISION);
+        int64_t needed  = static_cast<int64_t>(count * PRECISION);
 
         if (current >= needed) {
             return 0;
         }
 
-        int64_t deficit = needed - current;
+        int64_t deficit      = needed - current;
         double tokens_per_ns = config_.rate_per_second / 1e9;
         return static_cast<int64_t>(deficit / PRECISION / tokens_per_ns);
     }
@@ -209,20 +200,15 @@ public:
      * @brief Get current available tokens
      */
     double available_tokens() const noexcept {
-        return static_cast<double>(tokens_atomic_.load(std::memory_order_relaxed))
-               / PRECISION;
+        return static_cast<double>(tokens_atomic_.load(std::memory_order_relaxed)) / PRECISION;
     }
 
     /**
      * @brief Update rate limit configuration
      */
-    void set_rate(double rate_per_second) noexcept {
-        config_.rate_per_second = rate_per_second;
-    }
+    void set_rate(double rate_per_second) noexcept { config_.rate_per_second = rate_per_second; }
 
-    void set_burst(size_t burst_size) noexcept {
-        config_.burst_size = burst_size;
-    }
+    void set_burst(size_t burst_size) noexcept { config_.burst_size = burst_size; }
 
     const RateLimitConfig& config() const noexcept { return config_; }
     const RateLimiterStats& stats() const noexcept { return stats_; }
@@ -244,10 +230,10 @@ private:
 
     void refill() noexcept {
         auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()
-        ).count();
+                          std::chrono::steady_clock::now().time_since_epoch())
+                          .count();
 
-        int64_t last_ns = last_refill_ns_.load(std::memory_order_relaxed);
+        int64_t last_ns    = last_refill_ns_.load(std::memory_order_relaxed);
         int64_t elapsed_ns = now_ns - last_ns;
 
         if (elapsed_ns <= 0) {
@@ -256,25 +242,23 @@ private:
 
         // Calculate tokens to add
         double tokens_per_ns = config_.rate_per_second / 1e9;
-        int64_t new_tokens = static_cast<int64_t>(elapsed_ns * tokens_per_ns * PRECISION);
+        int64_t new_tokens   = static_cast<int64_t>(elapsed_ns * tokens_per_ns * PRECISION);
 
         if (new_tokens <= 0) {
             return;
         }
 
         // Update timestamp atomically
-        if (!last_refill_ns_.compare_exchange_strong(
-                last_ns, now_ns,
-                std::memory_order_release,
-                std::memory_order_relaxed)) {
+        if (!last_refill_ns_.compare_exchange_strong(last_ns, now_ns, std::memory_order_release,
+                                                     std::memory_order_relaxed)) {
             // Another thread updated - skip refill
             return;
         }
 
         // Add tokens up to maximum
         int64_t max_tokens = static_cast<int64_t>(config_.burst_size * PRECISION);
-        int64_t current = tokens_atomic_.load(std::memory_order_relaxed);
-        int64_t target = std::min(current + new_tokens, max_tokens);
+        int64_t current    = tokens_atomic_.load(std::memory_order_relaxed);
+        int64_t target     = std::min(current + new_tokens, max_tokens);
 
         // Best-effort update (if we lose race, tokens are still added by winner)
         tokens_atomic_.store(target, std::memory_order_relaxed);
@@ -296,9 +280,7 @@ public:
      * @param rate_per_second Maximum requests per second
      */
     explicit SlidingWindowLimiter(double rate_per_second)
-        : rate_per_second_(rate_per_second)
-        , slot_duration_ns_(1000000000 / WINDOW_SLOTS)
-    {
+        : rate_per_second_(rate_per_second), slot_duration_ns_(1000000000 / WINDOW_SLOTS) {
         for (auto& slot : slots_) {
             slot.store(0, std::memory_order_relaxed);
         }
@@ -312,9 +294,8 @@ public:
         stats_.requests.fetch_add(1, std::memory_order_relaxed);
 
         auto now = std::chrono::steady_clock::now();
-        auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            now.time_since_epoch()
-        ).count();
+        auto now_ns =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
 
         // Get current slot
         size_t current_slot = (now_ns / slot_duration_ns_) % WINDOW_SLOTS;
@@ -363,17 +344,15 @@ private:
 
     void clear_old_slots(int64_t now_ns) noexcept {
         int64_t last_clear = last_clear_ns_.load(std::memory_order_relaxed);
-        int64_t elapsed = now_ns - last_clear;
+        int64_t elapsed    = now_ns - last_clear;
 
         if (elapsed < slot_duration_ns_) {
             return;  // Not enough time passed
         }
 
         // Calculate slots to clear
-        size_t slots_to_clear = std::min(
-            static_cast<size_t>(elapsed / slot_duration_ns_),
-            WINDOW_SLOTS
-        );
+        size_t slots_to_clear =
+            std::min(static_cast<size_t>(elapsed / slot_duration_ns_), WINDOW_SLOTS);
 
         size_t start_slot = ((last_clear / slot_duration_ns_) + 1) % WINDOW_SLOTS;
 
@@ -396,11 +375,8 @@ public:
      * @param config Configuration including adaptation parameters
      */
     explicit AdaptiveRateLimiter(const RateLimitConfig& config)
-        : config_(config)
-        , bucket_(config)
-        , current_rate_(config.rate_per_second)
-        , load_factor_(0.0)
-    {}
+        : config_(config), bucket_(config), current_rate_(config.rate_per_second),
+          load_factor_(0.0) {}
 
     /**
      * @brief Try to acquire with adaptive adjustment
@@ -416,17 +392,15 @@ public:
     void report_load(double load) noexcept {
         // Exponential moving average
         constexpr double alpha = 0.1;
-        double current = load_factor_.load(std::memory_order_relaxed);
-        double updated = alpha * load + (1 - alpha) * current;
+        double current         = load_factor_.load(std::memory_order_relaxed);
+        double updated         = alpha * load + (1 - alpha) * current;
         load_factor_.store(updated, std::memory_order_relaxed);
     }
 
     /**
      * @brief Get current effective rate
      */
-    double current_rate() const noexcept {
-        return current_rate_.load(std::memory_order_relaxed);
-    }
+    double current_rate() const noexcept { return current_rate_.load(std::memory_order_relaxed); }
 
     const RateLimiterStats& stats() const noexcept { return bucket_.stats(); }
 
@@ -439,8 +413,8 @@ private:
 
     void update_rate() noexcept {
         auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()
-        ).count();
+                          std::chrono::steady_clock::now().time_since_epoch())
+                          .count();
 
         int64_t last = last_update_ns_.load(std::memory_order_relaxed);
         if (now_ns - last < 100000000) {  // Update every 100ms
@@ -456,10 +430,10 @@ private:
 
         // Reduce rate as load increases
         double rate_factor = 1.0 - (load * 0.8);  // At full load, use 20% of max
-        rate_factor = std::max(0.1, std::min(1.0, rate_factor));
+        rate_factor        = std::max(0.1, std::min(1.0, rate_factor));
 
         double new_rate = config_.max_rate * rate_factor;
-        new_rate = std::max(config_.min_rate, std::min(config_.max_rate, new_rate));
+        new_rate        = std::max(config_.min_rate, std::min(config_.max_rate, new_rate));
 
         current_rate_.store(new_rate, std::memory_order_relaxed);
         bucket_.set_rate(new_rate);
@@ -478,16 +452,14 @@ public:
      * @param global_config Global rate limit
      */
     explicit HierarchicalRateLimiter(const RateLimitConfig& global_config)
-        : global_bucket_(global_config)
-    {}
+        : global_bucket_(global_config) {}
 
     /**
      * @brief Add per-source rate limit
      * @param source_id Source identifier
      * @param config Source-specific rate limit
      */
-    void add_source_limit(const std::string& source_id,
-                          const RateLimitConfig& config) {
+    void add_source_limit(const std::string& source_id, const RateLimitConfig& config) {
         std::lock_guard lock(sources_mutex_);
         source_buckets_[source_id] = std::make_unique<TokenBucket>(config);
     }
@@ -521,9 +493,7 @@ public:
     /**
      * @brief Get global statistics
      */
-    const RateLimiterStats& global_stats() const noexcept {
-        return global_bucket_.stats();
-    }
+    const RateLimiterStats& global_stats() const noexcept { return global_bucket_.stats(); }
 
     /**
      * @brief Get source-specific statistics
@@ -559,8 +529,7 @@ public:
     /**
      * @brief Register a rate limiter
      */
-    void register_limiter(const std::string& name,
-                          const RateLimitConfig& config) {
+    void register_limiter(const std::string& name, const RateLimitConfig& config) {
         std::lock_guard lock(mutex_);
         limiters_[name] = std::make_unique<TokenBucket>(config);
     }
@@ -568,13 +537,12 @@ public:
     /**
      * @brief Get or create rate limiter
      */
-    TokenBucket& get_or_create(const std::string& name,
-                                const RateLimitConfig& config = {}) {
+    TokenBucket& get_or_create(const std::string& name, const RateLimitConfig& config = {}) {
         std::lock_guard lock(mutex_);
         auto it = limiters_.find(name);
         if (it == limiters_.end()) {
             limiters_[name] = std::make_unique<TokenBucket>(config);
-            it = limiters_.find(name);
+            it              = limiters_.find(name);
         }
         return *it->second;
     }
@@ -629,4 +597,4 @@ private:
     bool acquired_;
 };
 
-} // namespace ipb::common
+}  // namespace ipb::common
