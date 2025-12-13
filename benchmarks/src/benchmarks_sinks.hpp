@@ -38,7 +38,7 @@ void bench_serialize_payload() {
     // Benchmark payload serialization
 }
 
-} // namespace mqtt_sink_benchmarks
+}  // namespace mqtt_sink_benchmarks
 
 //=============================================================================
 // HTTP Sink Benchmarks (Placeholder)
@@ -54,7 +54,7 @@ void bench_serialize_batch() {
     // Benchmark batch serialization
 }
 
-} // namespace http_sink_benchmarks
+}  // namespace http_sink_benchmarks
 
 //=============================================================================
 // Console Sink Benchmarks
@@ -65,14 +65,11 @@ namespace console_sink_benchmarks {
 void bench_format_output() {
     // Format string generation
     char buffer[256];
-    snprintf(buffer, sizeof(buffer),
-             "[%s] %s: %.6f",
-             "2024-01-15T10:30:00Z",
-             "sensor.temperature",
+    snprintf(buffer, sizeof(buffer), "[%s] %s: %.6f", "2024-01-15T10:30:00Z", "sensor.temperature",
              42.5);
 }
 
-} // namespace console_sink_benchmarks
+}  // namespace console_sink_benchmarks
 
 //=============================================================================
 // Syslog Sink Benchmarks
@@ -83,16 +80,12 @@ namespace syslog_sink_benchmarks {
 void bench_format_syslog() {
     // RFC 5424 format generation
     char buffer[512];
-    snprintf(buffer, sizeof(buffer),
-             "<%d>1 %s %s %s - - %s",
+    snprintf(buffer, sizeof(buffer), "<%d>1 %s %s %s - - %s",
              14,  // facility * 8 + severity
-             "2024-01-15T10:30:00Z",
-             "hostname",
-             "ipb",
-             "sensor.temperature=42.5");
+             "2024-01-15T10:30:00Z", "hostname", "ipb", "sensor.temperature=42.5");
 }
 
-} // namespace syslog_sink_benchmarks
+}  // namespace syslog_sink_benchmarks
 
 //=============================================================================
 // Registration Function
@@ -104,13 +97,13 @@ inline void register_sink_benchmarks() {
     // Console Sink
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::SINKS;
-        def.component = "console";
+        def.category   = BenchmarkCategory::SINKS;
+        def.component  = "console";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "format_output";
-        def.benchmark = console_sink_benchmarks::bench_format_output;
+        def.name          = "format_output";
+        def.benchmark     = console_sink_benchmarks::bench_format_output;
         def.target_p50_ns = 500;
         def.target_p99_ns = 5000;
         registry.register_benchmark(def);
@@ -119,13 +112,13 @@ inline void register_sink_benchmarks() {
     // Syslog Sink
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::SINKS;
-        def.component = "syslog";
+        def.category   = BenchmarkCategory::SINKS;
+        def.component  = "syslog";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "format_message";
-        def.benchmark = syslog_sink_benchmarks::bench_format_syslog;
+        def.name          = "format_message";
+        def.benchmark     = syslog_sink_benchmarks::bench_format_syslog;
         def.target_p50_ns = 500;
         def.target_p99_ns = 5000;
         registry.register_benchmark(def);
@@ -135,4 +128,4 @@ inline void register_sink_benchmarks() {
     // and will be added when those components are available for benchmarking
 }
 
-} // namespace ipb::benchmark
+}  // namespace ipb::benchmark

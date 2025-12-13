@@ -37,9 +37,12 @@ inline std::vector<char> g_large_buffer(65536);
 
 void setup() {
     // Fill buffers with test data
-    for (auto& c : g_small_buffer) c = 'A';
-    for (auto& c : g_medium_buffer) c = 'B';
-    for (auto& c : g_large_buffer) c = 'C';
+    for (auto& c : g_small_buffer)
+        c = 'A';
+    for (auto& c : g_medium_buffer)
+        c = 'B';
+    for (auto& c : g_large_buffer)
+        c = 'C';
 }
 
 void bench_memcpy_64() {
@@ -78,7 +81,7 @@ void bench_buffer_alloc_large() {
     delete[] buf;
 }
 
-} // namespace buffer_benchmarks
+}  // namespace buffer_benchmarks
 
 //=============================================================================
 // TCP Frame Benchmarks
@@ -102,15 +105,15 @@ struct TCPHeader {
 inline TCPHeader g_header;
 
 void setup() {
-    g_header.src_port = 12345;
-    g_header.dst_port = 1883;
-    g_header.seq_num = 1000000;
-    g_header.ack_num = 2000000;
+    g_header.src_port    = 12345;
+    g_header.dst_port    = 1883;
+    g_header.seq_num     = 1000000;
+    g_header.ack_num     = 2000000;
     g_header.data_offset = 5;
-    g_header.flags = 0x18;  // PSH+ACK
-    g_header.window = 65535;
-    g_header.checksum = 0;
-    g_header.urgent_ptr = 0;
+    g_header.flags       = 0x18;  // PSH+ACK
+    g_header.window      = 65535;
+    g_header.checksum    = 0;
+    g_header.urgent_ptr  = 0;
 }
 
 void bench_header_parse() {
@@ -126,14 +129,14 @@ void bench_header_build() {
     TCPHeader hdr;
     hdr.src_port = __builtin_bswap16(12345);
     hdr.dst_port = __builtin_bswap16(1883);
-    hdr.seq_num = __builtin_bswap32(1000000);
-    hdr.ack_num = __builtin_bswap32(2000000);
+    hdr.seq_num  = __builtin_bswap32(1000000);
+    hdr.ack_num  = __builtin_bswap32(2000000);
     asm volatile("" : : "r"(hdr.src_port) : "memory");
 }
 
 uint16_t compute_checksum(const void* data, size_t len) {
     const uint16_t* ptr = static_cast<const uint16_t*>(data);
-    uint32_t sum = 0;
+    uint32_t sum        = 0;
     while (len > 1) {
         sum += *ptr++;
         len -= 2;
@@ -157,7 +160,7 @@ void bench_checksum_1k() {
     asm volatile("" : : "r"(cs) : "memory");
 }
 
-} // namespace tcp_benchmarks
+}  // namespace tcp_benchmarks
 
 //=============================================================================
 // WebSocket Frame Benchmarks
@@ -176,12 +179,12 @@ inline std::vector<char> g_payload(256);
 inline WSFrameHeader g_frame_header;
 
 void setup() {
-    g_frame_header.fin_rsv_opcode = 0x82;  // Binary frame, FIN set
-    g_frame_header.mask_len = 0x80 | 126;  // Masked, extended length
-    g_frame_header.mask_key[0] = 0x12;
-    g_frame_header.mask_key[1] = 0x34;
-    g_frame_header.mask_key[2] = 0x56;
-    g_frame_header.mask_key[3] = 0x78;
+    g_frame_header.fin_rsv_opcode = 0x82;        // Binary frame, FIN set
+    g_frame_header.mask_len       = 0x80 | 126;  // Masked, extended length
+    g_frame_header.mask_key[0]    = 0x12;
+    g_frame_header.mask_key[1]    = 0x34;
+    g_frame_header.mask_key[2]    = 0x56;
+    g_frame_header.mask_key[3]    = 0x78;
 
     for (size_t i = 0; i < g_payload.size(); ++i) {
         g_payload[i] = static_cast<char>(i);
@@ -189,10 +192,10 @@ void setup() {
 }
 
 void bench_frame_parse() {
-    bool fin = (g_frame_header.fin_rsv_opcode & 0x80) != 0;
+    bool fin       = (g_frame_header.fin_rsv_opcode & 0x80) != 0;
     uint8_t opcode = g_frame_header.fin_rsv_opcode & 0x0F;
-    bool masked = (g_frame_header.mask_len & 0x80) != 0;
-    uint8_t len = g_frame_header.mask_len & 0x7F;
+    bool masked    = (g_frame_header.mask_len & 0x80) != 0;
+    uint8_t len    = g_frame_header.mask_len & 0x7F;
     asm volatile("" : : "r"(fin), "r"(opcode), "r"(masked), "r"(len) : "memory");
 }
 
@@ -221,7 +224,7 @@ void bench_build_frame() {
     // Build a complete frame
     std::vector<char> frame(2 + 4 + g_payload.size());
 
-    frame[0] = static_cast<char>(0x82);  // Binary, FIN
+    frame[0] = static_cast<char>(0x82);                     // Binary, FIN
     frame[1] = static_cast<char>(0x80 | g_payload.size());  // Masked
 
     // Copy mask key
@@ -235,7 +238,7 @@ void bench_build_frame() {
     asm volatile("" : : "r"(frame[0]) : "memory");
 }
 
-} // namespace websocket_benchmarks
+}  // namespace websocket_benchmarks
 
 //=============================================================================
 // Serial Protocol Benchmarks (Simulated)
@@ -254,12 +257,12 @@ struct ModbusRTUFrame {
 inline ModbusRTUFrame g_rtu_frame;
 
 void setup() {
-    g_rtu_frame.slave_addr = 1;
-    g_rtu_frame.function_code = 3;  // Read holding registers
-    g_rtu_frame.data[0] = 0x00;     // Start address high
-    g_rtu_frame.data[1] = 0x00;     // Start address low
-    g_rtu_frame.data[2] = 0x00;     // Quantity high
-    g_rtu_frame.data[3] = 0x0A;     // Quantity low (10)
+    g_rtu_frame.slave_addr    = 1;
+    g_rtu_frame.function_code = 3;     // Read holding registers
+    g_rtu_frame.data[0]       = 0x00;  // Start address high
+    g_rtu_frame.data[1]       = 0x00;  // Start address low
+    g_rtu_frame.data[2]       = 0x00;  // Quantity high
+    g_rtu_frame.data[3]       = 0x0A;  // Quantity low (10)
 }
 
 uint16_t calc_crc16(const uint8_t* data, size_t len) {
@@ -288,26 +291,26 @@ void bench_crc16_medium() {
 }
 
 void bench_frame_parse() {
-    uint8_t addr = g_rtu_frame.slave_addr;
-    uint8_t func = g_rtu_frame.function_code;
+    uint8_t addr   = g_rtu_frame.slave_addr;
+    uint8_t func   = g_rtu_frame.function_code;
     uint16_t start = (g_rtu_frame.data[0] << 8) | g_rtu_frame.data[1];
-    uint16_t qty = (g_rtu_frame.data[2] << 8) | g_rtu_frame.data[3];
+    uint16_t qty   = (g_rtu_frame.data[2] << 8) | g_rtu_frame.data[3];
     asm volatile("" : : "r"(addr), "r"(func), "r"(start), "r"(qty) : "memory");
 }
 
 void bench_frame_build() {
     ModbusRTUFrame frame;
-    frame.slave_addr = 1;
+    frame.slave_addr    = 1;
     frame.function_code = 3;
-    frame.data[0] = 0x00;
-    frame.data[1] = 0x00;
-    frame.data[2] = 0x00;
-    frame.data[3] = 0x0A;
-    frame.crc = calc_crc16(reinterpret_cast<uint8_t*>(&frame), 6);
+    frame.data[0]       = 0x00;
+    frame.data[1]       = 0x00;
+    frame.data[2]       = 0x00;
+    frame.data[3]       = 0x0A;
+    frame.crc           = calc_crc16(reinterpret_cast<uint8_t*>(&frame), 6);
     asm volatile("" : : "r"(frame.crc) : "memory");
 }
 
-} // namespace serial_benchmarks
+}  // namespace serial_benchmarks
 
 //=============================================================================
 // Registration Function
@@ -319,39 +322,39 @@ inline void register_transport_benchmarks() {
     // Buffer Operations
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::TRANSPORTS;
-        def.component = "buffer";
+        def.category   = BenchmarkCategory::TRANSPORTS;
+        def.component  = "buffer";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "memcpy_64";
-        def.setup = buffer_benchmarks::setup;
-        def.benchmark = buffer_benchmarks::bench_memcpy_64;
+        def.name          = "memcpy_64";
+        def.setup         = buffer_benchmarks::setup;
+        def.benchmark     = buffer_benchmarks::bench_memcpy_64;
         def.target_p50_ns = 50;
         def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name = "memcpy_1k";
-        def.benchmark = buffer_benchmarks::bench_memcpy_1k;
+        def.name          = "memcpy_1k";
+        def.benchmark     = buffer_benchmarks::bench_memcpy_1k;
         def.target_p50_ns = 200;
         def.target_p99_ns = 2000;
         registry.register_benchmark(def);
 
-        def.name = "memcpy_64k";
-        def.benchmark = buffer_benchmarks::bench_memcpy_64k;
+        def.name          = "memcpy_64k";
+        def.benchmark     = buffer_benchmarks::bench_memcpy_64k;
         def.target_p50_ns = 10000;
         def.target_p99_ns = 50000;
         registry.register_benchmark(def);
 
-        def.name = "alloc_small";
+        def.name      = "alloc_small";
         def.benchmark = buffer_benchmarks::bench_buffer_alloc_small;
         registry.register_benchmark(def);
 
-        def.name = "alloc_medium";
+        def.name      = "alloc_medium";
         def.benchmark = buffer_benchmarks::bench_buffer_alloc_medium;
         registry.register_benchmark(def);
 
-        def.name = "alloc_large";
+        def.name      = "alloc_large";
         def.benchmark = buffer_benchmarks::bench_buffer_alloc_large;
         registry.register_benchmark(def);
     }
@@ -359,32 +362,32 @@ inline void register_transport_benchmarks() {
     // TCP
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::TRANSPORTS;
-        def.component = "tcp";
+        def.category   = BenchmarkCategory::TRANSPORTS;
+        def.component  = "tcp";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "header_parse";
-        def.setup = tcp_benchmarks::setup;
-        def.benchmark = tcp_benchmarks::bench_header_parse;
+        def.name          = "header_parse";
+        def.setup         = tcp_benchmarks::setup;
+        def.benchmark     = tcp_benchmarks::bench_header_parse;
         def.target_p50_ns = 20;
         def.target_p99_ns = 200;
         registry.register_benchmark(def);
 
-        def.name = "header_build";
-        def.setup = tcp_benchmarks::setup;
+        def.name      = "header_build";
+        def.setup     = tcp_benchmarks::setup;
         def.benchmark = tcp_benchmarks::bench_header_build;
         registry.register_benchmark(def);
 
-        def.name = "checksum_64";
-        def.setup = buffer_benchmarks::setup;
-        def.benchmark = tcp_benchmarks::bench_checksum_64;
+        def.name          = "checksum_64";
+        def.setup         = buffer_benchmarks::setup;
+        def.benchmark     = tcp_benchmarks::bench_checksum_64;
         def.target_p50_ns = 100;
         def.target_p99_ns = 1000;
         registry.register_benchmark(def);
 
-        def.name = "checksum_1k";
-        def.setup = buffer_benchmarks::setup;
+        def.name      = "checksum_1k";
+        def.setup     = buffer_benchmarks::setup;
         def.benchmark = tcp_benchmarks::bench_checksum_1k;
         registry.register_benchmark(def);
     }
@@ -392,32 +395,32 @@ inline void register_transport_benchmarks() {
     // WebSocket
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::TRANSPORTS;
-        def.component = "websocket";
+        def.category   = BenchmarkCategory::TRANSPORTS;
+        def.component  = "websocket";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "frame_parse";
-        def.setup = websocket_benchmarks::setup;
-        def.benchmark = websocket_benchmarks::bench_frame_parse;
+        def.name          = "frame_parse";
+        def.setup         = websocket_benchmarks::setup;
+        def.benchmark     = websocket_benchmarks::bench_frame_parse;
         def.target_p50_ns = 20;
         def.target_p99_ns = 200;
         registry.register_benchmark(def);
 
-        def.name = "mask_payload";
-        def.setup = websocket_benchmarks::setup;
-        def.benchmark = websocket_benchmarks::bench_mask_payload;
+        def.name          = "mask_payload";
+        def.setup         = websocket_benchmarks::setup;
+        def.benchmark     = websocket_benchmarks::bench_mask_payload;
         def.target_p50_ns = 500;
         def.target_p99_ns = 5000;
         registry.register_benchmark(def);
 
-        def.name = "unmask_payload";
-        def.setup = websocket_benchmarks::setup;
+        def.name      = "unmask_payload";
+        def.setup     = websocket_benchmarks::setup;
         def.benchmark = websocket_benchmarks::bench_unmask_payload;
         registry.register_benchmark(def);
 
-        def.name = "build_frame";
-        def.setup = websocket_benchmarks::setup;
+        def.name      = "build_frame";
+        def.setup     = websocket_benchmarks::setup;
         def.benchmark = websocket_benchmarks::bench_build_frame;
         registry.register_benchmark(def);
     }
@@ -425,33 +428,33 @@ inline void register_transport_benchmarks() {
     // Serial (Modbus RTU)
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::TRANSPORTS;
-        def.component = "serial";
+        def.category   = BenchmarkCategory::TRANSPORTS;
+        def.component  = "serial";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "crc16_small";
-        def.setup = serial_benchmarks::setup;
-        def.benchmark = serial_benchmarks::bench_crc16_small;
+        def.name          = "crc16_small";
+        def.setup         = serial_benchmarks::setup;
+        def.benchmark     = serial_benchmarks::bench_crc16_small;
         def.target_p50_ns = 100;
         def.target_p99_ns = 1000;
         registry.register_benchmark(def);
 
-        def.name = "crc16_medium";
-        def.setup = serial_benchmarks::setup;
+        def.name      = "crc16_medium";
+        def.setup     = serial_benchmarks::setup;
         def.benchmark = serial_benchmarks::bench_crc16_medium;
         registry.register_benchmark(def);
 
-        def.name = "frame_parse";
-        def.setup = serial_benchmarks::setup;
+        def.name      = "frame_parse";
+        def.setup     = serial_benchmarks::setup;
         def.benchmark = serial_benchmarks::bench_frame_parse;
         registry.register_benchmark(def);
 
-        def.name = "frame_build";
-        def.setup = serial_benchmarks::setup;
+        def.name      = "frame_build";
+        def.setup     = serial_benchmarks::setup;
         def.benchmark = serial_benchmarks::bench_frame_build;
         registry.register_benchmark(def);
     }
 }
 
-} // namespace ipb::benchmark
+}  // namespace ipb::benchmark

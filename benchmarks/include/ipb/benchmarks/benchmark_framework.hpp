@@ -47,11 +47,11 @@ namespace ipb::benchmark {
  * @brief Benchmark categories
  */
 enum class BenchmarkCategory {
-    CORE,       // Core framework components
-    SINKS,      // Output sinks (MQTT, HTTP, etc.)
-    SCOOPS,     // Input sources (OPC-UA, Modbus, etc.)
-    TRANSPORTS, // Transport layers
-    ALL         // Run all categories
+    CORE,        // Core framework components
+    SINKS,       // Output sinks (MQTT, HTTP, etc.)
+    SCOOPS,      // Input sources (OPC-UA, Modbus, etc.)
+    TRANSPORTS,  // Transport layers
+    ALL          // Run all categories
 };
 
 /**
@@ -59,11 +59,16 @@ enum class BenchmarkCategory {
  */
 inline std::string category_to_string(BenchmarkCategory cat) {
     switch (cat) {
-        case BenchmarkCategory::CORE: return "core";
-        case BenchmarkCategory::SINKS: return "sinks";
-        case BenchmarkCategory::SCOOPS: return "scoops";
-        case BenchmarkCategory::TRANSPORTS: return "transports";
-        case BenchmarkCategory::ALL: return "all";
+        case BenchmarkCategory::CORE:
+            return "core";
+        case BenchmarkCategory::SINKS:
+            return "sinks";
+        case BenchmarkCategory::SCOOPS:
+            return "scoops";
+        case BenchmarkCategory::TRANSPORTS:
+            return "transports";
+        case BenchmarkCategory::ALL:
+            return "all";
     }
     return "unknown";
 }
@@ -72,11 +77,16 @@ inline std::string category_to_string(BenchmarkCategory cat) {
  * @brief Parse category from string
  */
 inline std::optional<BenchmarkCategory> string_to_category(const std::string& str) {
-    if (str == "core") return BenchmarkCategory::CORE;
-    if (str == "sinks") return BenchmarkCategory::SINKS;
-    if (str == "scoops") return BenchmarkCategory::SCOOPS;
-    if (str == "transports") return BenchmarkCategory::TRANSPORTS;
-    if (str == "all") return BenchmarkCategory::ALL;
+    if (str == "core")
+        return BenchmarkCategory::CORE;
+    if (str == "sinks")
+        return BenchmarkCategory::SINKS;
+    if (str == "scoops")
+        return BenchmarkCategory::SCOOPS;
+    if (str == "transports")
+        return BenchmarkCategory::TRANSPORTS;
+    if (str == "all")
+        return BenchmarkCategory::ALL;
     return std::nullopt;
 }
 
@@ -202,13 +212,13 @@ struct ComparisonResult {
         return change_percent > 5.0 || p99_change_percent > 10.0;
     }
 
-    bool is_improvement() const {
-        return change_percent < -5.0;
-    }
+    bool is_improvement() const { return change_percent < -5.0; }
 
     std::string status() const {
-        if (is_regression()) return "REGRESSION";
-        if (is_improvement()) return "IMPROVED";
+        if (is_regression())
+            return "REGRESSION";
+        if (is_improvement())
+            return "IMPROVED";
         return "STABLE";
     }
 };
@@ -250,8 +260,7 @@ public:
      * @brief Register a benchmark
      */
     void register_benchmark(BenchmarkDef def) {
-        std::string key = category_to_string(def.category) + "/" +
-                          def.component + "/" + def.name;
+        std::string key  = category_to_string(def.category) + "/" + def.component + "/" + def.name;
         benchmarks_[key] = std::move(def);
 
         // Track components per category
@@ -277,7 +286,7 @@ public:
      * @brief Get benchmarks for specific component
      */
     std::vector<BenchmarkDef*> get_by_component(BenchmarkCategory cat,
-                                                 const std::string& component) {
+                                                const std::string& component) {
         std::vector<BenchmarkDef*> result;
         std::string prefix = category_to_string(cat) + "/" + component + "/";
 
@@ -352,8 +361,8 @@ class BenchmarkRunner {
 public:
     explicit BenchmarkRunner(RunConfig config = {}) : config_(std::move(config)) {
         // Get system info
-        platform_ = get_platform_info();
-        compiler_ = get_compiler_info();
+        platform_  = get_platform_info();
+        compiler_  = get_compiler_info();
         timestamp_ = get_timestamp();
 
         if (config_.version.empty()) {
@@ -373,7 +382,7 @@ public:
      * @brief Run benchmarks for specific component
      */
     std::vector<BenchmarkResult> run_component(BenchmarkCategory cat,
-                                                const std::string& component) {
+                                               const std::string& component) {
         auto benchmarks = BenchmarkRegistry::instance().get_by_component(cat, component);
         return run_benchmarks(benchmarks);
     }
@@ -381,16 +390,15 @@ public:
     /**
      * @brief Run all benchmarks
      */
-    std::vector<BenchmarkResult> run_all() {
-        return run_category(BenchmarkCategory::ALL);
-    }
+    std::vector<BenchmarkResult> run_all() { return run_category(BenchmarkCategory::ALL); }
 
     /**
      * @brief Run specific benchmark by name
      */
     std::optional<BenchmarkResult> run_single(const std::string& name) {
         auto* def = BenchmarkRegistry::instance().get_by_name(name);
-        if (!def) return std::nullopt;
+        if (!def)
+            return std::nullopt;
         return run_single_benchmark(*def);
     }
 
@@ -402,8 +410,9 @@ public:
         std::filesystem::path dir(config_.output_dir);
         std::filesystem::create_directories(dir);
 
-        std::string fname = filename.empty() ?
-            "benchmark_" + config_.version + "_" + timestamp_ + ".json" : filename;
+        std::string fname = filename.empty()
+                              ? "benchmark_" + config_.version + "_" + timestamp_ + ".json"
+                              : filename;
 
         std::filesystem::path path = dir / fname;
 
@@ -443,9 +452,7 @@ public:
      * @brief Compare current results with baseline
      */
     std::vector<ComparisonResult> compare_with_baseline(
-            const std::vector<BenchmarkResult>& current,
-            const std::vector<BenchmarkResult>& baseline) {
-
+        const std::vector<BenchmarkResult>& current, const std::vector<BenchmarkResult>& baseline) {
         std::vector<ComparisonResult> comparisons;
 
         // Index baseline by name
@@ -456,20 +463,20 @@ public:
 
         for (const auto& c : current) {
             std::string key = c.category + "/" + c.component + "/" + c.name;
-            auto it = baseline_map.find(key);
+            auto it         = baseline_map.find(key);
 
             if (it != baseline_map.end()) {
                 const auto& b = *it->second;
                 ComparisonResult comp;
-                comp.benchmark_name = key;
-                comp.baseline_mean_ns = b.mean_ns;
-                comp.current_mean_ns = c.mean_ns;
-                comp.change_percent = calc_change_percent(b.mean_ns, c.mean_ns);
-                comp.baseline_p99_ns = b.p99_ns;
-                comp.current_p99_ns = c.p99_ns;
+                comp.benchmark_name     = key;
+                comp.baseline_mean_ns   = b.mean_ns;
+                comp.current_mean_ns    = c.mean_ns;
+                comp.change_percent     = calc_change_percent(b.mean_ns, c.mean_ns);
+                comp.baseline_p99_ns    = b.p99_ns;
+                comp.current_p99_ns     = c.p99_ns;
                 comp.p99_change_percent = calc_change_percent(b.p99_ns, c.p99_ns);
-                comp.baseline_ops = b.ops_per_sec;
-                comp.current_ops = c.ops_per_sec;
+                comp.baseline_ops       = b.ops_per_sec;
+                comp.current_ops        = c.ops_per_sec;
                 comp.ops_change_percent = calc_change_percent(b.ops_per_sec, c.ops_per_sec);
                 comparisons.push_back(comp);
             }
@@ -487,9 +494,12 @@ public:
         // Summary counts
         int regressions = 0, improvements = 0, stable = 0;
         for (const auto& c : comparisons) {
-            if (c.is_regression()) regressions++;
-            else if (c.is_improvement()) improvements++;
-            else stable++;
+            if (c.is_regression())
+                regressions++;
+            else if (c.is_improvement())
+                improvements++;
+            else
+                stable++;
         }
 
         std::cout << "Summary: " << comparisons.size() << " benchmarks compared\n";
@@ -498,22 +508,17 @@ public:
         std::cout << "  Stable:       " << stable << "\n\n";
 
         // Detailed table
-        std::cout << std::left << std::setw(40) << "Benchmark"
-                  << std::right << std::setw(12) << "Baseline"
-                  << std::setw(12) << "Current"
-                  << std::setw(10) << "Change"
-                  << std::setw(10) << "Status"
-                  << "\n";
+        std::cout << std::left << std::setw(40) << "Benchmark" << std::right << std::setw(12)
+                  << "Baseline" << std::setw(12) << "Current" << std::setw(10) << "Change"
+                  << std::setw(10) << "Status" << "\n";
         std::cout << std::string(84, '-') << "\n";
 
         for (const auto& c : comparisons) {
-            std::cout << std::left << std::setw(40) << truncate(c.benchmark_name, 39)
-                      << std::right << std::setw(12) << format_time(c.baseline_mean_ns)
-                      << std::setw(12) << format_time(c.current_mean_ns)
-                      << std::setw(9) << std::fixed << std::setprecision(1)
-                      << c.change_percent << "%"
-                      << std::setw(10) << c.status()
-                      << "\n";
+            std::cout << std::left << std::setw(40) << truncate(c.benchmark_name, 39) << std::right
+                      << std::setw(12) << format_time(c.baseline_mean_ns) << std::setw(12)
+                      << format_time(c.current_mean_ns) << std::setw(9) << std::fixed
+                      << std::setprecision(1) << c.change_percent << "%" << std::setw(10)
+                      << c.status() << "\n";
         }
 
         std::cout << "\n";
@@ -524,13 +529,12 @@ public:
             for (const auto& c : comparisons) {
                 if (c.is_regression()) {
                     std::cout << "  " << c.benchmark_name << "\n";
-                    std::cout << "    Mean: " << format_time(c.baseline_mean_ns)
-                              << " -> " << format_time(c.current_mean_ns)
-                              << " (+" << std::fixed << std::setprecision(1)
-                              << c.change_percent << "%)\n";
-                    std::cout << "    P99:  " << format_time(c.baseline_p99_ns)
-                              << " -> " << format_time(c.current_p99_ns)
-                              << " (+" << c.p99_change_percent << "%)\n";
+                    std::cout << "    Mean: " << format_time(c.baseline_mean_ns) << " -> "
+                              << format_time(c.current_mean_ns) << " (+" << std::fixed
+                              << std::setprecision(1) << c.change_percent << "%)\n";
+                    std::cout << "    P99:  " << format_time(c.baseline_p99_ns) << " -> "
+                              << format_time(c.current_p99_ns) << " (+" << c.p99_change_percent
+                              << "%)\n";
                 }
             }
             std::cout << "\n";
@@ -541,7 +545,7 @@ public:
      * @brief Generate markdown report
      */
     std::string generate_markdown_report(const std::vector<BenchmarkResult>& results,
-                                          const std::vector<ComparisonResult>& comparisons = {}) {
+                                         const std::vector<ComparisonResult>& comparisons = {}) {
         std::ostringstream md;
 
         md << "# IPB Benchmark Report\n\n";
@@ -564,14 +568,15 @@ public:
             int passed = 0, failed = 0;
             double total_ops = 0;
             for (const auto* r : cat_results) {
-                if (r->slo_passed) passed++;
-                else failed++;
+                if (r->slo_passed)
+                    passed++;
+                else
+                    failed++;
                 total_ops += r->ops_per_sec;
             }
             double avg_ops = cat_results.empty() ? 0 : total_ops / cat_results.size();
 
-            md << "| " << cat << " | " << cat_results.size()
-               << " | " << passed << " | " << failed
+            md << "| " << cat << " | " << cat_results.size() << " | " << passed << " | " << failed
                << " | " << format_throughput(avg_ops) << " |\n";
         }
 
@@ -586,10 +591,8 @@ public:
             md << "|-----------|------|-----|------------|--------|\n";
 
             for (const auto* r : cat_results) {
-                md << "| " << r->component << "/" << r->name
-                   << " | " << format_time(r->mean_ns)
-                   << " | " << format_time(r->p99_ns)
-                   << " | " << format_throughput(r->ops_per_sec)
+                md << "| " << r->component << "/" << r->name << " | " << format_time(r->mean_ns)
+                   << " | " << format_time(r->p99_ns) << " | " << format_throughput(r->ops_per_sec)
                    << " | " << (r->slo_passed ? "✓" : "✗") << " |\n";
             }
             md << "\n";
@@ -602,13 +605,11 @@ public:
             md << "|-----------|----------|---------|--------|--------|\n";
 
             for (const auto& c : comparisons) {
-                std::string status_emoji = c.is_regression() ? "⚠️" :
-                                          (c.is_improvement() ? "✨" : "➖");
-                md << "| " << c.benchmark_name
-                   << " | " << format_time(c.baseline_mean_ns)
-                   << " | " << format_time(c.current_mean_ns)
-                   << " | " << std::fixed << std::setprecision(1) << c.change_percent << "%"
-                   << " | " << status_emoji << " |\n";
+                std::string status_emoji =
+                    c.is_regression() ? "⚠️" : (c.is_improvement() ? "✨" : "➖");
+                md << "| " << c.benchmark_name << " | " << format_time(c.baseline_mean_ns) << " | "
+                   << format_time(c.current_mean_ns) << " | " << std::fixed << std::setprecision(1)
+                   << c.change_percent << "%" << " | " << status_emoji << " |\n";
             }
             md << "\n";
         }
@@ -628,14 +629,14 @@ private:
         std::vector<BenchmarkResult> results;
         results.reserve(benchmarks.size());
 
-        size_t total = benchmarks.size();
+        size_t total   = benchmarks.size();
         size_t current = 0;
 
         for (auto* def : benchmarks) {
             ++current;
             if (config_.verbose) {
-                std::cout << "[" << current << "/" << total << "] Running: "
-                          << def->component << "/" << def->name << "... ";
+                std::cout << "[" << current << "/" << total << "] Running: " << def->component
+                          << "/" << def->name << "... ";
                 std::cout.flush();
             }
 
@@ -643,8 +644,8 @@ private:
             results.push_back(result);
 
             if (config_.verbose) {
-                std::cout << "done (" << format_time(result.mean_ns)
-                          << " mean, " << format_throughput(result.ops_per_sec) << ")\n";
+                std::cout << "done (" << format_time(result.mean_ns) << " mean, "
+                          << format_throughput(result.ops_per_sec) << ")\n";
             }
         }
 
@@ -653,22 +654,24 @@ private:
 
     BenchmarkResult run_single_benchmark(const BenchmarkDef& def) {
         BenchmarkResult result;
-        result.name = def.name;
-        result.category = category_to_string(def.category);
+        result.name      = def.name;
+        result.category  = category_to_string(def.category);
         result.component = def.component;
         result.timestamp = timestamp_;
-        result.version = config_.version;
-        result.platform = platform_;
-        result.compiler = compiler_;
+        result.version   = config_.version;
+        result.platform  = platform_;
+        result.compiler  = compiler_;
 
         size_t iterations = def.iterations > 0 ? def.iterations : config_.default_iterations;
-        size_t warmup = def.warmup > 0 ? def.warmup : config_.default_warmup;
+        size_t warmup     = def.warmup > 0 ? def.warmup : config_.default_warmup;
 
         // Warmup
         for (size_t i = 0; i < warmup; ++i) {
-            if (def.setup) def.setup();
+            if (def.setup)
+                def.setup();
             def.benchmark();
-            if (def.teardown) def.teardown();
+            if (def.teardown)
+                def.teardown();
         }
 
         // Collect measurements
@@ -678,22 +681,24 @@ private:
         auto overall_start = std::chrono::high_resolution_clock::now();
 
         for (size_t i = 0; i < iterations; ++i) {
-            if (def.setup) def.setup();
+            if (def.setup)
+                def.setup();
 
             auto start = std::chrono::high_resolution_clock::now();
             def.benchmark();
             auto end = std::chrono::high_resolution_clock::now();
 
-            if (def.teardown) def.teardown();
+            if (def.teardown)
+                def.teardown();
 
             auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
             latencies.push_back(ns);
         }
 
         auto overall_end = std::chrono::high_resolution_clock::now();
-        result.duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            overall_end - overall_start
-        ).count();
+        result.duration_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(overall_end - overall_start)
+                .count();
 
         // Calculate statistics
         calculate_statistics(result, latencies);
@@ -717,13 +722,14 @@ private:
     }
 
     void calculate_statistics(BenchmarkResult& result, std::vector<int64_t>& latencies) {
-        if (latencies.empty()) return;
+        if (latencies.empty())
+            return;
 
         std::sort(latencies.begin(), latencies.end());
 
         // Remove outliers if configured
         if (config_.remove_outliers && latencies.size() > 10) {
-            double sum = std::accumulate(latencies.begin(), latencies.end(), 0.0);
+            double sum  = std::accumulate(latencies.begin(), latencies.end(), 0.0);
             double mean = sum / latencies.size();
 
             double sq_sum = 0;
@@ -751,7 +757,7 @@ private:
         result.iterations = latencies.size();
 
         // Mean and stddev
-        double sum = std::accumulate(latencies.begin(), latencies.end(), 0.0);
+        double sum     = std::accumulate(latencies.begin(), latencies.end(), 0.0);
         result.mean_ns = sum / latencies.size();
 
         double sq_sum = 0;
@@ -765,12 +771,12 @@ private:
         result.max_ns = latencies.back();
 
         // Percentiles
-        result.p50_ns = percentile(latencies, 0.50);
-        result.p75_ns = percentile(latencies, 0.75);
-        result.p90_ns = percentile(latencies, 0.90);
-        result.p95_ns = percentile(latencies, 0.95);
-        result.p99_ns = percentile(latencies, 0.99);
-        result.p999_ns = percentile(latencies, 0.999);
+        result.p50_ns    = percentile(latencies, 0.50);
+        result.p75_ns    = percentile(latencies, 0.75);
+        result.p90_ns    = percentile(latencies, 0.90);
+        result.p95_ns    = percentile(latencies, 0.95);
+        result.p99_ns    = percentile(latencies, 0.99);
+        result.p999_ns   = percentile(latencies, 0.999);
         result.median_ns = result.p50_ns;
 
         // Throughput
@@ -780,18 +786,21 @@ private:
     }
 
     static double percentile(const std::vector<int64_t>& sorted, double p) {
-        if (sorted.empty()) return 0;
-        double idx = p * (sorted.size() - 1);
+        if (sorted.empty())
+            return 0;
+        double idx   = p * (sorted.size() - 1);
         size_t lower = static_cast<size_t>(idx);
         size_t upper = lower + 1;
-        double frac = idx - lower;
+        double frac  = idx - lower;
 
-        if (upper >= sorted.size()) return sorted.back();
+        if (upper >= sorted.size())
+            return sorted.back();
         return sorted[lower] * (1 - frac) + sorted[upper] * frac;
     }
 
     static double calc_change_percent(double baseline, double current) {
-        if (baseline == 0) return 0;
+        if (baseline == 0)
+            return 0;
         return ((current - baseline) / baseline) * 100.0;
     }
 
@@ -808,7 +817,8 @@ private:
 
         for (size_t i = 0; i < results.size(); ++i) {
             oss << results[i].to_json();
-            if (i < results.size() - 1) oss << ",";
+            if (i < results.size() - 1)
+                oss << ",";
             oss << "\n";
         }
 
@@ -825,7 +835,7 @@ private:
     }
 
     static std::string get_timestamp() {
-        auto now = std::chrono::system_clock::now();
+        auto now  = std::chrono::system_clock::now();
         auto time = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
         ss << std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S");
@@ -833,29 +843,27 @@ private:
     }
 
     static std::string get_platform_info() {
-        #ifdef __linux__
+#ifdef __linux__
         return "Linux";
-        #elif defined(_WIN32)
+#elif defined(_WIN32)
         return "Windows";
-        #elif defined(__APPLE__)
+#elif defined(__APPLE__)
         return "macOS";
-        #else
+#else
         return "Unknown";
-        #endif
+#endif
     }
 
     static std::string get_compiler_info() {
-        #ifdef __GNUC__
-        return "GCC " + std::to_string(__GNUC__) + "." +
-               std::to_string(__GNUC_MINOR__);
-        #elif defined(__clang__)
-        return "Clang " + std::to_string(__clang_major__) + "." +
-               std::to_string(__clang_minor__);
-        #elif defined(_MSC_VER)
+#ifdef __GNUC__
+        return "GCC " + std::to_string(__GNUC__) + "." + std::to_string(__GNUC_MINOR__);
+#elif defined(__clang__)
+        return "Clang " + std::to_string(__clang_major__) + "." + std::to_string(__clang_minor__);
+#elif defined(_MSC_VER)
         return "MSVC " + std::to_string(_MSC_VER);
-        #else
+#else
         return "Unknown";
-        #endif
+#endif
     }
 
     static std::string format_time(double ns) {
@@ -889,7 +897,8 @@ private:
     }
 
     static std::string truncate(const std::string& s, size_t max_len) {
-        if (s.length() <= max_len) return s;
+        if (s.length() <= max_len)
+            return s;
         return s.substr(0, max_len - 3) + "...";
     }
 };
@@ -901,39 +910,39 @@ private:
 /**
  * @brief Helper for benchmark registration
  */
-#define IPB_REGISTER_BENCHMARK(category, component, name, func) \
-    namespace { \
-        struct BenchmarkRegistrar_##category##_##component##_##name { \
-            BenchmarkRegistrar_##category##_##component##_##name() { \
-                ipb::benchmark::BenchmarkDef def; \
-                def.name = #name; \
-                def.category = ipb::benchmark::BenchmarkCategory::category; \
-                def.component = #component; \
-                def.benchmark = func; \
-                ipb::benchmark::BenchmarkRegistry::instance().register_benchmark(std::move(def)); \
-            } \
-        }; \
-        static BenchmarkRegistrar_##category##_##component##_##name \
-            registrar_##category##_##component##_##name; \
+#define IPB_REGISTER_BENCHMARK(category, component, name, func)                               \
+    namespace {                                                                               \
+    struct BenchmarkRegistrar_##category##_##component##_##name {                             \
+        BenchmarkRegistrar_##category##_##component##_##name() {                              \
+            ipb::benchmark::BenchmarkDef def;                                                 \
+            def.name      = #name;                                                            \
+            def.category  = ipb::benchmark::BenchmarkCategory::category;                      \
+            def.component = #component;                                                       \
+            def.benchmark = func;                                                             \
+            ipb::benchmark::BenchmarkRegistry::instance().register_benchmark(std::move(def)); \
+        }                                                                                     \
+    };                                                                                        \
+    static BenchmarkRegistrar_##category##_##component##_##name                               \
+        registrar_##category##_##component##_##name;                                          \
     }
 
-#define IPB_REGISTER_BENCHMARK_WITH_SLO(category, component, name, func, p50, p99, ops) \
-    namespace { \
-        struct BenchmarkRegistrar_##category##_##component##_##name { \
-            BenchmarkRegistrar_##category##_##component##_##name() { \
-                ipb::benchmark::BenchmarkDef def; \
-                def.name = #name; \
-                def.category = ipb::benchmark::BenchmarkCategory::category; \
-                def.component = #component; \
-                def.benchmark = func; \
-                def.target_p50_ns = p50; \
-                def.target_p99_ns = p99; \
-                def.target_ops = ops; \
-                ipb::benchmark::BenchmarkRegistry::instance().register_benchmark(std::move(def)); \
-            } \
-        }; \
-        static BenchmarkRegistrar_##category##_##component##_##name \
-            registrar_##category##_##component##_##name; \
+#define IPB_REGISTER_BENCHMARK_WITH_SLO(category, component, name, func, p50, p99, ops)       \
+    namespace {                                                                               \
+    struct BenchmarkRegistrar_##category##_##component##_##name {                             \
+        BenchmarkRegistrar_##category##_##component##_##name() {                              \
+            ipb::benchmark::BenchmarkDef def;                                                 \
+            def.name          = #name;                                                        \
+            def.category      = ipb::benchmark::BenchmarkCategory::category;                  \
+            def.component     = #component;                                                   \
+            def.benchmark     = func;                                                         \
+            def.target_p50_ns = p50;                                                          \
+            def.target_p99_ns = p99;                                                          \
+            def.target_ops    = ops;                                                          \
+            ipb::benchmark::BenchmarkRegistry::instance().register_benchmark(std::move(def)); \
+        }                                                                                     \
+    };                                                                                        \
+    static BenchmarkRegistrar_##category##_##component##_##name                               \
+        registrar_##category##_##component##_##name;                                          \
     }
 
-} // namespace ipb::benchmark
+}  // namespace ipb::benchmark

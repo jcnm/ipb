@@ -17,11 +17,6 @@
 #include <ipb/benchmarks/benchmark_framework.hpp>
 
 // Include all benchmark modules
-#include "benchmarks_core.hpp"
-#include "benchmarks_sinks.hpp"
-#include "benchmarks_scoops.hpp"
-#include "benchmarks_transports.hpp"
-
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -31,6 +26,11 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "benchmarks_core.hpp"
+#include "benchmarks_scoops.hpp"
+#include "benchmarks_sinks.hpp"
+#include "benchmarks_transports.hpp"
 
 using namespace ipb::benchmark;
 
@@ -154,7 +154,7 @@ CliArgs parse_args(int argc, char** argv) {
             args.report = true;
         } else if (arg.starts_with("--category=")) {
             auto cat_str = arg.substr(11);
-            auto cat = string_to_category(cat_str);
+            auto cat     = string_to_category(cat_str);
             if (cat) {
                 args.category = *cat;
             } else {
@@ -168,7 +168,7 @@ CliArgs parse_args(int argc, char** argv) {
             args.version = arg.substr(10);
         } else if (arg.starts_with("--save-baseline=")) {
             args.baseline_version = arg.substr(16);
-            args.save_baseline = true;
+            args.save_baseline    = true;
         } else if (arg.starts_with("--compare=")) {
             args.baseline_version = arg.substr(10);
         } else if (arg.starts_with("--output=")) {
@@ -208,7 +208,7 @@ int main(int argc, char** argv) {
         for (auto cat : {BenchmarkCategory::CORE, BenchmarkCategory::SINKS,
                          BenchmarkCategory::SCOOPS, BenchmarkCategory::TRANSPORTS}) {
             std::string cat_name = category_to_string(cat);
-            auto components = registry.list_components(cat);
+            auto components      = registry.list_components(cat);
 
             if (!components.empty()) {
                 std::cout << "[" << cat_name << "]\n";
@@ -227,10 +227,10 @@ int main(int argc, char** argv) {
 
     // Configure runner
     RunConfig config;
-    config.verbose = args.verbose;
+    config.verbose     = args.verbose;
     config.json_output = args.json;
-    config.output_dir = args.output_dir;
-    config.version = args.version;
+    config.output_dir  = args.output_dir;
+    config.version     = args.version;
 
     BenchmarkRunner runner(config);
 
@@ -270,11 +270,8 @@ int main(int argc, char** argv) {
     std::cout << "========================================\n\n";
 
     // Table header
-    std::cout << std::left << std::setw(35) << "Benchmark"
-              << std::right << std::setw(10) << "Mean"
-              << std::setw(10) << "P99"
-              << std::setw(12) << "Throughput"
-              << std::setw(8) << "Status"
+    std::cout << std::left << std::setw(35) << "Benchmark" << std::right << std::setw(10) << "Mean"
+              << std::setw(10) << "P99" << std::setw(12) << "Throughput" << std::setw(8) << "Status"
               << "\n";
     std::cout << std::string(75, '-') << "\n";
 
@@ -285,20 +282,20 @@ int main(int argc, char** argv) {
             name = name.substr(0, 31) + "...";
         }
 
-        std::cout << std::left << std::setw(35) << name
-                  << std::right << std::setw(10) << format_time_short(r.mean_ns)
-                  << std::setw(10) << format_time_short(r.p99_ns)
-                  << std::setw(12) << format_throughput_short(r.ops_per_sec)
-                  << std::setw(8) << (r.slo_passed ? "PASS" : "FAIL")
-                  << "\n";
+        std::cout << std::left << std::setw(35) << name << std::right << std::setw(10)
+                  << format_time_short(r.mean_ns) << std::setw(10) << format_time_short(r.p99_ns)
+                  << std::setw(12) << format_throughput_short(r.ops_per_sec) << std::setw(8)
+                  << (r.slo_passed ? "PASS" : "FAIL") << "\n";
 
-        if (r.slo_passed) passed++;
-        else failed++;
+        if (r.slo_passed)
+            passed++;
+        else
+            failed++;
     }
 
     std::cout << std::string(75, '-') << "\n";
-    std::cout << "Total: " << results.size() << " benchmarks, "
-              << passed << " passed, " << failed << " failed\n\n";
+    std::cout << "Total: " << results.size() << " benchmarks, " << passed << " passed, " << failed
+              << " failed\n\n";
 
     // Save results
     runner.save_results(results);

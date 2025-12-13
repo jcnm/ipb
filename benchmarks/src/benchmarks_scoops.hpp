@@ -55,8 +55,8 @@ void bench_decode_registers() {
 
 void bench_decode_float32() {
     // Decode 2 registers as 32-bit float (big-endian)
-    uint32_t combined = (static_cast<uint32_t>(g_registers[0]) << 16) |
-                        static_cast<uint32_t>(g_registers[1]);
+    uint32_t combined =
+        (static_cast<uint32_t>(g_registers[0]) << 16) | static_cast<uint32_t>(g_registers[1]);
     float value;
     std::memcpy(&value, &combined, sizeof(float));
     asm volatile("" : : "r"(value) : "memory");
@@ -64,8 +64,8 @@ void bench_decode_float32() {
 
 void bench_decode_int32() {
     // Decode 2 registers as 32-bit integer
-    int32_t value = (static_cast<int32_t>(g_registers[0]) << 16) |
-                    static_cast<int32_t>(g_registers[1]);
+    int32_t value =
+        (static_cast<int32_t>(g_registers[0]) << 16) | static_cast<int32_t>(g_registers[1]);
     asm volatile("" : : "r"(value) : "memory");
 }
 
@@ -79,7 +79,7 @@ void bench_encode_registers() {
     asm volatile("" : : "r"(output[0]) : "memory");
 }
 
-} // namespace modbus_scoop_benchmarks
+}  // namespace modbus_scoop_benchmarks
 
 //=============================================================================
 // OPC-UA Scoop Benchmarks (Simulated)
@@ -101,7 +101,7 @@ struct SimulatedVariant {
 inline SimulatedVariant g_variant;
 
 void setup() {
-    g_variant.type = 11;  // Double
+    g_variant.type     = 11;  // Double
     g_variant.data.dbl = 42.5;
 }
 
@@ -114,7 +114,7 @@ void bench_decode_variant_double() {
 }
 
 void bench_decode_variant_int32() {
-    g_variant.type = 6;
+    g_variant.type       = 6;
     g_variant.data.int32 = 12345;
 
     int32_t value = 0;
@@ -127,12 +127,12 @@ void bench_decode_variant_int32() {
 void bench_node_id_parse() {
     // Parse node ID string "ns=2;s=MyVariable"
     const char* node_id = "ns=2;s=MyVariable";
-    int ns = 0;
+    int ns              = 0;
     char identifier[64] = {0};
 
     // Simple parsing
     if (std::strncmp(node_id, "ns=", 3) == 0) {
-        ns = node_id[3] - '0';
+        ns               = node_id[3] - '0';
         const char* semi = std::strchr(node_id, ';');
         if (semi && semi[1] == 's' && semi[2] == '=') {
             std::strncpy(identifier, semi + 3, sizeof(identifier) - 1);
@@ -141,7 +141,7 @@ void bench_node_id_parse() {
     asm volatile("" : : "r"(ns), "r"(identifier[0]) : "memory");
 }
 
-} // namespace opcua_scoop_benchmarks
+}  // namespace opcua_scoop_benchmarks
 
 //=============================================================================
 // Sparkplug B Scoop Benchmarks (Simulated)
@@ -166,21 +166,29 @@ inline std::vector<SparkplugMetric> g_metrics(100);
 
 void setup() {
     for (size_t i = 0; i < g_metrics.size(); ++i) {
-        g_metrics[i].alias = i;
-        g_metrics[i].timestamp = 1705312200000 + i;
-        g_metrics[i].datatype = 10;  // Double
+        g_metrics[i].alias              = i;
+        g_metrics[i].timestamp          = 1705312200000 + i;
+        g_metrics[i].datatype           = 10;  // Double
         g_metrics[i].value.double_value = static_cast<double>(i) * 1.5;
     }
 }
 
 void bench_decode_metric() {
     const auto& metric = g_metrics[0];
-    double value = 0;
+    double value       = 0;
     switch (metric.datatype) {
-        case 7: value = metric.value.int_value; break;
-        case 9: value = metric.value.float_value; break;
-        case 10: value = metric.value.double_value; break;
-        case 11: value = metric.value.bool_value ? 1.0 : 0.0; break;
+        case 7:
+            value = metric.value.int_value;
+            break;
+        case 9:
+            value = metric.value.float_value;
+            break;
+        case 10:
+            value = metric.value.double_value;
+            break;
+        case 11:
+            value = metric.value.bool_value ? 1.0 : 0.0;
+            break;
     }
     asm volatile("" : : "r"(value) : "memory");
 }
@@ -191,8 +199,12 @@ void bench_decode_batch() {
     for (int i = 0; i < 10; ++i) {
         const auto& metric = g_metrics[i];
         switch (metric.datatype) {
-            case 10: values[i] = metric.value.double_value; break;
-            default: values[i] = 0; break;
+            case 10:
+                values[i] = metric.value.double_value;
+                break;
+            default:
+                values[i] = 0;
+                break;
         }
     }
     asm volatile("" : : "r"(values[0]) : "memory");
@@ -200,13 +212,13 @@ void bench_decode_batch() {
 
 void bench_timestamp_decode() {
     // Convert Sparkplug timestamp (milliseconds) to timespec
-    uint64_t ts_ms = g_metrics[0].timestamp;
-    time_t seconds = ts_ms / 1000;
+    uint64_t ts_ms   = g_metrics[0].timestamp;
+    time_t seconds   = ts_ms / 1000;
     long nanoseconds = (ts_ms % 1000) * 1000000;
     asm volatile("" : : "r"(seconds), "r"(nanoseconds) : "memory");
 }
 
-} // namespace sparkplug_benchmarks
+}  // namespace sparkplug_benchmarks
 
 //=============================================================================
 // Registration Function
@@ -218,29 +230,29 @@ inline void register_scoop_benchmarks() {
     // Modbus Scoop
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::SCOOPS;
-        def.component = "modbus";
+        def.category   = BenchmarkCategory::SCOOPS;
+        def.component  = "modbus";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "decode_registers";
-        def.setup = modbus_scoop_benchmarks::setup;
-        def.benchmark = modbus_scoop_benchmarks::bench_decode_registers;
+        def.name          = "decode_registers";
+        def.setup         = modbus_scoop_benchmarks::setup;
+        def.benchmark     = modbus_scoop_benchmarks::bench_decode_registers;
         def.target_p50_ns = 100;
         def.target_p99_ns = 1000;
         registry.register_benchmark(def);
 
-        def.name = "decode_float32";
-        def.benchmark = modbus_scoop_benchmarks::bench_decode_float32;
+        def.name          = "decode_float32";
+        def.benchmark     = modbus_scoop_benchmarks::bench_decode_float32;
         def.target_p50_ns = 50;
         def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name = "decode_int32";
+        def.name      = "decode_int32";
         def.benchmark = modbus_scoop_benchmarks::bench_decode_int32;
         registry.register_benchmark(def);
 
-        def.name = "encode_registers";
+        def.name      = "encode_registers";
         def.benchmark = modbus_scoop_benchmarks::bench_encode_registers;
         registry.register_benchmark(def);
     }
@@ -248,25 +260,25 @@ inline void register_scoop_benchmarks() {
     // OPC-UA Scoop
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::SCOOPS;
-        def.component = "opcua";
+        def.category   = BenchmarkCategory::SCOOPS;
+        def.component  = "opcua";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "decode_variant_double";
-        def.setup = opcua_scoop_benchmarks::setup;
-        def.benchmark = opcua_scoop_benchmarks::bench_decode_variant_double;
+        def.name          = "decode_variant_double";
+        def.setup         = opcua_scoop_benchmarks::setup;
+        def.benchmark     = opcua_scoop_benchmarks::bench_decode_variant_double;
         def.target_p50_ns = 50;
         def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name = "decode_variant_int32";
-        def.setup = opcua_scoop_benchmarks::setup;
+        def.name      = "decode_variant_int32";
+        def.setup     = opcua_scoop_benchmarks::setup;
         def.benchmark = opcua_scoop_benchmarks::bench_decode_variant_int32;
         registry.register_benchmark(def);
 
-        def.name = "node_id_parse";
-        def.benchmark = opcua_scoop_benchmarks::bench_node_id_parse;
+        def.name          = "node_id_parse";
+        def.benchmark     = opcua_scoop_benchmarks::bench_node_id_parse;
         def.target_p50_ns = 200;
         def.target_p99_ns = 2000;
         registry.register_benchmark(def);
@@ -275,30 +287,30 @@ inline void register_scoop_benchmarks() {
     // Sparkplug B
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::SCOOPS;
-        def.component = "sparkplug";
+        def.category   = BenchmarkCategory::SCOOPS;
+        def.component  = "sparkplug";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "decode_metric";
-        def.setup = sparkplug_benchmarks::setup;
-        def.benchmark = sparkplug_benchmarks::bench_decode_metric;
+        def.name          = "decode_metric";
+        def.setup         = sparkplug_benchmarks::setup;
+        def.benchmark     = sparkplug_benchmarks::bench_decode_metric;
         def.target_p50_ns = 50;
         def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name = "decode_batch";
-        def.setup = sparkplug_benchmarks::setup;
-        def.benchmark = sparkplug_benchmarks::bench_decode_batch;
+        def.name          = "decode_batch";
+        def.setup         = sparkplug_benchmarks::setup;
+        def.benchmark     = sparkplug_benchmarks::bench_decode_batch;
         def.target_p50_ns = 200;
         def.target_p99_ns = 2000;
         registry.register_benchmark(def);
 
-        def.name = "timestamp_decode";
-        def.setup = sparkplug_benchmarks::setup;
+        def.name      = "timestamp_decode";
+        def.setup     = sparkplug_benchmarks::setup;
         def.benchmark = sparkplug_benchmarks::bench_timestamp_decode;
         registry.register_benchmark(def);
     }
 }
 
-} // namespace ipb::benchmark
+}  // namespace ipb::benchmark

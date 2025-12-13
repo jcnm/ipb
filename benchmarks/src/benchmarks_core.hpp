@@ -15,12 +15,12 @@
  */
 
 #include <ipb/benchmarks/benchmark_framework.hpp>
-#include <ipb/common/memory_pool.hpp>
-#include <ipb/common/lockfree_queue.hpp>
-#include <ipb/common/rate_limiter.hpp>
 #include <ipb/common/backpressure.hpp>
 #include <ipb/common/cache_optimized.hpp>
 #include <ipb/common/data_point.hpp>
+#include <ipb/common/lockfree_queue.hpp>
+#include <ipb/common/memory_pool.hpp>
+#include <ipb/common/rate_limiter.hpp>
 
 #include <atomic>
 #include <cstring>
@@ -38,7 +38,7 @@ struct BenchmarkData {
 };
 
 // Prevent compiler optimization
-template<typename T>
+template <typename T>
 inline void do_not_optimize(T&& value) {
 #ifdef __GNUC__
     asm volatile("" : : "r,m"(value) : "memory");
@@ -54,7 +54,7 @@ inline void do_not_optimize(T&& value) {
 namespace memory_pool_benchmarks {
 
 inline common::ObjectPool<BenchmarkData, 256>* g_pool = nullptr;
-inline BenchmarkData* g_allocated = nullptr;
+inline BenchmarkData* g_allocated                     = nullptr;
 
 void setup() {
     if (!g_pool) {
@@ -101,7 +101,7 @@ void cleanup() {
     g_pool = nullptr;
 }
 
-} // namespace memory_pool_benchmarks
+}  // namespace memory_pool_benchmarks
 
 //=============================================================================
 // Lock-free Queue Benchmarks
@@ -109,9 +109,9 @@ void cleanup() {
 
 namespace queue_benchmarks {
 
-inline common::SPSCQueue<uint64_t, 4096>* g_spsc = nullptr;
+inline common::SPSCQueue<uint64_t, 4096>* g_spsc  = nullptr;
 inline common::BoundedMPMCQueue<uint64_t>* g_mpmc = nullptr;
-inline uint64_t g_counter = 0;
+inline uint64_t g_counter                         = 0;
 
 void setup_spsc() {
     if (!g_spsc) {
@@ -186,7 +186,7 @@ void cleanup() {
     g_mpmc = nullptr;
 }
 
-} // namespace queue_benchmarks
+}  // namespace queue_benchmarks
 
 //=============================================================================
 // Rate Limiter Benchmarks
@@ -194,22 +194,18 @@ void cleanup() {
 
 namespace rate_limiter_benchmarks {
 
-inline common::TokenBucket* g_fast_bucket = nullptr;
-inline common::TokenBucket* g_slow_bucket = nullptr;
+inline common::TokenBucket* g_fast_bucket      = nullptr;
+inline common::TokenBucket* g_slow_bucket      = nullptr;
 inline common::SlidingWindowLimiter* g_sliding = nullptr;
 
 void setup() {
     if (!g_fast_bucket) {
-        g_fast_bucket = new common::TokenBucket(common::RateLimitConfig{
-            .rate_per_second = 10000000,
-            .burst_size = 100000
-        });
+        g_fast_bucket = new common::TokenBucket(
+            common::RateLimitConfig{.rate_per_second = 10000000, .burst_size = 100000});
     }
     if (!g_slow_bucket) {
-        g_slow_bucket = new common::TokenBucket(common::RateLimitConfig{
-            .rate_per_second = 100,
-            .burst_size = 1
-        });
+        g_slow_bucket = new common::TokenBucket(
+            common::RateLimitConfig{.rate_per_second = 100, .burst_size = 1});
         // Drain the bucket
         while (g_slow_bucket->try_acquire()) {}
     }
@@ -239,10 +235,10 @@ void cleanup() {
     delete g_sliding;
     g_fast_bucket = nullptr;
     g_slow_bucket = nullptr;
-    g_sliding = nullptr;
+    g_sliding     = nullptr;
 }
 
-} // namespace rate_limiter_benchmarks
+}  // namespace rate_limiter_benchmarks
 
 //=============================================================================
 // Backpressure Benchmarks
@@ -250,26 +246,24 @@ void cleanup() {
 
 namespace backpressure_benchmarks {
 
-inline common::BackpressureController* g_no_pressure = nullptr;
+inline common::BackpressureController* g_no_pressure   = nullptr;
 inline common::BackpressureController* g_high_pressure = nullptr;
-inline common::PressureSensor* g_sensor = nullptr;
+inline common::PressureSensor* g_sensor                = nullptr;
 
 void setup() {
     if (!g_no_pressure) {
-        g_no_pressure = new common::BackpressureController(common::BackpressureConfig{
-            .strategy = common::BackpressureStrategy::THROTTLE,
-            .low_watermark = 0.9,
-            .high_watermark = 0.95,
-            .critical_watermark = 0.99
-        });
+        g_no_pressure = new common::BackpressureController(
+            common::BackpressureConfig{.strategy           = common::BackpressureStrategy::THROTTLE,
+                                       .low_watermark      = 0.9,
+                                       .high_watermark     = 0.95,
+                                       .critical_watermark = 0.99});
     }
     if (!g_high_pressure) {
-        g_high_pressure = new common::BackpressureController(common::BackpressureConfig{
-            .strategy = common::BackpressureStrategy::DROP_NEWEST,
-            .low_watermark = 0.1,
-            .high_watermark = 0.2,
-            .critical_watermark = 0.3
-        });
+        g_high_pressure = new common::BackpressureController(
+            common::BackpressureConfig{.strategy       = common::BackpressureStrategy::DROP_NEWEST,
+                                       .low_watermark  = 0.1,
+                                       .high_watermark = 0.2,
+                                       .critical_watermark = 0.3});
         g_high_pressure->update_queue(90, 100);
     }
     if (!g_sensor) {
@@ -280,7 +274,8 @@ void setup() {
 void bench_no_pressure() {
     bool result = g_no_pressure->should_accept();
     do_not_optimize(result);
-    if (result) g_no_pressure->item_processed();
+    if (result)
+        g_no_pressure->item_processed();
 }
 
 void bench_high_pressure() {
@@ -299,12 +294,12 @@ void cleanup() {
     delete g_no_pressure;
     delete g_high_pressure;
     delete g_sensor;
-    g_no_pressure = nullptr;
+    g_no_pressure   = nullptr;
     g_high_pressure = nullptr;
-    g_sensor = nullptr;
+    g_sensor        = nullptr;
 }
 
-} // namespace backpressure_benchmarks
+}  // namespace backpressure_benchmarks
 
 //=============================================================================
 // Cache Optimization Benchmarks
@@ -313,9 +308,9 @@ void cleanup() {
 namespace cache_benchmarks {
 
 inline common::PrefetchBuffer<uint64_t, 1024>* g_prefetch_buf = nullptr;
-inline common::CacheAligned<uint64_t>* g_aligned = nullptr;
-inline uint64_t g_regular = 0;
-inline uint64_t g_counter = 0;
+inline common::CacheAligned<uint64_t>* g_aligned              = nullptr;
+inline uint64_t g_regular                                     = 0;
+inline uint64_t g_counter                                     = 0;
 
 void setup() {
     if (!g_prefetch_buf) {
@@ -364,10 +359,10 @@ void cleanup() {
     delete g_prefetch_buf;
     delete g_aligned;
     g_prefetch_buf = nullptr;
-    g_aligned = nullptr;
+    g_aligned      = nullptr;
 }
 
-} // namespace cache_benchmarks
+}  // namespace cache_benchmarks
 
 //=============================================================================
 // DataPoint Benchmarks
@@ -417,7 +412,7 @@ void cleanup() {
     g_dp = nullptr;
 }
 
-} // namespace datapoint_benchmarks
+}  // namespace datapoint_benchmarks
 
 //=============================================================================
 // Registration Function
@@ -429,37 +424,37 @@ inline void register_core_benchmarks() {
     // Memory Pool
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::CORE;
-        def.component = "memory_pool";
+        def.category   = BenchmarkCategory::CORE;
+        def.component  = "memory_pool";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "allocate";
-        def.setup = memory_pool_benchmarks::setup;
-        def.benchmark = memory_pool_benchmarks::bench_allocate;
-        def.teardown = memory_pool_benchmarks::teardown_allocate;
+        def.name          = "allocate";
+        def.setup         = memory_pool_benchmarks::setup;
+        def.benchmark     = memory_pool_benchmarks::bench_allocate;
+        def.teardown      = memory_pool_benchmarks::teardown_allocate;
         def.target_p50_ns = 100;
         def.target_p99_ns = 1000;
         registry.register_benchmark(def);
 
-        def.name = "deallocate";
-        def.setup = memory_pool_benchmarks::setup_deallocate;
+        def.name      = "deallocate";
+        def.setup     = memory_pool_benchmarks::setup_deallocate;
         def.benchmark = memory_pool_benchmarks::bench_deallocate;
-        def.teardown = nullptr;
+        def.teardown  = nullptr;
         registry.register_benchmark(def);
 
-        def.name = "alloc_dealloc_cycle";
-        def.setup = memory_pool_benchmarks::setup;
-        def.benchmark = memory_pool_benchmarks::bench_alloc_dealloc_cycle;
-        def.teardown = nullptr;
+        def.name          = "alloc_dealloc_cycle";
+        def.setup         = memory_pool_benchmarks::setup;
+        def.benchmark     = memory_pool_benchmarks::bench_alloc_dealloc_cycle;
+        def.teardown      = nullptr;
         def.target_p50_ns = 200;
         def.target_p99_ns = 2000;
         registry.register_benchmark(def);
 
-        def.name = "heap_new_delete";
-        def.setup = nullptr;
-        def.benchmark = memory_pool_benchmarks::bench_heap_new_delete;
-        def.teardown = nullptr;
+        def.name          = "heap_new_delete";
+        def.setup         = nullptr;
+        def.benchmark     = memory_pool_benchmarks::bench_heap_new_delete;
+        def.teardown      = nullptr;
         def.target_p50_ns = 500;
         def.target_p99_ns = 5000;
         registry.register_benchmark(def);
@@ -468,77 +463,77 @@ inline void register_core_benchmarks() {
     // Lock-free Queues
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::CORE;
-        def.component = "queue";
+        def.category   = BenchmarkCategory::CORE;
+        def.component  = "queue";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "spsc_enqueue";
-        def.setup = queue_benchmarks::setup_spsc;
-        def.benchmark = queue_benchmarks::bench_spsc_enqueue;
-        def.teardown = queue_benchmarks::teardown_spsc_enqueue;
+        def.name          = "spsc_enqueue";
+        def.setup         = queue_benchmarks::setup_spsc;
+        def.benchmark     = queue_benchmarks::bench_spsc_enqueue;
+        def.teardown      = queue_benchmarks::teardown_spsc_enqueue;
         def.target_p50_ns = 50;
         def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name = "spsc_dequeue";
-        def.setup = queue_benchmarks::setup_spsc_dequeue;
+        def.name      = "spsc_dequeue";
+        def.setup     = queue_benchmarks::setup_spsc_dequeue;
         def.benchmark = queue_benchmarks::bench_spsc_dequeue;
-        def.teardown = nullptr;
+        def.teardown  = nullptr;
         registry.register_benchmark(def);
 
-        def.name = "spsc_cycle";
-        def.setup = queue_benchmarks::setup_spsc;
-        def.benchmark = queue_benchmarks::bench_spsc_cycle;
-        def.teardown = nullptr;
+        def.name          = "spsc_cycle";
+        def.setup         = queue_benchmarks::setup_spsc;
+        def.benchmark     = queue_benchmarks::bench_spsc_cycle;
+        def.teardown      = nullptr;
         def.target_p50_ns = 100;
         def.target_p99_ns = 1000;
         registry.register_benchmark(def);
 
-        def.name = "mpmc_enqueue";
-        def.setup = queue_benchmarks::setup_mpmc;
-        def.benchmark = queue_benchmarks::bench_mpmc_enqueue;
-        def.teardown = queue_benchmarks::teardown_mpmc_enqueue;
+        def.name          = "mpmc_enqueue";
+        def.setup         = queue_benchmarks::setup_mpmc;
+        def.benchmark     = queue_benchmarks::bench_mpmc_enqueue;
+        def.teardown      = queue_benchmarks::teardown_mpmc_enqueue;
         def.target_p50_ns = 100;
         def.target_p99_ns = 1000;
         registry.register_benchmark(def);
 
-        def.name = "mpmc_dequeue";
-        def.setup = queue_benchmarks::setup_mpmc_dequeue;
+        def.name      = "mpmc_dequeue";
+        def.setup     = queue_benchmarks::setup_mpmc_dequeue;
         def.benchmark = queue_benchmarks::bench_mpmc_dequeue;
-        def.teardown = nullptr;
+        def.teardown  = nullptr;
         registry.register_benchmark(def);
 
-        def.name = "mpmc_cycle";
-        def.setup = queue_benchmarks::setup_mpmc;
+        def.name      = "mpmc_cycle";
+        def.setup     = queue_benchmarks::setup_mpmc;
         def.benchmark = queue_benchmarks::bench_mpmc_cycle;
-        def.teardown = nullptr;
+        def.teardown  = nullptr;
         registry.register_benchmark(def);
     }
 
     // Rate Limiter
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::CORE;
-        def.component = "rate_limiter";
+        def.category   = BenchmarkCategory::CORE;
+        def.component  = "rate_limiter";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "token_bucket_allowed";
-        def.setup = rate_limiter_benchmarks::setup;
-        def.benchmark = rate_limiter_benchmarks::bench_token_bucket_allowed;
+        def.name          = "token_bucket_allowed";
+        def.setup         = rate_limiter_benchmarks::setup;
+        def.benchmark     = rate_limiter_benchmarks::bench_token_bucket_allowed;
         def.target_p50_ns = 50;
         def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name = "token_bucket_limited";
-        def.setup = rate_limiter_benchmarks::setup;
+        def.name      = "token_bucket_limited";
+        def.setup     = rate_limiter_benchmarks::setup;
         def.benchmark = rate_limiter_benchmarks::bench_token_bucket_limited;
         registry.register_benchmark(def);
 
-        def.name = "sliding_window";
-        def.setup = rate_limiter_benchmarks::setup;
-        def.benchmark = rate_limiter_benchmarks::bench_sliding_window;
+        def.name          = "sliding_window";
+        def.setup         = rate_limiter_benchmarks::setup;
+        def.benchmark     = rate_limiter_benchmarks::bench_sliding_window;
         def.target_p50_ns = 100;
         def.target_p99_ns = 1000;
         registry.register_benchmark(def);
@@ -547,25 +542,25 @@ inline void register_core_benchmarks() {
     // Backpressure
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::CORE;
-        def.component = "backpressure";
+        def.category   = BenchmarkCategory::CORE;
+        def.component  = "backpressure";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "no_pressure";
-        def.setup = backpressure_benchmarks::setup;
-        def.benchmark = backpressure_benchmarks::bench_no_pressure;
+        def.name          = "no_pressure";
+        def.setup         = backpressure_benchmarks::setup;
+        def.benchmark     = backpressure_benchmarks::bench_no_pressure;
         def.target_p50_ns = 50;
         def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name = "high_pressure";
-        def.setup = backpressure_benchmarks::setup;
+        def.name      = "high_pressure";
+        def.setup     = backpressure_benchmarks::setup;
         def.benchmark = backpressure_benchmarks::bench_high_pressure;
         registry.register_benchmark(def);
 
-        def.name = "sensor_update";
-        def.setup = backpressure_benchmarks::setup;
+        def.name      = "sensor_update";
+        def.setup     = backpressure_benchmarks::setup;
         def.benchmark = backpressure_benchmarks::bench_sensor_update;
         registry.register_benchmark(def);
     }
@@ -573,29 +568,29 @@ inline void register_core_benchmarks() {
     // Cache Optimization
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::CORE;
-        def.component = "cache";
+        def.category   = BenchmarkCategory::CORE;
+        def.component  = "cache";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "prefetch_push";
-        def.setup = cache_benchmarks::setup;
+        def.name      = "prefetch_push";
+        def.setup     = cache_benchmarks::setup;
         def.benchmark = cache_benchmarks::bench_prefetch_push;
-        def.teardown = cache_benchmarks::teardown_prefetch_push;
+        def.teardown  = cache_benchmarks::teardown_prefetch_push;
         registry.register_benchmark(def);
 
-        def.name = "prefetch_pop";
-        def.setup = cache_benchmarks::setup_prefetch_pop;
+        def.name      = "prefetch_pop";
+        def.setup     = cache_benchmarks::setup_prefetch_pop;
         def.benchmark = cache_benchmarks::bench_prefetch_pop;
         registry.register_benchmark(def);
 
-        def.name = "aligned_increment";
-        def.setup = cache_benchmarks::setup;
+        def.name      = "aligned_increment";
+        def.setup     = cache_benchmarks::setup;
         def.benchmark = cache_benchmarks::bench_aligned_increment;
         registry.register_benchmark(def);
 
-        def.name = "regular_increment";
-        def.setup = nullptr;
+        def.name      = "regular_increment";
+        def.setup     = nullptr;
         def.benchmark = cache_benchmarks::bench_regular_increment;
         registry.register_benchmark(def);
     }
@@ -603,35 +598,35 @@ inline void register_core_benchmarks() {
     // DataPoint
     {
         BenchmarkDef def;
-        def.category = BenchmarkCategory::CORE;
-        def.component = "datapoint";
+        def.category   = BenchmarkCategory::CORE;
+        def.component  = "datapoint";
         def.iterations = 100000;
-        def.warmup = 1000;
+        def.warmup     = 1000;
 
-        def.name = "create";
-        def.setup = nullptr;
-        def.benchmark = datapoint_benchmarks::bench_create_datapoint;
+        def.name          = "create";
+        def.setup         = nullptr;
+        def.benchmark     = datapoint_benchmarks::bench_create_datapoint;
         def.target_p50_ns = 500;
         def.target_p99_ns = 5000;
         registry.register_benchmark(def);
 
-        def.name = "copy";
-        def.setup = datapoint_benchmarks::setup;
+        def.name      = "copy";
+        def.setup     = datapoint_benchmarks::setup;
         def.benchmark = datapoint_benchmarks::bench_copy_datapoint;
         registry.register_benchmark(def);
 
-        def.name = "value_get";
-        def.setup = datapoint_benchmarks::setup;
-        def.benchmark = datapoint_benchmarks::bench_value_get;
+        def.name          = "value_get";
+        def.setup         = datapoint_benchmarks::setup;
+        def.benchmark     = datapoint_benchmarks::bench_value_get;
         def.target_p50_ns = 20;
         def.target_p99_ns = 200;
         registry.register_benchmark(def);
 
-        def.name = "value_create";
-        def.setup = nullptr;
+        def.name      = "value_create";
+        def.setup     = nullptr;
         def.benchmark = datapoint_benchmarks::bench_value_create;
         registry.register_benchmark(def);
     }
 }
 
-} // namespace ipb::benchmark
+}  // namespace ipb::benchmark

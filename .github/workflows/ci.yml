@@ -253,9 +253,9 @@ jobs:
 
       - name: Check Formatting
         run: |
-          find core sinks scoops apps transport \
-            \( -name '*.cpp' -o -name '*.hpp' \) -type f | \
-            xargs clang-format-18 --dry-run --Werror
+          find core sinks scoops apps transport examples tests benchmarks \
+            \( -name '*.cpp' -o -name '*.hpp' \) -type f 2>/dev/null | \
+            xargs -r clang-format-18 --dry-run --Werror
 
       - name: Run cppcheck
         run: |
@@ -265,7 +265,11 @@ jobs:
             -I core/common/include \
             -I core/components/include \
             -I core/router/include \
-            core/ sinks/ scoops/ apps/ 2>&1 | tee cppcheck-report.txt
+            -I core/security/include \
+            -I core/testing/include \
+            -I transport/mqtt/include \
+            -I transport/http/include \
+            core/ sinks/ scoops/ apps/ transport/ 2>&1 | tee cppcheck-report.txt
         continue-on-error: true
 
       - name: Upload cppcheck Report
@@ -790,9 +794,9 @@ jobs:
 
       - name: Run clang-tidy
         run: |
-          find core sinks scoops apps transport \
-            -name '*.cpp' -type f | head -50 | \
-            xargs -P $(nproc) -I{} \
+          find core sinks scoops apps transport examples tests benchmarks \
+            -name '*.cpp' -type f 2>/dev/null | head -50 | \
+            xargs -r -P $(nproc) -I{} \
             clang-tidy-18 -p build {} 2>&1 | tee clang-tidy-report.txt
         continue-on-error: true
 
