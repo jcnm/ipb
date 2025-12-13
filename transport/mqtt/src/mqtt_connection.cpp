@@ -225,17 +225,17 @@ public:
         return backend_->unsubscribe(topic);
     }
 
-    void set_connection_callback(ConnectionCallback cb) {
+    void set_connection_callback(HighLevelConnectionCallback cb) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
         connection_cb_ = std::move(cb);
     }
 
-    void set_message_callback(MessageCallback cb) {
+    void set_message_callback(HighLevelMessageCallback cb) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
         message_cb_ = std::move(cb);
     }
 
-    void set_delivery_callback(DeliveryCallback cb) {
+    void set_delivery_callback(HighLevelDeliveryCallback cb) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
         delivery_cb_ = std::move(cb);
     }
@@ -289,10 +289,10 @@ private:
     std::unique_ptr<IMQTTBackend> backend_;
     std::atomic<ConnectionState> state_;
 
-    // Callbacks
-    ConnectionCallback connection_cb_;
-    MessageCallback message_cb_;
-    DeliveryCallback delivery_cb_;
+    // Callbacks (high-level versions with owned strings)
+    HighLevelConnectionCallback connection_cb_;
+    HighLevelMessageCallback message_cb_;
+    HighLevelDeliveryCallback delivery_cb_;
     mutable std::mutex callback_mutex_;
 
     // Statistics
@@ -388,15 +388,15 @@ bool MQTTConnection::unsubscribe(const std::vector<std::string>& topics) {
     return true;
 }
 
-void MQTTConnection::set_connection_callback(ConnectionCallback cb) {
+void MQTTConnection::set_connection_callback(HighLevelConnectionCallback cb) {
     impl_->set_connection_callback(std::move(cb));
 }
 
-void MQTTConnection::set_message_callback(MessageCallback cb) {
+void MQTTConnection::set_message_callback(HighLevelMessageCallback cb) {
     impl_->set_message_callback(std::move(cb));
 }
 
-void MQTTConnection::set_delivery_callback(DeliveryCallback cb) {
+void MQTTConnection::set_delivery_callback(HighLevelDeliveryCallback cb) {
     impl_->set_delivery_callback(std::move(cb));
 }
 

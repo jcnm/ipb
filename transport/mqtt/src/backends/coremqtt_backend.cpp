@@ -2,6 +2,8 @@
 
 #include "ipb/transport/mqtt/mqtt_connection.hpp"
 
+#include <iostream>  // For std::cerr in stub implementation
+
 #ifdef IPB_HAS_COREMQTT
 
 // coreMQTT headers

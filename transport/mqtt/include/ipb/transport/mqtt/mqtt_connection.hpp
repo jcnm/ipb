@@ -123,13 +123,19 @@ struct ConnectionConfig {
 };
 
 //=============================================================================
-// Callbacks
+// High-Level Callbacks (with owned strings for convenience)
+// Note: ConnectionCallback, MessageCallback, DeliveryCallback with zero-copy
+// signatures are defined in backends/mqtt_backend.hpp. These are higher-level
+// versions that use owned strings for user convenience.
 //=============================================================================
 
-using ConnectionCallback = std::function<void(ConnectionState state, const std::string& reason)>;
-using MessageCallback    = std::function<void(const std::string& topic, const std::string& payload,
-                                           QoS qos, bool retained)>;
-using DeliveryCallback   = std::function<void(int token, bool success, const std::string& error)>;
+using HighLevelConnectionCallback =
+    std::function<void(ConnectionState state, const std::string& reason)>;
+using HighLevelMessageCallback = std::function<void(const std::string& topic,
+                                                    const std::string& payload, QoS qos,
+                                                    bool retained)>;
+using HighLevelDeliveryCallback =
+    std::function<void(int token, bool success, const std::string& error)>;
 
 //=============================================================================
 // MQTTConnection - Individual connection wrapper
@@ -282,17 +288,17 @@ public:
     /**
      * @brief Set connection state callback
      */
-    void set_connection_callback(ConnectionCallback cb);
+    void set_connection_callback(HighLevelConnectionCallback cb);
 
     /**
      * @brief Set message received callback
      */
-    void set_message_callback(MessageCallback cb);
+    void set_message_callback(HighLevelMessageCallback cb);
 
     /**
      * @brief Set delivery complete callback
      */
-    void set_delivery_callback(DeliveryCallback cb);
+    void set_delivery_callback(HighLevelDeliveryCallback cb);
 
     //=========================================================================
     // Statistics
