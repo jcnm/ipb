@@ -5,14 +5,15 @@
  * Lightweight industrial protocol bridge for edge/embedded deployments.
  */
 
-#include "bridge.hpp"
-
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <getopt.h>
 #include <thread>
+
+#include <getopt.h>
+
+#include "bridge.hpp"
 
 #ifndef IPB_BRIDGE_VERSION
 #define IPB_BRIDGE_VERSION "1.0.0"
@@ -21,7 +22,7 @@
 namespace {
 
 // Global bridge instance for signal handling
-ipb::bridge::Bridge* g_bridge = nullptr;
+ipb::bridge::Bridge* g_bridge    = nullptr;
 volatile sig_atomic_t g_shutdown = 0;
 
 void signal_handler(int signum) {
@@ -76,22 +77,19 @@ void print_usage(const char* program) {
 void print_stats(const ipb::bridge::BridgeStats& stats) {
     std::printf("\nBridge Statistics:\n");
     std::printf("  Messages received:  %lu\n",
-        static_cast<unsigned long>(stats.messages_received.load()));
+                static_cast<unsigned long>(stats.messages_received.load()));
     std::printf("  Messages forwarded: %lu\n",
-        static_cast<unsigned long>(stats.messages_forwarded.load()));
+                static_cast<unsigned long>(stats.messages_forwarded.load()));
     std::printf("  Messages dropped:   %lu\n",
-        static_cast<unsigned long>(stats.messages_dropped.load()));
-    std::printf("  Errors:             %lu\n",
-        static_cast<unsigned long>(stats.errors.load()));
+                static_cast<unsigned long>(stats.messages_dropped.load()));
+    std::printf("  Errors:             %lu\n", static_cast<unsigned long>(stats.errors.load()));
     std::printf("  Uptime:             %lu seconds\n",
-        static_cast<unsigned long>(stats.uptime_seconds.load()));
-    std::printf("  Active sources:     %u\n",
-        static_cast<unsigned>(stats.active_sources.load()));
-    std::printf("  Active sinks:       %u\n",
-        static_cast<unsigned>(stats.active_sinks.load()));
+                static_cast<unsigned long>(stats.uptime_seconds.load()));
+    std::printf("  Active sources:     %u\n", static_cast<unsigned>(stats.active_sources.load()));
+    std::printf("  Active sinks:       %u\n", static_cast<unsigned>(stats.active_sinks.load()));
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 int main(int argc, char* argv[]) {
     // Command line options
@@ -103,13 +101,13 @@ int main(int argc, char* argv[]) {
         {"quiet",   no_argument,       nullptr, 'q'},
         {"version", no_argument,       nullptr, 'V'},
         {"help",    no_argument,       nullptr, 'h'},
-        {nullptr,   0,                 nullptr, 0}
+        {nullptr,   0,                 nullptr, 0  }
     };
 
     std::string config_path;
-    bool test_only = false;
+    bool test_only   = false;
     bool daemon_mode = false;
-    int verbosity = 0;
+    int verbosity    = 0;
 
     // Parse command line
     int opt;

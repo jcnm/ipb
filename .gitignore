@@ -39,6 +39,11 @@ Makefile
 Testing/
 CTestTestfile.cmake
 
+# Benchmark results (managed by CI as artifacts)
+benchmarks/results/
+benchmarks/baselines/
+benchmarks/reports/
+
 # Coverage
 *.gcno
 *.gcda

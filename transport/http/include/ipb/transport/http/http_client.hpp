@@ -8,14 +8,14 @@
  * Supports multiple backends (curl, beast) with automatic selection.
  */
 
-#include "http_backend.hpp"
-
+#include <chrono>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <functional>
-#include <chrono>
-#include <optional>
+
+#include "http_backend.hpp"
 
 namespace ipb::transport::http {
 
@@ -50,7 +50,7 @@ struct HTTPConfig {
     bool use_http2 = true;
 
     // Connection pooling
-    bool enable_connection_pool = true;
+    bool enable_connection_pool     = true;
     size_t max_connections_per_host = 6;
 
     // Authentication
@@ -65,9 +65,7 @@ struct HTTPConfig {
     /**
      * @brief Create default configuration
      */
-    static HTTPConfig default_config() {
-        return HTTPConfig{};
-    }
+    static HTTPConfig default_config() { return HTTPConfig{}; }
 };
 
 //=============================================================================
@@ -115,7 +113,7 @@ public:
     ~HTTPClient();
 
     // Non-copyable, movable
-    HTTPClient(const HTTPClient&) = delete;
+    HTTPClient(const HTTPClient&)            = delete;
     HTTPClient& operator=(const HTTPClient&) = delete;
     HTTPClient(HTTPClient&&) noexcept;
     HTTPClient& operator=(HTTPClient&&) noexcept;
@@ -282,4 +280,4 @@ struct URLComponents {
 
 std::optional<URLComponents> parse_url(const std::string& url);
 
-} // namespace ipb::transport::http
+}  // namespace ipb::transport::http

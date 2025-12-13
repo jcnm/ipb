@@ -15,8 +15,8 @@
  */
 
 #include <ipb/common/data_point.hpp>
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <atomic>
@@ -39,11 +39,11 @@ class PatternMatcher;
  * @brief Priority levels for routing rules
  */
 enum class RulePriority : uint8_t {
-    LOWEST = 0,
-    LOW = 64,
-    NORMAL = 128,
-    HIGH = 192,
-    HIGHEST = 255,
+    LOWEST   = 0,
+    LOW      = 64,
+    NORMAL   = 128,
+    HIGH     = 192,
+    HIGHEST  = 255,
     REALTIME = 254  ///< Special priority for real-time data
 };
 
@@ -51,27 +51,27 @@ enum class RulePriority : uint8_t {
  * @brief Types of rules supported by the engine
  */
 enum class RuleType : uint8_t {
-    STATIC,          ///< Exact address match
-    PATTERN,         ///< Pattern/regex match
-    PROTOCOL,        ///< Match by protocol ID
-    QUALITY,         ///< Match by data quality
-    VALUE,           ///< Match by value condition
-    TIMESTAMP,       ///< Match by timestamp range
-    COMPOSITE,       ///< Combination of multiple conditions
-    CUSTOM           ///< Custom predicate function
+    STATIC,     ///< Exact address match
+    PATTERN,    ///< Pattern/regex match
+    PROTOCOL,   ///< Match by protocol ID
+    QUALITY,    ///< Match by data quality
+    VALUE,      ///< Match by value condition
+    TIMESTAMP,  ///< Match by timestamp range
+    COMPOSITE,  ///< Combination of multiple conditions
+    CUSTOM      ///< Custom predicate function
 };
 
 /**
  * @brief Comparison operators for value conditions
  */
 enum class CompareOp : uint8_t {
-    EQ,     ///< Equal
-    NE,     ///< Not equal
-    LT,     ///< Less than
-    LE,     ///< Less than or equal
-    GT,     ///< Greater than
-    GE,     ///< Greater than or equal
-    BETWEEN ///< Between two values (inclusive)
+    EQ,      ///< Equal
+    NE,      ///< Not equal
+    LT,      ///< Less than
+    LE,      ///< Less than or equal
+    GT,      ///< Greater than
+    GE,      ///< Greater than or equal
+    BETWEEN  ///< Between two values (inclusive)
 };
 
 /**
@@ -94,8 +94,8 @@ struct ValueCondition {
  * @brief Result of rule evaluation
  */
 struct RuleMatchResult {
-    bool matched = false;
-    uint32_t rule_id = 0;
+    bool matched          = false;
+    uint32_t rule_id      = 0;
     RulePriority priority = RulePriority::NORMAL;
     std::vector<std::string> target_ids;
 
@@ -159,62 +159,44 @@ struct RoutingRule {
 
     // Copy constructor (atomics need explicit handling)
     RoutingRule(const RoutingRule& other)
-        : id(other.id)
-        , name(other.name)
-        , type(other.type)
-        , priority(other.priority)
-        , enabled(other.enabled)
-        , source_addresses(other.source_addresses)
-        , address_pattern(other.address_pattern)
-        , protocol_ids(other.protocol_ids)
-        , quality_levels(other.quality_levels)
-        , value_condition(other.value_condition)
-        , start_time(other.start_time)
-        , end_time(other.end_time)
-        , target_sink_ids(other.target_sink_ids)
-        , custom_predicate(other.custom_predicate)
-        , match_count(other.match_count.load())
-        , eval_count(other.eval_count.load())
-        , total_eval_time_ns(other.total_eval_time_ns.load())
-    {}
+        : id(other.id), name(other.name), type(other.type), priority(other.priority),
+          enabled(other.enabled), source_addresses(other.source_addresses),
+          address_pattern(other.address_pattern), protocol_ids(other.protocol_ids),
+          quality_levels(other.quality_levels), value_condition(other.value_condition),
+          start_time(other.start_time), end_time(other.end_time),
+          target_sink_ids(other.target_sink_ids), custom_predicate(other.custom_predicate),
+          match_count(other.match_count.load()), eval_count(other.eval_count.load()),
+          total_eval_time_ns(other.total_eval_time_ns.load()) {}
 
     // Move constructor
     RoutingRule(RoutingRule&& other) noexcept
-        : id(other.id)
-        , name(std::move(other.name))
-        , type(other.type)
-        , priority(other.priority)
-        , enabled(other.enabled)
-        , source_addresses(std::move(other.source_addresses))
-        , address_pattern(std::move(other.address_pattern))
-        , protocol_ids(std::move(other.protocol_ids))
-        , quality_levels(std::move(other.quality_levels))
-        , value_condition(std::move(other.value_condition))
-        , start_time(other.start_time)
-        , end_time(other.end_time)
-        , target_sink_ids(std::move(other.target_sink_ids))
-        , custom_predicate(std::move(other.custom_predicate))
-        , match_count(other.match_count.load())
-        , eval_count(other.eval_count.load())
-        , total_eval_time_ns(other.total_eval_time_ns.load())
-    {}
+        : id(other.id), name(std::move(other.name)), type(other.type), priority(other.priority),
+          enabled(other.enabled), source_addresses(std::move(other.source_addresses)),
+          address_pattern(std::move(other.address_pattern)),
+          protocol_ids(std::move(other.protocol_ids)),
+          quality_levels(std::move(other.quality_levels)),
+          value_condition(std::move(other.value_condition)), start_time(other.start_time),
+          end_time(other.end_time), target_sink_ids(std::move(other.target_sink_ids)),
+          custom_predicate(std::move(other.custom_predicate)),
+          match_count(other.match_count.load()), eval_count(other.eval_count.load()),
+          total_eval_time_ns(other.total_eval_time_ns.load()) {}
 
     // Copy assignment
     RoutingRule& operator=(const RoutingRule& other) {
         if (this != &other) {
-            id = other.id;
-            name = other.name;
-            type = other.type;
-            priority = other.priority;
-            enabled = other.enabled;
+            id               = other.id;
+            name             = other.name;
+            type             = other.type;
+            priority         = other.priority;
+            enabled          = other.enabled;
             source_addresses = other.source_addresses;
-            address_pattern = other.address_pattern;
-            protocol_ids = other.protocol_ids;
-            quality_levels = other.quality_levels;
-            value_condition = other.value_condition;
-            start_time = other.start_time;
-            end_time = other.end_time;
-            target_sink_ids = other.target_sink_ids;
+            address_pattern  = other.address_pattern;
+            protocol_ids     = other.protocol_ids;
+            quality_levels   = other.quality_levels;
+            value_condition  = other.value_condition;
+            start_time       = other.start_time;
+            end_time         = other.end_time;
+            target_sink_ids  = other.target_sink_ids;
             custom_predicate = other.custom_predicate;
             match_count.store(other.match_count.load());
             eval_count.store(other.eval_count.load());
@@ -226,19 +208,19 @@ struct RoutingRule {
     // Move assignment
     RoutingRule& operator=(RoutingRule&& other) noexcept {
         if (this != &other) {
-            id = other.id;
-            name = std::move(other.name);
-            type = other.type;
-            priority = other.priority;
-            enabled = other.enabled;
+            id               = other.id;
+            name             = std::move(other.name);
+            type             = other.type;
+            priority         = other.priority;
+            enabled          = other.enabled;
             source_addresses = std::move(other.source_addresses);
-            address_pattern = std::move(other.address_pattern);
-            protocol_ids = std::move(other.protocol_ids);
-            quality_levels = std::move(other.quality_levels);
-            value_condition = std::move(other.value_condition);
-            start_time = other.start_time;
-            end_time = other.end_time;
-            target_sink_ids = std::move(other.target_sink_ids);
+            address_pattern  = std::move(other.address_pattern);
+            protocol_ids     = std::move(other.protocol_ids);
+            quality_levels   = std::move(other.quality_levels);
+            value_condition  = std::move(other.value_condition);
+            start_time       = other.start_time;
+            end_time         = other.end_time;
+            target_sink_ids  = std::move(other.target_sink_ids);
             custom_predicate = std::move(other.custom_predicate);
             match_count.store(other.match_count.load());
             eval_count.store(other.eval_count.load());
@@ -253,8 +235,7 @@ struct RoutingRule {
     /// Get average evaluation time in nanoseconds
     double avg_eval_time_ns() const noexcept {
         auto count = eval_count.load(std::memory_order_relaxed);
-        return count > 0 ?
-            static_cast<double>(total_eval_time_ns.load()) / count : 0.0;
+        return count > 0 ? static_cast<double>(total_eval_time_ns.load()) / count : 0.0;
     }
 };
 
@@ -278,8 +259,7 @@ struct RuleEngineStats {
 
     double match_rate() const noexcept {
         auto evals = total_evaluations.load();
-        return evals > 0 ?
-            static_cast<double>(total_matches) / evals * 100.0 : 0.0;
+        return evals > 0 ? static_cast<double>(total_matches) / evals * 100.0 : 0.0;
     }
 
     void reset() noexcept {
@@ -352,7 +332,7 @@ public:
     ~RuleEngine();
 
     // Non-copyable, movable
-    RuleEngine(const RuleEngine&) = delete;
+    RuleEngine(const RuleEngine&)            = delete;
     RuleEngine& operator=(const RuleEngine&) = delete;
     RuleEngine(RuleEngine&&) noexcept;
     RuleEngine& operator=(RuleEngine&&) noexcept;
@@ -392,9 +372,8 @@ public:
     std::optional<RuleMatchResult> evaluate_first(const common::DataPoint& dp);
 
     /// Evaluate rules of specific priority or higher
-    std::vector<RuleMatchResult> evaluate_priority(
-        const common::DataPoint& dp,
-        RulePriority min_priority);
+    std::vector<RuleMatchResult> evaluate_priority(const common::DataPoint& dp,
+                                                   RulePriority min_priority);
 
     /// Batch evaluation for multiple data points
     std::vector<std::vector<RuleMatchResult>> evaluate_batch(
@@ -449,13 +428,13 @@ public:
     }
 
     RuleBuilder& match_addresses(std::vector<std::string> addresses) {
-        rule_.type = RuleType::STATIC;
+        rule_.type             = RuleType::STATIC;
         rule_.source_addresses = std::move(addresses);
         return *this;
     }
 
     RuleBuilder& match_pattern(std::string pattern) {
-        rule_.type = RuleType::PATTERN;
+        rule_.type            = RuleType::PATTERN;
         rule_.address_pattern = std::move(pattern);
         return *this;
     }
@@ -467,7 +446,7 @@ public:
     }
 
     RuleBuilder& match_protocols(std::vector<uint16_t> protocols) {
-        rule_.type = RuleType::PROTOCOL;
+        rule_.type         = RuleType::PROTOCOL;
         rule_.protocol_ids = std::move(protocols);
         return *this;
     }
@@ -479,13 +458,13 @@ public:
     }
 
     RuleBuilder& match_value(ValueCondition condition) {
-        rule_.type = RuleType::VALUE;
+        rule_.type            = RuleType::VALUE;
         rule_.value_condition = std::move(condition);
         return *this;
     }
 
     RuleBuilder& match_custom(std::function<bool(const common::DataPoint&)> predicate) {
-        rule_.type = RuleType::CUSTOM;
+        rule_.type             = RuleType::CUSTOM;
         rule_.custom_predicate = std::move(predicate);
         return *this;
     }
@@ -500,12 +479,10 @@ public:
         return *this;
     }
 
-    RoutingRule build() {
-        return std::move(rule_);
-    }
+    RoutingRule build() { return std::move(rule_); }
 
 private:
     RoutingRule rule_;
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

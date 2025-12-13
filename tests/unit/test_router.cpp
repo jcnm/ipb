@@ -10,27 +10,29 @@
  * - Router: Core routing functionality
  */
 
-#include <gtest/gtest.h>
 #include <ipb/router/router.hpp>
+
 #include <atomic>
 #include <chrono>
 #include <future>
-#include <thread>
 #include <memory>
+#include <thread>
+
+#include <gtest/gtest.h>
 
 // Use explicit namespaces to avoid ambiguity between ipb::router and ipb::core types
 namespace router = ipb::router;
-namespace core = ipb::core;
+namespace core   = ipb::core;
 namespace common = ipb::common;
+using common::ConfigurationBase;
 using common::DataPoint;
 using common::DataSet;
-using common::Result;
-using common::Timestamp;
-using common::ok;
 using common::IIPBSink;
 using common::IIPBSinkBase;
-using common::ConfigurationBase;
+using common::ok;
+using common::Result;
 using common::Statistics;
+using common::Timestamp;
 
 // ============================================================================
 // Mock Sink for Testing
@@ -53,8 +55,14 @@ public:
     explicit RouterMockSinkImpl(std::shared_ptr<RouterMockSinkState> state)
         : state_(std::move(state)) {}
 
-    Result<void> start() override { state_->started = true; return ok(); }
-    Result<void> stop() override { state_->started = false; return ok(); }
+    Result<void> start() override {
+        state_->started = true;
+        return ok();
+    }
+    Result<void> stop() override {
+        state_->started = false;
+        return ok();
+    }
     bool is_running() const noexcept override { return state_->started; }
 
     Result<void> configure(const ConfigurationBase&) override { return ok(); }
@@ -81,9 +89,7 @@ public:
         return ok();
     }
 
-    Result<void> write_dataset(const DataSet&) override {
-        return ok();
-    }
+    Result<void> write_dataset(const DataSet&) override { return ok(); }
 
     std::future<Result<void>> write_async(const DataPoint&) override {
         std::promise<Result<void>> p;
@@ -113,8 +119,11 @@ class RouterMockSink {
 public:
     explicit RouterMockSink(const std::string& name = "mock")
         : state_(std::make_shared<RouterMockSinkState>(name))
-        // Note: Can't use make_shared with unique_ptr argument; use shared_ptr constructor directly
-        , sink_(std::shared_ptr<IIPBSink>(new IIPBSink(std::make_unique<RouterMockSinkImpl>(state_)))) {}
+          // Note: Can't use make_shared with unique_ptr argument; use shared_ptr constructor
+          // directly
+          ,
+          sink_(std::shared_ptr<IIPBSink>(
+              new IIPBSink(std::make_unique<RouterMockSinkImpl>(state_)))) {}
 
     // Get the IIPBSink to pass to router
     std::shared_ptr<IIPBSink> get() const { return sink_; }
@@ -199,9 +208,9 @@ TEST_F(RouterRoutingRuleTest, DefaultConstruction) {
 
 TEST_F(RouterRoutingRuleTest, CopyConstruction) {
     router::RoutingRule original;
-    original.rule_id = 42;
-    original.name = "test_rule";
-    original.type = router::RuleType::REGEX_PATTERN;
+    original.rule_id         = 42;
+    original.name            = "test_rule";
+    original.type            = router::RuleType::REGEX_PATTERN;
     original.address_pattern = "sensors/.*";
     original.target_sink_ids = {"sink1", "sink2"};
 
@@ -217,7 +226,7 @@ TEST_F(RouterRoutingRuleTest, CopyConstruction) {
 TEST_F(RouterRoutingRuleTest, MoveConstruction) {
     router::RoutingRule original;
     original.rule_id = 42;
-    original.name = "test_rule";
+    original.name    = "test_rule";
 
     router::RoutingRule moved(std::move(original));
 
@@ -233,11 +242,11 @@ class RouterRuleBuilderTest : public ::testing::Test {};
 
 TEST_F(RouterRuleBuilderTest, BuildStaticRule) {
     auto rule = router::RuleBuilder()
-        .name("static_rule")
-        .priority(router::RoutingPriority::HIGH)
-        .match_address("sensors/temp1")
-        .route_to("influxdb")
-        .build();
+                    .name("static_rule")
+                    .priority(router::RoutingPriority::HIGH)
+                    .match_address("sensors/temp1")
+                    .route_to("influxdb")
+                    .build();
 
     EXPECT_EQ(rule.name, "static_rule");
     EXPECT_EQ(rule.priority, router::RoutingPriority::HIGH);
@@ -247,10 +256,10 @@ TEST_F(RouterRuleBuilderTest, BuildStaticRule) {
 
 TEST_F(RouterRuleBuilderTest, BuildPatternRule) {
     auto rule = router::RuleBuilder()
-        .name("pattern_rule")
-        .match_pattern("sensors/temp.*")
-        .route_to(std::vector<std::string>{"kafka", "influxdb"})
-        .build();
+                    .name("pattern_rule")
+                    .match_pattern("sensors/temp.*")
+                    .route_to(std::vector<std::string>{"kafka", "influxdb"})
+                    .build();
 
     EXPECT_EQ(rule.name, "pattern_rule");
     EXPECT_EQ(rule.type, router::RuleType::REGEX_PATTERN);
@@ -259,12 +268,12 @@ TEST_F(RouterRuleBuilderTest, BuildPatternRule) {
 
 TEST_F(RouterRuleBuilderTest, BuildLoadBalancedRule) {
     auto rule = router::RuleBuilder()
-        .name("lb_rule")
-        .match_pattern(".*")
-        .route_to(std::vector<std::string>{"sink1", "sink2", "sink3"})
-        .load_balance(router::LoadBalanceStrategy::WEIGHTED_ROUND_ROBIN)
-        .with_weights(std::vector<uint32_t>{100, 200, 50})
-        .build();
+                    .name("lb_rule")
+                    .match_pattern(".*")
+                    .route_to(std::vector<std::string>{"sink1", "sink2", "sink3"})
+                    .load_balance(router::LoadBalanceStrategy::WEIGHTED_ROUND_ROBIN)
+                    .with_weights(std::vector<uint32_t>{100, 200, 50})
+                    .build();
 
     EXPECT_EQ(rule.load_balance_strategy, router::LoadBalanceStrategy::WEIGHTED_ROUND_ROBIN);
     EXPECT_EQ(rule.sink_weights.size(), 3u);
@@ -272,11 +281,11 @@ TEST_F(RouterRuleBuilderTest, BuildLoadBalancedRule) {
 
 TEST_F(RouterRuleBuilderTest, BuildFailoverRule) {
     auto rule = router::RuleBuilder()
-        .name("failover_rule")
-        .match_address("critical/data")
-        .route_to("primary_sink")
-        .with_failover(std::vector<std::string>{"backup1", "backup2"})
-        .build();
+                    .name("failover_rule")
+                    .match_address("critical/data")
+                    .route_to("primary_sink")
+                    .with_failover(std::vector<std::string>{"backup1", "backup2"})
+                    .build();
 
     EXPECT_TRUE(rule.enable_failover);
     EXPECT_EQ(rule.backup_sink_ids.size(), 2u);
@@ -284,11 +293,11 @@ TEST_F(RouterRuleBuilderTest, BuildFailoverRule) {
 
 TEST_F(RouterRuleBuilderTest, BuildBatchingRule) {
     auto rule = router::RuleBuilder()
-        .name("batching_rule")
-        .match_pattern("sensors/.*")
-        .route_to("batch_sink")
-        .enable_batching(100, std::chrono::milliseconds(50))
-        .build();
+                    .name("batching_rule")
+                    .match_pattern("sensors/.*")
+                    .route_to("batch_sink")
+                    .enable_batching(100, std::chrono::milliseconds(50))
+                    .build();
 
     EXPECT_TRUE(rule.enable_batching);
     EXPECT_EQ(rule.batch_size, 100u);
@@ -328,9 +337,9 @@ TEST_F(RouterConfigTest, RealtimeConfig) {
 class RouterTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_ = router::RouterConfig::default_config();
-        config_.message_bus.dispatcher_threads = 2;
-        config_.scheduler.worker_threads = 2;
+        config_                                   = router::RouterConfig::default_config();
+        config_.message_bus.dispatcher_threads    = 2;
+        config_.scheduler.worker_threads          = 2;
         config_.sink_registry.enable_health_check = false;
     }
 
@@ -368,7 +377,7 @@ TEST_F(RouterTest, ComponentName) {
 TEST_F(RouterTest, RegisterSink) {
     router::Router router(config_);
 
-    auto sink = std::make_shared<RouterMockSink>("test_sink");
+    auto sink   = std::make_shared<RouterMockSink>("test_sink");
     auto result = router.register_sink("sink1", sink->get());
 
     EXPECT_TRUE(result.is_success());
@@ -381,7 +390,7 @@ TEST_F(RouterTest, RegisterSink) {
 TEST_F(RouterTest, RegisterSinkWithWeight) {
     router::Router router(config_);
 
-    auto sink = std::make_shared<RouterMockSink>("test_sink");
+    auto sink   = std::make_shared<RouterMockSink>("test_sink");
     auto result = router.register_sink("sink1", sink->get(), 200);
 
     EXPECT_TRUE(result.is_success());
@@ -427,9 +436,9 @@ TEST_F(RouterTest, EnableDisableSink) {
 class RouterRuleManagementTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_ = router::RouterConfig::default_config();
-        config_.message_bus.dispatcher_threads = 2;
-        config_.scheduler.worker_threads = 2;
+        config_                                   = router::RouterConfig::default_config();
+        config_.message_bus.dispatcher_threads    = 2;
+        config_.scheduler.worker_threads          = 2;
         config_.sink_registry.enable_health_check = false;
     }
 
@@ -444,10 +453,10 @@ TEST_F(RouterRuleManagementTest, AddRule) {
     router.register_sink("sink1", sink->get());
 
     auto rule = router::RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+                    .name("test_rule")
+                    .match_address("sensors/temp1")
+                    .route_to("sink1")
+                    .build();
 
     auto result = router.add_rule(rule);
     EXPECT_TRUE(result.is_success());
@@ -462,12 +471,12 @@ TEST_F(RouterRuleManagementTest, GetRule) {
     router.register_sink("sink1", sink->get());
 
     auto rule = router::RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+                    .name("test_rule")
+                    .match_address("sensors/temp1")
+                    .route_to("sink1")
+                    .build();
 
-    auto add_result = router.add_rule(rule);
+    auto add_result  = router.add_rule(rule);
     uint32_t rule_id = add_result.value();
 
     auto retrieved = router.get_rule(rule_id);
@@ -483,12 +492,12 @@ TEST_F(RouterRuleManagementTest, RemoveRule) {
     router.register_sink("sink1", sink->get());
 
     auto rule = router::RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+                    .name("test_rule")
+                    .match_address("sensors/temp1")
+                    .route_to("sink1")
+                    .build();
 
-    auto add_result = router.add_rule(rule);
+    auto add_result  = router.add_rule(rule);
     uint32_t rule_id = add_result.value();
 
     auto remove_result = router.remove_rule(rule_id);
@@ -506,12 +515,12 @@ TEST_F(RouterRuleManagementTest, EnableDisableRule) {
     router.register_sink("sink1", sink->get());
 
     auto rule = router::RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+                    .name("test_rule")
+                    .match_address("sensors/temp1")
+                    .route_to("sink1")
+                    .build();
 
-    auto add_result = router.add_rule(rule);
+    auto add_result  = router.add_rule(rule);
     uint32_t rule_id = add_result.value();
 
     auto disable_result = router.enable_rule(rule_id, false);
@@ -530,10 +539,10 @@ TEST_F(RouterRuleManagementTest, GetAllRules) {
 
     for (int i = 0; i < 5; ++i) {
         auto rule = router::RuleBuilder()
-            .name("rule_" + std::to_string(i))
-            .match_address("sensors/temp" + std::to_string(i))
-            .route_to("sink1")
-            .build();
+                        .name("rule_" + std::to_string(i))
+                        .match_address("sensors/temp" + std::to_string(i))
+                        .route_to("sink1")
+                        .build();
         router.add_rule(rule);
     }
 
@@ -548,9 +557,9 @@ TEST_F(RouterRuleManagementTest, GetAllRules) {
 class MessageRoutingTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_ = router::RouterConfig::default_config();
-        config_.message_bus.dispatcher_threads = 2;
-        config_.scheduler.worker_threads = 2;
+        config_                                   = router::RouterConfig::default_config();
+        config_.message_bus.dispatcher_threads    = 2;
+        config_.scheduler.worker_threads          = 2;
         config_.sink_registry.enable_health_check = false;
     }
 
@@ -590,10 +599,10 @@ TEST_F(MessageRoutingTest, RouteWithMatchingRule) {
     router.register_sink("sink1", sink->get());
 
     auto rule = router::RuleBuilder()
-        .name("temp_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+                    .name("temp_rule")
+                    .match_address("sensors/temp1")
+                    .route_to("sink1")
+                    .build();
     router.add_rule(rule);
 
     router.start();
@@ -619,10 +628,10 @@ TEST_F(MessageRoutingTest, RouteWithDeadline) {
     router.register_sink("sink1", sink->get());
 
     auto rule = router::RuleBuilder()
-        .name("deadline_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+                    .name("deadline_rule")
+                    .match_address("sensors/temp1")
+                    .route_to("sink1")
+                    .build();
     router.add_rule(rule);
 
     router.start();
@@ -631,7 +640,7 @@ TEST_F(MessageRoutingTest, RouteWithDeadline) {
     dp.set_value(25.5);
 
     auto deadline = Timestamp::now() + std::chrono::milliseconds(100);
-    auto result = router.route_with_deadline(dp, deadline);
+    auto result   = router.route_with_deadline(dp, deadline);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
     router.stop();
@@ -644,10 +653,10 @@ TEST_F(MessageRoutingTest, RouteBatch) {
     router.register_sink("sink1", sink->get());
 
     auto rule = router::RuleBuilder()
-        .name("batch_rule")
-        .match_pattern("sensors/.*")
-        .route_to("sink1")
-        .build();
+                    .name("batch_rule")
+                    .match_pattern("sensors/.*")
+                    .route_to("sink1")
+                    .build();
     router.add_rule(rule);
 
     router.start();
@@ -672,7 +681,7 @@ TEST_F(MessageRoutingTest, RouteBatch) {
 class SchedulerControlTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_ = router::RouterConfig::default_config();
+        config_                          = router::RouterConfig::default_config();
         config_.scheduler.worker_threads = 2;
     }
 
@@ -715,9 +724,9 @@ TEST_F(SchedulerControlTest, GetMissedDeadlineCount) {
 class RouterMetricsTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_ = router::RouterConfig::default_config();
-        config_.message_bus.dispatcher_threads = 2;
-        config_.scheduler.worker_threads = 2;
+        config_                                   = router::RouterConfig::default_config();
+        config_.message_bus.dispatcher_threads    = 2;
+        config_.scheduler.worker_threads          = 2;
         config_.sink_registry.enable_health_check = false;
     }
 
@@ -755,7 +764,7 @@ TEST_F(RouterMetricsTest, ResetMetrics) {
 class RouterHealthTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_ = router::RouterConfig::default_config();
+        config_                                   = router::RouterConfig::default_config();
         config_.sink_registry.enable_health_check = false;
     }
 
@@ -785,9 +794,7 @@ TEST_F(RouterHealthTest, NotHealthyWhenStopped) {
 
 class ComponentAccessTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        config_ = router::RouterConfig::default_config();
-    }
+    void SetUp() override { config_ = router::RouterConfig::default_config(); }
 
     router::RouterConfig config_;
 };
@@ -853,9 +860,7 @@ TEST_F(RouterFactoryTest, CreateRealtime) {
 
 class RouterMoveTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        config_ = router::RouterConfig::default_config();
-    }
+    void SetUp() override { config_ = router::RouterConfig::default_config(); }
 
     router::RouterConfig config_;
 };
@@ -896,7 +901,7 @@ TEST_F(ValueConditionTest, EqualOperator) {
     ref.set(42);
 
     router::ValueCondition cond;
-    cond.op = router::ValueOperator::EQUAL;
+    cond.op              = router::ValueOperator::EQUAL;
     cond.reference_value = ref;
 
     common::Value test_equal;
@@ -913,7 +918,7 @@ TEST_F(ValueConditionTest, NotEqualOperator) {
     ref.set(42);
 
     router::ValueCondition cond;
-    cond.op = router::ValueOperator::NOT_EQUAL;
+    cond.op              = router::ValueOperator::NOT_EQUAL;
     cond.reference_value = ref;
 
     common::Value test_not_equal;
@@ -1016,9 +1021,9 @@ TEST_F(RoutingRuleValidationTest, TimestampBasedValid) {
     router::RoutingRule rule;
     rule.name = "test_rule";
     rule.target_sink_ids.push_back("sink1");
-    rule.type = router::RuleType::TIMESTAMP_BASED;
+    rule.type       = router::RuleType::TIMESTAMP_BASED;
     rule.start_time = Timestamp(std::chrono::nanoseconds(100));
-    rule.end_time = Timestamp(std::chrono::nanoseconds(200));
+    rule.end_time   = Timestamp(std::chrono::nanoseconds(200));
     EXPECT_TRUE(rule.is_valid());
 }
 
@@ -1026,9 +1031,9 @@ TEST_F(RoutingRuleValidationTest, TimestampBasedInvalidRange) {
     router::RoutingRule rule;
     rule.name = "test_rule";
     rule.target_sink_ids.push_back("sink1");
-    rule.type = router::RuleType::TIMESTAMP_BASED;
+    rule.type       = router::RuleType::TIMESTAMP_BASED;
     rule.start_time = Timestamp(std::chrono::nanoseconds(200));
-    rule.end_time = Timestamp(std::chrono::nanoseconds(100));  // end < start
+    rule.end_time   = Timestamp(std::chrono::nanoseconds(100));  // end < start
     EXPECT_FALSE(rule.is_valid());
 }
 
@@ -1056,7 +1061,7 @@ TEST_F(RoutingRuleValidationTest, CustomLogicValid) {
     router::RoutingRule rule;
     rule.name = "test_rule";
     rule.target_sink_ids.push_back("sink1");
-    rule.type = router::RuleType::CUSTOM_LOGIC;
+    rule.type             = router::RuleType::CUSTOM_LOGIC;
     rule.custom_condition = [](const DataPoint&) { return true; };
     EXPECT_TRUE(rule.is_valid());
 }
@@ -1100,7 +1105,7 @@ TEST_F(RoutingRuleValidationTest, RegexPatternValid) {
     router::RoutingRule rule;
     rule.name = "test_rule";
     rule.target_sink_ids.push_back("sink1");
-    rule.type = router::RuleType::REGEX_PATTERN;
+    rule.type            = router::RuleType::REGEX_PATTERN;
     rule.address_pattern = "sensor/.*";
     EXPECT_TRUE(rule.is_valid());
 }
@@ -1109,7 +1114,7 @@ TEST_F(RoutingRuleValidationTest, RegexPatternEmptyInvalid) {
     router::RoutingRule rule;
     rule.name = "test_rule";
     rule.target_sink_ids.push_back("sink1");
-    rule.type = router::RuleType::REGEX_PATTERN;
+    rule.type            = router::RuleType::REGEX_PATTERN;
     rule.address_pattern = "";
     EXPECT_FALSE(rule.is_valid());
 }
@@ -1118,9 +1123,11 @@ TEST_F(RoutingRuleValidationTest, CustomTargetSelector) {
     router::RoutingRule rule;
     rule.name = "test_rule";
     // No target_sink_ids but has custom_target_selector
-    rule.type = router::RuleType::CUSTOM_LOGIC;
-    rule.custom_condition = [](const DataPoint&) { return true; };
-    rule.custom_target_selector = [](const DataPoint&) { return std::vector<std::string>{"sink1"}; };
+    rule.type                   = router::RuleType::CUSTOM_LOGIC;
+    rule.custom_condition       = [](const DataPoint&) { return true; };
+    rule.custom_target_selector = [](const DataPoint&) {
+        return std::vector<std::string>{"sink1"};
+    };
     EXPECT_TRUE(rule.is_valid());
 }
 
@@ -1195,7 +1202,7 @@ TEST_F(RoutingRuleMatchesTest, CustomLogicMatches) {
     router::RoutingRule rule;
     rule.name = "test_rule";
     rule.target_sink_ids.push_back("sink1");
-    rule.type = router::RuleType::CUSTOM_LOGIC;
+    rule.type             = router::RuleType::CUSTOM_LOGIC;
     rule.custom_condition = [](const DataPoint& dp) {
         return dp.address().find("temp") != std::string_view::npos;
     };
@@ -1213,7 +1220,7 @@ TEST_F(RoutingRuleMatchesTest, FailoverMatches) {
     rule.name = "test_rule";
     rule.target_sink_ids.push_back("sink1");
     rule.target_sink_ids.push_back("sink2");
-    rule.type = router::RuleType::FAILOVER;
+    rule.type    = router::RuleType::FAILOVER;
     rule.enabled = true;
 
     DataPoint dp("any/address");
@@ -1226,7 +1233,7 @@ TEST_F(RoutingRuleMatchesTest, LoadBalancingMatches) {
     rule.name = "test_rule";
     rule.target_sink_ids.push_back("sink1");
     rule.target_sink_ids.push_back("sink2");
-    rule.type = router::RuleType::LOAD_BALANCING;
+    rule.type    = router::RuleType::LOAD_BALANCING;
     rule.enabled = true;
 
     DataPoint dp("any/address");

@@ -143,6 +143,7 @@ add_library(ipb-common STATIC
     src/platform.cpp
     src/error.cpp
     src/debug.cpp
+    src/memory_pool.cpp
 )
 
 # Set target properties
@@ -208,6 +209,11 @@ endif()
 # Examples
 if(IPB_COMMON_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+# Benchmarks
+if(IPB_COMMON_ENABLE_BENCHMARKS)
+    add_subdirectory(benchmarks)
 endif()
 
 # Installation

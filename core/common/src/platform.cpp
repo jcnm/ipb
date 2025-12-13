@@ -1,34 +1,34 @@
 #include <ipb/common/platform.hpp>
 
-#include <thread>
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 
 // Platform-specific includes
 #if defined(IPB_OS_WINDOWS)
-    #ifndef WIN32_LEAN_AND_MEAN
-        #define WIN32_LEAN_AND_MEAN
-    #endif
-    #include <windows.h>
-    #include <intrin.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <intrin.h>
+#include <windows.h>
 #elif defined(IPB_OS_POSIX)
-    #include <unistd.h>
-    #include <sys/types.h>
-    #include <pthread.h>
-    #if defined(IPB_OS_LINUX)
-        #include <sys/sysinfo.h>
-        #include <sched.h>
-    #elif defined(IPB_OS_MACOS)
-        #include <sys/sysctl.h>
-        #include <mach/mach.h>
-    #elif defined(IPB_OS_FREEBSD)
-        #include <sys/sysctl.h>
-    #endif
+#include <pthread.h>
+#include <sys/types.h>
+#include <unistd.h>
+#if defined(IPB_OS_LINUX)
+#include <sched.h>
+#include <sys/sysinfo.h>
+#elif defined(IPB_OS_MACOS)
+#include <mach/mach.h>
+#include <sys/sysctl.h>
+#elif defined(IPB_OS_FREEBSD)
+#include <sys/sysctl.h>
+#endif
 #endif
 
 // For CPUID on x86
 #if (defined(IPB_ARCH_X86) || defined(IPB_ARCH_X86_64)) && !defined(IPB_COMPILER_MSVC)
-    #include <cpuid.h>
+#include <cpuid.h>
 #endif
 
 namespace ipb::common::platform {
@@ -53,7 +53,7 @@ uint32_t get_cpu_count() noexcept {
     return nprocs > 0 ? static_cast<uint32_t>(nprocs) : 1;
 #elif defined(IPB_OS_MACOS) || defined(IPB_OS_FREEBSD)
     int mib[2] = {CTL_HW, HW_NCPU};
-    int ncpu = 1;
+    int ncpu   = 1;
     size_t len = sizeof(ncpu);
     sysctl(mib, 2, &ncpu, &len, nullptr, 0);
     return static_cast<uint32_t>(ncpu);
@@ -81,17 +81,17 @@ uint64_t get_total_memory() noexcept {
     }
     return 0;
 #elif defined(IPB_OS_MACOS)
-    int mib[2] = {CTL_HW, HW_MEMSIZE};
+    int mib[2]       = {CTL_HW, HW_MEMSIZE};
     uint64_t memsize = 0;
-    size_t len = sizeof(memsize);
+    size_t len       = sizeof(memsize);
     if (sysctl(mib, 2, &memsize, &len, nullptr, 0) == 0) {
         return memsize;
     }
     return 0;
 #elif defined(IPB_OS_FREEBSD)
-    int mib[2] = {CTL_HW, HW_PHYSMEM};
+    int mib[2]            = {CTL_HW, HW_PHYSMEM};
     unsigned long physmem = 0;
-    size_t len = sizeof(physmem);
+    size_t len            = sizeof(physmem);
     if (sysctl(mib, 2, &physmem, &len, nullptr, 0) == 0) {
         return physmem;
     }
@@ -122,9 +122,8 @@ uint64_t get_available_memory() noexcept {
     mach_msg_type_number_t count = sizeof(vm_stats) / sizeof(natural_t);
 
     host_page_size(host_port, &page_size);
-    if (host_statistics64(host_port, HOST_VM_INFO64,
-                         reinterpret_cast<host_info64_t>(&vm_stats),
-                         &count) == KERN_SUCCESS) {
+    if (host_statistics64(host_port, HOST_VM_INFO64, reinterpret_cast<host_info64_t>(&vm_stats),
+                          &count) == KERN_SUCCESS) {
         return static_cast<uint64_t>(vm_stats.free_count) * page_size;
     }
     return 0;
@@ -210,13 +209,12 @@ uint64_t get_thread_id() noexcept {
 
 bool is_elevated() noexcept {
 #if defined(IPB_OS_WINDOWS)
-    BOOL fRet = FALSE;
+    BOOL fRet     = FALSE;
     HANDLE hToken = nullptr;
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
         TOKEN_ELEVATION Elevation;
         DWORD cbSize = sizeof(TOKEN_ELEVATION);
-        if (GetTokenInformation(hToken, TokenElevation, &Elevation,
-                               sizeof(Elevation), &cbSize)) {
+        if (GetTokenInformation(hToken, TokenElevation, &Elevation, sizeof(Elevation), &cbSize)) {
             fRet = Elevation.TokenIsElevated;
         }
         CloseHandle(hToken);
@@ -286,7 +284,7 @@ CpuidResult cpuid(uint32_t leaf, uint32_t subleaf = 0) {
     return result;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 #endif
 
 CpuFeatures detect_cpu_features() noexcept {
@@ -294,15 +292,15 @@ CpuFeatures detect_cpu_features() noexcept {
 
 #if defined(IPB_ARCH_X86) || defined(IPB_ARCH_X86_64)
     // Get max leaf
-    auto leaf0 = cpuid(0);
+    auto leaf0        = cpuid(0);
     uint32_t max_leaf = leaf0.eax;
 
     if (max_leaf >= 1) {
         auto leaf1 = cpuid(1);
 
         // EDX flags
-        features.has_sse   = (leaf1.edx & (1 << 25)) != 0;
-        features.has_sse2  = (leaf1.edx & (1 << 26)) != 0;
+        features.has_sse  = (leaf1.edx & (1 << 25)) != 0;
+        features.has_sse2 = (leaf1.edx & (1 << 26)) != 0;
 
         // ECX flags
         features.has_sse3  = (leaf1.ecx & (1 << 0)) != 0;
@@ -326,26 +324,26 @@ CpuFeatures detect_cpu_features() noexcept {
     // ARM64 always has NEON
     features.has_neon = true;
 
-    #if defined(IPB_OS_LINUX)
+#if defined(IPB_OS_LINUX)
     // On Linux, we could check /proc/cpuinfo or use getauxval
     // For simplicity, assume common features are available
-    features.has_crc32 = true;
+    features.has_crc32  = true;
     features.has_crypto = true;
-    #elif defined(IPB_OS_MACOS)
+#elif defined(IPB_OS_MACOS)
     // Apple Silicon has all these features
-    features.has_crc32 = true;
+    features.has_crc32  = true;
     features.has_crypto = true;
-    #endif
+#endif
 
 #elif defined(IPB_ARCH_ARM)
-    // Check for NEON at runtime on 32-bit ARM
-    #if defined(IPB_OS_LINUX)
+// Check for NEON at runtime on 32-bit ARM
+#if defined(IPB_OS_LINUX)
     // Would need to check /proc/cpuinfo
     features.has_neon = false;  // Conservative default
-    #endif
+#endif
 #endif
 
     return features;
 }
 
-} // namespace ipb::common::platform
+}  // namespace ipb::common::platform

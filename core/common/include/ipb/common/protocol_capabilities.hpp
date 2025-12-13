@@ -28,25 +28,25 @@ namespace ipb::common {
  * @brief Protocol communication mode
  */
 enum class CommunicationMode : uint8_t {
-    SYNCHRONOUS,      ///< Request-response, blocking
-    ASYNCHRONOUS,     ///< Non-blocking, callback-based
-    REAL_TIME,        ///< Hard real-time constraints
-    NEAR_REAL_TIME,   ///< Soft real-time, low latency
-    BATCH,            ///< Bulk data transfer
-    STREAMING         ///< Continuous data flow
+    SYNCHRONOUS,     ///< Request-response, blocking
+    ASYNCHRONOUS,    ///< Non-blocking, callback-based
+    REAL_TIME,       ///< Hard real-time constraints
+    NEAR_REAL_TIME,  ///< Soft real-time, low latency
+    BATCH,           ///< Bulk data transfer
+    STREAMING        ///< Continuous data flow
 };
 
 /**
  * @brief Security protocol support
  */
 enum class SecurityProtocol : uint8_t {
-    NONE = 0,
+    NONE    = 0,
     TLS_1_2 = 1,
     TLS_1_3 = 2,
-    DTLS = 3,
-    SSH = 4,
-    IPSEC = 5,
-    CUSTOM = 255
+    DTLS    = 3,
+    SSH     = 4,
+    IPSEC   = 5,
+    CUSTOM  = 255
 };
 
 /**
@@ -71,9 +71,9 @@ enum class AuthMechanism : uint8_t {
  */
 enum class AuthorizationModel : uint8_t {
     NONE = 0,
-    RBAC,             ///< Role-Based Access Control
-    ABAC,             ///< Attribute-Based Access Control
-    ACL,              ///< Access Control Lists
+    RBAC,  ///< Role-Based Access Control
+    ABAC,  ///< Attribute-Based Access Control
+    ACL,   ///< Access Control Lists
     CAPABILITY_BASED,
     CUSTOM = 255
 };
@@ -96,13 +96,13 @@ enum class DeploymentPlatform : uint8_t {
  * @brief ISO/OSI layer intervention
  */
 enum class ISOLayer : uint8_t {
-    PHYSICAL = 1,      ///< Layer 1 - Physical
-    DATA_LINK = 2,     ///< Layer 2 - Data Link
-    NETWORK = 3,       ///< Layer 3 - Network
-    TRANSPORT = 4,     ///< Layer 4 - Transport
-    SESSION = 5,       ///< Layer 5 - Session
+    PHYSICAL     = 1,  ///< Layer 1 - Physical
+    DATA_LINK    = 2,  ///< Layer 2 - Data Link
+    NETWORK      = 3,  ///< Layer 3 - Network
+    TRANSPORT    = 4,  ///< Layer 4 - Transport
+    SESSION      = 5,  ///< Layer 5 - Session
     PRESENTATION = 6,  ///< Layer 6 - Presentation
-    APPLICATION = 7    ///< Layer 7 - Application
+    APPLICATION  = 7   ///< Layer 7 - Application
 };
 
 /**
@@ -125,7 +125,7 @@ enum class ProtocolType : uint8_t {
 
     // IoT protocols
     MQTT,
-    MQTT_SN,          ///< MQTT for Sensor Networks
+    MQTT_SN,  ///< MQTT for Sensor Networks
     COAP,
     AMQP,
     DDS,
@@ -163,25 +163,25 @@ enum class ProtocolType : uint8_t {
  * @brief Memory requirements specification
  */
 struct MemoryRequirements {
-    uint64_t min_ram_bytes = 0;         ///< Minimum RAM required
-    uint64_t recommended_ram_bytes = 0;  ///< Recommended RAM
-    uint64_t max_ram_bytes = 0;          ///< Maximum RAM usage
-    uint64_t min_flash_bytes = 0;        ///< Minimum flash/storage
-    uint64_t stack_size_bytes = 0;       ///< Per-thread stack size
-    bool uses_heap = true;               ///< Whether heap allocation is used
-    bool zero_allocation_mode = false;   ///< Supports zero-alloc operation
+    uint64_t min_ram_bytes         = 0;      ///< Minimum RAM required
+    uint64_t recommended_ram_bytes = 0;      ///< Recommended RAM
+    uint64_t max_ram_bytes         = 0;      ///< Maximum RAM usage
+    uint64_t min_flash_bytes       = 0;      ///< Minimum flash/storage
+    uint64_t stack_size_bytes      = 0;      ///< Per-thread stack size
+    bool uses_heap                 = true;   ///< Whether heap allocation is used
+    bool zero_allocation_mode      = false;  ///< Supports zero-alloc operation
 };
 
 /**
  * @brief CPU requirements specification
  */
 struct CpuRequirements {
-    uint32_t min_frequency_mhz = 0;      ///< Minimum CPU frequency
+    uint32_t min_frequency_mhz         = 0;  ///< Minimum CPU frequency
     uint32_t recommended_frequency_mhz = 0;
-    uint8_t min_cores = 1;               ///< Minimum CPU cores
-    uint8_t recommended_cores = 1;
-    bool requires_fpu = false;           ///< Floating point unit required
-    bool requires_simd = false;          ///< SIMD instructions required
+    uint8_t min_cores                  = 1;  ///< Minimum CPU cores
+    uint8_t recommended_cores          = 1;
+    bool requires_fpu                  = false;        ///< Floating point unit required
+    bool requires_simd                 = false;        ///< SIMD instructions required
     std::vector<std::string> supported_architectures;  ///< arm, x86, riscv, etc.
 };
 
@@ -189,13 +189,13 @@ struct CpuRequirements {
  * @brief Network requirements specification
  */
 struct NetworkRequirements {
-    uint32_t min_bandwidth_kbps = 0;     ///< Minimum bandwidth
+    uint32_t min_bandwidth_kbps         = 0;  ///< Minimum bandwidth
     uint32_t recommended_bandwidth_kbps = 0;
-    uint32_t max_latency_ms = 0;         ///< Maximum tolerable latency
-    bool requires_multicast = false;
-    bool requires_broadcast = false;
-    bool ipv4_supported = true;
-    bool ipv6_supported = false;
+    uint32_t max_latency_ms             = 0;  ///< Maximum tolerable latency
+    bool requires_multicast             = false;
+    bool requires_broadcast             = false;
+    bool ipv4_supported                 = true;
+    bool ipv6_supported                 = false;
     std::vector<uint16_t> default_ports;
 };
 
@@ -227,8 +227,8 @@ struct LatencyCharacteristics {
     std::chrono::microseconds typical_latency{0};
     std::chrono::microseconds min_latency{0};
     std::chrono::microseconds max_latency{0};
-    std::chrono::microseconds p99_latency{0};      ///< 99th percentile
-    std::chrono::microseconds p999_latency{0};     ///< 99.9th percentile
+    std::chrono::microseconds p99_latency{0};   ///< 99th percentile
+    std::chrono::microseconds p999_latency{0};  ///< 99.9th percentile
 
     // Jitter
     std::chrono::microseconds typical_jitter{0};
@@ -236,11 +236,11 @@ struct LatencyCharacteristics {
 
     // Throughput
     uint32_t max_messages_per_second = 0;
-    uint64_t max_bytes_per_second = 0;
+    uint64_t max_bytes_per_second    = 0;
 
     // Real-time characteristics
-    bool deterministic = false;           ///< Deterministic timing
-    bool hard_real_time = false;          ///< Hard RT guarantees
+    bool deterministic  = false;              ///< Deterministic timing
+    bool hard_real_time = false;              ///< Hard RT guarantees
     std::chrono::microseconds cycle_time{0};  ///< For cyclic protocols
 };
 
@@ -255,7 +255,7 @@ struct AppAuthentication {
     bool supported = false;
     std::vector<AuthMechanism> mechanisms;
     bool multi_factor_supported = false;
-    bool session_management = false;
+    bool session_management     = false;
     std::chrono::seconds session_timeout{0};
     uint32_t max_sessions = 0;
 };
@@ -266,10 +266,10 @@ struct AppAuthentication {
 struct UserAuthentication {
     bool supported = false;
     std::vector<AuthMechanism> mechanisms;
-    bool multi_factor_supported = false;
-    bool password_policy_enforced = false;
+    bool multi_factor_supported    = false;
+    bool password_policy_enforced  = false;
     bool account_lockout_supported = false;
-    uint32_t max_failed_attempts = 0;
+    uint32_t max_failed_attempts   = 0;
     std::chrono::seconds lockout_duration{0};
 };
 
@@ -277,11 +277,11 @@ struct UserAuthentication {
  * @brief Authorization capabilities
  */
 struct AuthorizationCapabilities {
-    bool supported = false;
+    bool supported           = false;
     AuthorizationModel model = AuthorizationModel::NONE;
-    bool fine_grained = false;           ///< Resource-level permissions
-    bool hierarchical = false;           ///< Role hierarchy support
-    bool dynamic_policies = false;       ///< Runtime policy updates
+    bool fine_grained        = false;  ///< Resource-level permissions
+    bool hierarchical        = false;  ///< Role hierarchy support
+    bool dynamic_policies    = false;  ///< Runtime policy updates
     std::vector<std::string> built_in_roles;
 };
 
@@ -295,9 +295,9 @@ struct SecurityCapabilities {
     SecurityProtocol default_protocol = SecurityProtocol::NONE;
 
     // Certificate support
-    bool certificate_validation = false;
+    bool certificate_validation       = false;
     bool certificate_revocation_check = false;
-    bool mutual_authentication = false;
+    bool mutual_authentication        = false;
 
     // Authentication
     AppAuthentication app_auth;
@@ -308,12 +308,12 @@ struct SecurityCapabilities {
 
     // Data protection
     bool payload_encryption = false;
-    bool message_signing = false;
-    bool integrity_check = false;
-    bool replay_protection = false;
+    bool message_signing    = false;
+    bool integrity_check    = false;
+    bool replay_protection  = false;
 
     // Audit
-    bool audit_logging = false;
+    bool audit_logging   = false;
     bool security_events = false;
 };
 
@@ -350,25 +350,25 @@ struct ProtocolCapabilities {
     SecurityCapabilities security;
 
     // Features
-    bool supports_discovery = false;
+    bool supports_discovery      = false;
     bool supports_auto_reconnect = false;
-    bool supports_qos = false;
-    bool supports_compression = false;
-    bool supports_batching = false;
-    bool supports_transactions = false;
-    bool supports_subscriptions = false;
-    bool bidirectional = false;
+    bool supports_qos            = false;
+    bool supports_compression    = false;
+    bool supports_batching       = false;
+    bool supports_transactions   = false;
+    bool supports_subscriptions  = false;
+    bool bidirectional           = false;
 
     // Data characteristics
     uint32_t max_payload_bytes = 0;
-    uint32_t max_topic_length = 0;
-    bool binary_payload = true;
-    bool text_payload = true;
+    uint32_t max_topic_length  = 0;
+    bool binary_payload        = true;
+    bool text_payload          = true;
 
     // Reliability
-    bool at_most_once = false;     ///< QoS 0
-    bool at_least_once = false;    ///< QoS 1
-    bool exactly_once = false;     ///< QoS 2
+    bool at_most_once     = false;  ///< QoS 0
+    bool at_least_once    = false;  ///< QoS 1
+    bool exactly_once     = false;  ///< QoS 2
     bool ordered_delivery = false;
 
     // Helper methods
@@ -382,16 +382,13 @@ struct ProtocolCapabilities {
     }
 
     bool supports_security() const noexcept {
-        return security.transport_encryption ||
-               security.payload_encryption ||
-               security.app_auth.supported ||
-               security.user_auth.supported;
+        return security.transport_encryption || security.payload_encryption ||
+               security.app_auth.supported || security.user_auth.supported;
     }
 
     bool supports_real_time() const noexcept {
         for (auto mode : supported_modes) {
-            if (mode == CommunicationMode::REAL_TIME ||
-                mode == CommunicationMode::NEAR_REAL_TIME) {
+            if (mode == CommunicationMode::REAL_TIME || mode == CommunicationMode::NEAR_REAL_TIME) {
                 return true;
             }
         }
@@ -429,26 +426,26 @@ struct ProtocolInfo {
 
     // Quick access flags (computed from capabilities if available)
     struct {
-        bool secure = false;
+        bool secure        = false;
         bool authenticated = false;
-        bool real_time = false;
-        bool reliable = false;
+        bool real_time     = false;
+        bool reliable      = false;
         bool bidirectional = false;
     } flags;
 
     // Current configuration
     struct {
         SecurityProtocol security_protocol = SecurityProtocol::NONE;
-        AuthMechanism auth_mechanism = AuthMechanism::NONE;
-        CommunicationMode comm_mode = CommunicationMode::ASYNCHRONOUS;
-        uint8_t qos_level = 0;
+        AuthMechanism auth_mechanism       = AuthMechanism::NONE;
+        CommunicationMode comm_mode        = CommunicationMode::ASYNCHRONOUS;
+        uint8_t qos_level                  = 0;
     } current_config;
 
     // Runtime metrics
     struct {
         std::chrono::microseconds current_latency{0};
         uint64_t messages_per_second = 0;
-        double availability_percent = 100.0;
+        double availability_percent  = 100.0;
     } metrics;
 };
 
@@ -461,40 +458,74 @@ struct ProtocolInfo {
  */
 constexpr std::string_view protocol_type_to_string(ProtocolType type) noexcept {
     switch (type) {
-        case ProtocolType::MODBUS_RTU: return "Modbus RTU";
-        case ProtocolType::MODBUS_TCP: return "Modbus TCP";
-        case ProtocolType::MODBUS_ASCII: return "Modbus ASCII";
-        case ProtocolType::OPCUA: return "OPC UA";
-        case ProtocolType::PROFINET: return "PROFINET";
-        case ProtocolType::PROFIBUS: return "PROFIBUS";
-        case ProtocolType::ETHERCAT: return "EtherCAT";
-        case ProtocolType::CANOPEN: return "CANopen";
-        case ProtocolType::DEVICENET: return "DeviceNet";
-        case ProtocolType::BACNET: return "BACnet";
-        case ProtocolType::HART: return "HART";
-        case ProtocolType::FOUNDATION_FIELDBUS: return "Foundation Fieldbus";
-        case ProtocolType::MQTT: return "MQTT";
-        case ProtocolType::MQTT_SN: return "MQTT-SN";
-        case ProtocolType::COAP: return "CoAP";
-        case ProtocolType::AMQP: return "AMQP";
-        case ProtocolType::DDS: return "DDS";
-        case ProtocolType::SPARKPLUG_B: return "Sparkplug B";
-        case ProtocolType::LWM2M: return "LwM2M";
-        case ProtocolType::HTTP: return "HTTP";
-        case ProtocolType::HTTPS: return "HTTPS";
-        case ProtocolType::WEBSOCKET: return "WebSocket";
-        case ProtocolType::GRPC: return "gRPC";
-        case ProtocolType::REST: return "REST";
-        case ProtocolType::GRAPHQL: return "GraphQL";
-        case ProtocolType::KAFKA: return "Kafka";
-        case ProtocolType::RABBITMQ: return "RabbitMQ";
-        case ProtocolType::ZEROMQ: return "ZeroMQ";
-        case ProtocolType::REDIS_PUBSUB: return "Redis Pub/Sub";
-        case ProtocolType::INFLUXDB: return "InfluxDB";
-        case ProtocolType::TIMESCALEDB: return "TimescaleDB";
-        case ProtocolType::MONGODB: return "MongoDB";
-        case ProtocolType::CUSTOM: return "Custom";
-        default: return "Unknown";
+        case ProtocolType::MODBUS_RTU:
+            return "Modbus RTU";
+        case ProtocolType::MODBUS_TCP:
+            return "Modbus TCP";
+        case ProtocolType::MODBUS_ASCII:
+            return "Modbus ASCII";
+        case ProtocolType::OPCUA:
+            return "OPC UA";
+        case ProtocolType::PROFINET:
+            return "PROFINET";
+        case ProtocolType::PROFIBUS:
+            return "PROFIBUS";
+        case ProtocolType::ETHERCAT:
+            return "EtherCAT";
+        case ProtocolType::CANOPEN:
+            return "CANopen";
+        case ProtocolType::DEVICENET:
+            return "DeviceNet";
+        case ProtocolType::BACNET:
+            return "BACnet";
+        case ProtocolType::HART:
+            return "HART";
+        case ProtocolType::FOUNDATION_FIELDBUS:
+            return "Foundation Fieldbus";
+        case ProtocolType::MQTT:
+            return "MQTT";
+        case ProtocolType::MQTT_SN:
+            return "MQTT-SN";
+        case ProtocolType::COAP:
+            return "CoAP";
+        case ProtocolType::AMQP:
+            return "AMQP";
+        case ProtocolType::DDS:
+            return "DDS";
+        case ProtocolType::SPARKPLUG_B:
+            return "Sparkplug B";
+        case ProtocolType::LWM2M:
+            return "LwM2M";
+        case ProtocolType::HTTP:
+            return "HTTP";
+        case ProtocolType::HTTPS:
+            return "HTTPS";
+        case ProtocolType::WEBSOCKET:
+            return "WebSocket";
+        case ProtocolType::GRPC:
+            return "gRPC";
+        case ProtocolType::REST:
+            return "REST";
+        case ProtocolType::GRAPHQL:
+            return "GraphQL";
+        case ProtocolType::KAFKA:
+            return "Kafka";
+        case ProtocolType::RABBITMQ:
+            return "RabbitMQ";
+        case ProtocolType::ZEROMQ:
+            return "ZeroMQ";
+        case ProtocolType::REDIS_PUBSUB:
+            return "Redis Pub/Sub";
+        case ProtocolType::INFLUXDB:
+            return "InfluxDB";
+        case ProtocolType::TIMESCALEDB:
+            return "TimescaleDB";
+        case ProtocolType::MONGODB:
+            return "MongoDB";
+        case ProtocolType::CUSTOM:
+            return "Custom";
+        default:
+            return "Unknown";
     }
 }
 
@@ -503,16 +534,25 @@ constexpr std::string_view protocol_type_to_string(ProtocolType type) noexcept {
  */
 constexpr std::string_view deployment_platform_to_string(DeploymentPlatform platform) noexcept {
     switch (platform) {
-        case DeploymentPlatform::EMBEDDED_BARE_METAL: return "Bare Metal";
-        case DeploymentPlatform::EMBEDDED_RTOS: return "RTOS";
-        case DeploymentPlatform::EMBEDDED_LINUX: return "Embedded Linux";
-        case DeploymentPlatform::EDGE_GATEWAY: return "Edge Gateway";
-        case DeploymentPlatform::EDGE_MOBILE: return "Mobile Edge";
-        case DeploymentPlatform::SERVER_STANDARD: return "Server";
-        case DeploymentPlatform::SERVER_CLOUD: return "Cloud";
-        case DeploymentPlatform::SERVER_CONTAINERIZED: return "Container";
-        default: return "Unknown";
+        case DeploymentPlatform::EMBEDDED_BARE_METAL:
+            return "Bare Metal";
+        case DeploymentPlatform::EMBEDDED_RTOS:
+            return "RTOS";
+        case DeploymentPlatform::EMBEDDED_LINUX:
+            return "Embedded Linux";
+        case DeploymentPlatform::EDGE_GATEWAY:
+            return "Edge Gateway";
+        case DeploymentPlatform::EDGE_MOBILE:
+            return "Mobile Edge";
+        case DeploymentPlatform::SERVER_STANDARD:
+            return "Server";
+        case DeploymentPlatform::SERVER_CLOUD:
+            return "Cloud";
+        case DeploymentPlatform::SERVER_CONTAINERIZED:
+            return "Container";
+        default:
+            return "Unknown";
     }
 }
 
-} // namespace ipb::common
+}  // namespace ipb::common

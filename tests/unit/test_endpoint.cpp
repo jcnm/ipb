@@ -12,11 +12,13 @@
  * - rt::ThreadPriority: Thread priority (platform-specific)
  */
 
-#include <gtest/gtest.h>
 #include <ipb/common/endpoint.hpp>
+
+#include <chrono>
 #include <string>
 #include <thread>
-#include <chrono>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::common;
 
@@ -54,8 +56,8 @@ TEST_F(EndPointTest, PathConstruction) {
 }
 
 TEST_F(EndPointTest, FullConstruction) {
-    EndPoint ep(EndPoint::Protocol::HTTPS, "example.com", 443,
-                "/api/v1", EndPoint::SecurityLevel::TLS);
+    EndPoint ep(EndPoint::Protocol::HTTPS, "example.com", 443, "/api/v1",
+                EndPoint::SecurityLevel::TLS);
 
     EXPECT_EQ(ep.protocol(), EndPoint::Protocol::HTTPS);
     EXPECT_EQ(ep.host(), "example.com");
@@ -115,8 +117,8 @@ TEST_F(EndPointTest, CustomProperties) {
     ep.set_property("qos", "2");
 
     auto client_id = ep.get_property("client_id");
-    auto qos = ep.get_property("qos");
-    auto unknown = ep.get_property("nonexistent");
+    auto qos       = ep.get_property("qos");
+    auto unknown   = ep.get_property("nonexistent");
 
     EXPECT_TRUE(client_id.has_value());
     EXPECT_EQ(*client_id, "device_001");
@@ -353,8 +355,8 @@ TEST_F(ConnectionStatsTest, DefaultValues) {
 
 TEST_F(ConnectionStatsTest, Reset) {
     ConnectionStats stats;
-    stats.bytes_sent = 1000;
-    stats.messages_sent = 50;
+    stats.bytes_sent          = 1000;
+    stats.messages_sent       = 50;
     stats.connection_attempts = 10;
 
     stats.reset();
@@ -371,7 +373,7 @@ TEST_F(ConnectionStatsTest, ConnectionSuccessRate) {
     EXPECT_DOUBLE_EQ(stats.connection_success_rate(), 0.0);
 
     // 50% success rate
-    stats.connection_attempts = 10;
+    stats.connection_attempts    = 10;
     stats.successful_connections = 5;
     EXPECT_DOUBLE_EQ(stats.connection_success_rate(), 50.0);
 
@@ -649,8 +651,8 @@ class ThreadPriorityTest : public ::testing::Test {};
 TEST_F(ThreadPriorityTest, SetCurrentThreadPriority) {
     // This may or may not succeed depending on permissions
     // We just verify it doesn't crash
-    auto result = rt::ThreadPriority::set_current_thread_priority(
-        rt::ThreadPriority::Level::NORMAL);
+    auto result =
+        rt::ThreadPriority::set_current_thread_priority(rt::ThreadPriority::Level::NORMAL);
     (void)result;  // Result depends on platform/permissions
 }
 

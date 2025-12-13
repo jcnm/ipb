@@ -14,9 +14,9 @@
  */
 
 #include <ipb/common/data_point.hpp>
+#include <ipb/common/debug.hpp>
 #include <ipb/common/endpoint.hpp>
 #include <ipb/common/error.hpp>
-#include <ipb/common/debug.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <atomic>
@@ -40,22 +40,17 @@ class MessageBusImpl;
 struct Message {
     /// Message types for different routing behaviors
     enum class Type : uint8_t {
-        DATA_POINT,      ///< Single data point
-        DATA_BATCH,      ///< Batch of data points
-        CONTROL,         ///< Control message (start/stop/config)
-        HEARTBEAT,       ///< Health check message
-        DEADLINE_TASK    ///< Task with deadline for EDF scheduler
+        DATA_POINT,    ///< Single data point
+        DATA_BATCH,    ///< Batch of data points
+        CONTROL,       ///< Control message (start/stop/config)
+        HEARTBEAT,     ///< Health check message
+        DEADLINE_TASK  ///< Task with deadline for EDF scheduler
     };
 
     /// Message priority levels
-    enum class Priority : uint8_t {
-        LOW = 0,
-        NORMAL = 64,
-        HIGH = 128,
-        REALTIME = 255
-    };
+    enum class Priority : uint8_t { LOW = 0, NORMAL = 64, HIGH = 128, REALTIME = 255 };
 
-    Type type = Type::DATA_POINT;
+    Type type         = Type::DATA_POINT;
     Priority priority = Priority::NORMAL;
 
     /// Source identifier
@@ -82,15 +77,11 @@ struct Message {
     Message() : timestamp(common::Timestamp::now()) {}
 
     explicit Message(common::DataPoint dp)
-        : type(Type::DATA_POINT)
-        , payload(std::move(dp))
-        , timestamp(common::Timestamp::now()) {}
+        : type(Type::DATA_POINT), payload(std::move(dp)), timestamp(common::Timestamp::now()) {}
 
     Message(std::string_view topic_name, common::DataPoint dp)
-        : type(Type::DATA_POINT)
-        , topic(topic_name)
-        , payload(std::move(dp))
-        , timestamp(common::Timestamp::now()) {}
+        : type(Type::DATA_POINT), topic(topic_name), payload(std::move(dp)),
+          timestamp(common::Timestamp::now()) {}
 };
 
 /**
@@ -106,11 +97,11 @@ public:
     Subscription() = default;
     Subscription(uint64_t id, std::weak_ptr<Channel> channel);
 
-    Subscription(Subscription&&) noexcept = default;
+    Subscription(Subscription&&) noexcept            = default;
     Subscription& operator=(Subscription&&) noexcept = default;
 
     // Non-copyable
-    Subscription(const Subscription&) = delete;
+    Subscription(const Subscription&)            = delete;
     Subscription& operator=(const Subscription&) = delete;
 
     ~Subscription();
@@ -189,9 +180,9 @@ struct MessageBusConfig {
 
     /// Drop policy when buffer is full
     enum class DropPolicy {
-        DROP_NEWEST,    ///< Drop incoming messages
-        DROP_OLDEST,    ///< Drop oldest messages in queue
-        BLOCK           ///< Block publisher (NOT real-time safe!)
+        DROP_NEWEST,  ///< Drop incoming messages
+        DROP_OLDEST,  ///< Drop oldest messages in queue
+        BLOCK         ///< Block publisher (NOT real-time safe!)
     } drop_policy = DropPolicy::DROP_OLDEST;
 
     /// CPU affinity for dispatcher threads (-1 = no affinity)
@@ -231,7 +222,7 @@ public:
     ~MessageBus();
 
     // Non-copyable, movable
-    MessageBus(const MessageBus&) = delete;
+    MessageBus(const MessageBus&)            = delete;
     MessageBus& operator=(const MessageBus&) = delete;
     MessageBus(MessageBus&&) noexcept;
     MessageBus& operator=(MessageBus&&) noexcept;
@@ -267,13 +258,13 @@ public:
     // Subscribing
 
     /// Subscribe to a topic pattern (supports wildcards: * and #)
-    [[nodiscard]] Subscription subscribe(std::string_view topic_pattern, SubscriberCallback callback);
+    [[nodiscard]] Subscription subscribe(std::string_view topic_pattern,
+                                         SubscriberCallback callback);
 
     /// Subscribe with filter predicate
-    [[nodiscard]] Subscription subscribe_filtered(
-        std::string_view topic_pattern,
-        std::function<bool(const Message&)> filter,
-        SubscriberCallback callback);
+    [[nodiscard]] Subscription subscribe_filtered(std::string_view topic_pattern,
+                                                  std::function<bool(const Message&)> filter,
+                                                  SubscriberCallback callback);
 
     // Channel management
 
@@ -303,4 +294,4 @@ private:
     std::unique_ptr<MessageBusImpl> impl_;
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

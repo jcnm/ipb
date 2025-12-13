@@ -12,12 +12,14 @@
  * - ScoopRegistry: Scoop management and read strategies
  */
 
-#include <gtest/gtest.h>
 #include <ipb/core/scoop_registry/scoop_registry.hpp>
+
 #include <atomic>
 #include <future>
 #include <memory>
 #include <thread>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::core;
 using namespace ipb::common;
@@ -46,8 +48,14 @@ public:
     explicit MockScoopImpl(std::shared_ptr<MockScoopState> state) : state_(std::move(state)) {}
 
     // IIPBComponent interface
-    Result<void> start() override { state_->started = true; return ok(); }
-    Result<void> stop() override { state_->started = false; return ok(); }
+    Result<void> start() override {
+        state_->started = true;
+        return ok();
+    }
+    Result<void> stop() override {
+        state_->started = false;
+        return ok();
+    }
     bool is_running() const noexcept override { return state_->started; }
 
     Result<void> configure(const ConfigurationBase&) override { return ok(); }
@@ -75,9 +83,7 @@ public:
         return Result<DataSet>(std::move(data));
     }
 
-    Result<DataSet> read_async() override {
-        return read();
-    }
+    Result<DataSet> read_async() override { return read(); }
 
     Result<void> subscribe(DataCallback data_cb, ErrorCallback) override {
         // Store callback for potential triggering
@@ -85,9 +91,7 @@ public:
         return ok();
     }
 
-    Result<void> unsubscribe() override {
-        return ok();
-    }
+    Result<void> unsubscribe() override { return ok(); }
 
     Result<void> add_address(std::string_view address) override {
         std::lock_guard lock(state_->addresses_mutex);
@@ -120,9 +124,7 @@ public:
         return ok();
     }
 
-    bool is_connected() const noexcept override {
-        return state_->connected;
-    }
+    bool is_connected() const noexcept override { return state_->connected; }
 
     // Protocol interface
     std::string_view protocol_name() const noexcept override { return "mock"; }
@@ -136,8 +138,8 @@ private:
 class MockScoop {
 public:
     explicit MockScoop(const std::string& name = "mock")
-        : state_(std::make_shared<MockScoopState>(name))
-        , scoop_(std::shared_ptr<IProtocolSource>(
+        : state_(std::make_shared<MockScoopState>(name)),
+          scoop_(std::shared_ptr<IProtocolSource>(
               new IProtocolSource(std::make_unique<MockScoopImpl>(state_)))) {}
 
     // Get the IProtocolSource to pass to registry
@@ -221,14 +223,14 @@ TEST_F(ScoopInfoTest, AverageLatency) {
 
     // With some reads
     info.reads_successful.store(100);
-    info.total_latency_ns.store(1000000);  // 1ms total
+    info.total_latency_ns.store(1000000);           // 1ms total
     EXPECT_DOUBLE_EQ(info.avg_latency_us(), 10.0);  // 10us average
 }
 
 TEST_F(ScoopInfoTest, CopyConstruction) {
     ScoopInfo original;
-    original.id = "test";
-    original.type = "mock";
+    original.id       = "test";
+    original.type     = "mock";
     original.priority = 5;
     original.reads_successful.store(100);
 
@@ -241,7 +243,7 @@ TEST_F(ScoopInfoTest, CopyConstruction) {
 
 TEST_F(ScoopInfoTest, MoveConstruction) {
     ScoopInfo original;
-    original.id = "test";
+    original.id   = "test";
     original.type = "mock";
     original.reads_successful.store(100);
 
@@ -338,7 +340,7 @@ TEST_F(ScoopRegistryConfigTest, DefaultValues) {
 class ScoopRegistryTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;    // Disable for faster tests
+        config_.enable_health_check   = false;  // Disable for faster tests
         config_.enable_auto_reconnect = false;  // Disable for predictable tests
     }
 
@@ -353,7 +355,7 @@ TEST_F(ScoopRegistryTest, DefaultConstruction) {
 
 TEST_F(ScoopRegistryTest, ConfiguredConstruction) {
     ScoopRegistryConfig custom_config;
-    custom_config.default_strategy = ReadStrategy::ROUND_ROBIN;
+    custom_config.default_strategy    = ReadStrategy::ROUND_ROBIN;
     custom_config.unhealthy_threshold = 5;
 
     ScoopRegistry registry(custom_config);
@@ -376,7 +378,7 @@ TEST_F(ScoopRegistryTest, StartStop) {
 TEST_F(ScoopRegistryTest, RegisterScoop) {
     ScoopRegistry registry(config_);
 
-    auto scoop = std::make_shared<MockScoop>("test_scoop");
+    auto scoop      = std::make_shared<MockScoop>("test_scoop");
     bool registered = registry.register_scoop("scoop1", scoop->get());
 
     EXPECT_TRUE(registered);
@@ -387,7 +389,7 @@ TEST_F(ScoopRegistryTest, RegisterScoop) {
 TEST_F(ScoopRegistryTest, RegisterScoopWithPrimary) {
     ScoopRegistry registry(config_);
 
-    auto scoop = std::make_shared<MockScoop>("test_scoop");
+    auto scoop      = std::make_shared<MockScoop>("test_scoop");
     bool registered = registry.register_scoop("scoop1", scoop->get(), true);
 
     EXPECT_TRUE(registered);
@@ -400,7 +402,7 @@ TEST_F(ScoopRegistryTest, RegisterScoopWithPrimary) {
 TEST_F(ScoopRegistryTest, RegisterScoopWithPriority) {
     ScoopRegistry registry(config_);
 
-    auto scoop = std::make_shared<MockScoop>("test_scoop");
+    auto scoop      = std::make_shared<MockScoop>("test_scoop");
     bool registered = registry.register_scoop("scoop1", scoop->get(), false, 10);
 
     EXPECT_TRUE(registered);
@@ -478,7 +480,7 @@ TEST_F(ScoopRegistryTest, GetScoopIds) {
 class ScoopConfigurationTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;
+        config_.enable_health_check   = false;
         config_.enable_auto_reconnect = false;
     }
 
@@ -536,7 +538,7 @@ TEST_F(ScoopConfigurationTest, SetConfigNonexistent) {
 class ScoopSelectionTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;
+        config_.enable_health_check   = false;
         config_.enable_auto_reconnect = false;
     }
 
@@ -591,8 +593,8 @@ TEST_F(ScoopSelectionTest, SelectBroadcast) {
     registry.register_scoop("scoop2", scoop2->get());
     registry.register_scoop("scoop3", scoop3->get());
 
-    auto result = registry.select_scoop(
-        {"scoop1", "scoop2", "scoop3"}, ReadStrategy::BROADCAST_MERGE);
+    auto result =
+        registry.select_scoop({"scoop1", "scoop2", "scoop3"}, ReadStrategy::BROADCAST_MERGE);
 
     EXPECT_TRUE(result.success);
     EXPECT_EQ(result.selected_scoop_ids.size(), 3u);
@@ -615,7 +617,7 @@ TEST_F(ScoopSelectionTest, SelectNoHealthyScoops) {
 class DataReadingTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;
+        config_.enable_health_check   = false;
         config_.enable_auto_reconnect = false;
     }
 
@@ -684,7 +686,7 @@ TEST_F(DataReadingTest, ReadWithFailover) {
 class ConnectionManagementTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;
+        config_.enable_health_check   = false;
         config_.enable_auto_reconnect = false;
     }
 
@@ -777,7 +779,7 @@ TEST_F(ConnectionManagementTest, DisconnectAll) {
 class HealthManagementTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;
+        config_.enable_health_check   = false;
         config_.enable_auto_reconnect = false;
     }
 
@@ -860,7 +862,7 @@ TEST_F(HealthManagementTest, GetUnhealthyScoops) {
 class AddressSpaceTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;
+        config_.enable_health_check   = false;
         config_.enable_auto_reconnect = false;
     }
 
@@ -919,7 +921,7 @@ TEST_F(AddressSpaceTest, AddAddressToMultipleScoops) {
 class ScoopRegistryStatsIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;
+        config_.enable_health_check   = false;
         config_.enable_auto_reconnect = false;
     }
 
@@ -984,7 +986,7 @@ TEST_F(ScoopRegistryStatsIntegrationTest, MoveConstruction) {
 class AggregatedSubscriptionTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.enable_health_check = false;
+        config_.enable_health_check   = false;
         config_.enable_auto_reconnect = false;
     }
 
@@ -1008,4 +1010,3 @@ TEST_F(AggregatedSubscriptionTest, Cancel) {
     sub.cancel();  // Should not crash
     EXPECT_FALSE(sub.is_active());
 }
-

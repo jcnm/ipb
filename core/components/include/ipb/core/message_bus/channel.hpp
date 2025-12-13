@@ -8,16 +8,17 @@
  * channel optimized for real-time message passing.
  */
 
-#include "message_bus.hpp"
 #include <ipb/common/endpoint.hpp>
 
-#include <atomic>
 #include <array>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <vector>
+
+#include "message_bus.hpp"
 
 namespace ipb::core {
 
@@ -27,7 +28,7 @@ namespace ipb::core {
  * Uses a bounded ring buffer with atomic operations for
  * lock-free producer/consumer synchronization.
  */
-template<size_t Capacity>
+template <size_t Capacity>
 class MPMCRingBuffer {
     static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
 
@@ -49,8 +50,8 @@ public:
         size_t pos = head_.load(std::memory_order_relaxed);
 
         for (;;) {
-            slot = &slots_[pos & (Capacity - 1)];
-            size_t seq = slot->sequence.load(std::memory_order_acquire);
+            slot          = &slots_[pos & (Capacity - 1)];
+            size_t seq    = slot->sequence.load(std::memory_order_acquire);
             intptr_t diff = static_cast<intptr_t>(seq) - static_cast<intptr_t>(pos);
 
             if (diff == 0) {
@@ -58,7 +59,7 @@ public:
                     break;
                 }
             } else if (diff < 0) {
-                return false; // Buffer full
+                return false;  // Buffer full
             } else {
                 pos = head_.load(std::memory_order_relaxed);
             }
@@ -78,8 +79,8 @@ public:
         size_t pos = tail_.load(std::memory_order_relaxed);
 
         for (;;) {
-            slot = &slots_[pos & (Capacity - 1)];
-            size_t seq = slot->sequence.load(std::memory_order_acquire);
+            slot          = &slots_[pos & (Capacity - 1)];
+            size_t seq    = slot->sequence.load(std::memory_order_acquire);
             intptr_t diff = static_cast<intptr_t>(seq) - static_cast<intptr_t>(pos + 1);
 
             if (diff == 0) {
@@ -87,7 +88,7 @@ public:
                     break;
                 }
             } else if (diff < 0) {
-                return false; // Buffer empty
+                return false;  // Buffer empty
             } else {
                 pos = tail_.load(std::memory_order_relaxed);
             }
@@ -135,7 +136,7 @@ struct SubscriberEntry {
         : id(subscriber_id), callback(std::move(cb)) {}
 
     SubscriberEntry(uint64_t subscriber_id, SubscriberCallback cb,
-                   std::function<bool(const Message&)> flt)
+                    std::function<bool(const Message&)> flt)
         : id(subscriber_id), callback(std::move(cb)), filter(std::move(flt)) {}
 };
 
@@ -154,7 +155,7 @@ public:
     ~Channel();
 
     // Non-copyable
-    Channel(const Channel&) = delete;
+    Channel(const Channel&)            = delete;
     Channel& operator=(const Channel&) = delete;
 
     /// Get topic name
@@ -174,8 +175,7 @@ public:
     uint64_t subscribe(SubscriberCallback callback);
 
     /// Add a subscriber with filter
-    uint64_t subscribe(SubscriberCallback callback,
-                      std::function<bool(const Message&)> filter);
+    uint64_t subscribe(SubscriberCallback callback, std::function<bool(const Message&)> filter);
 
     /// Remove a subscriber
     void unsubscribe(uint64_t subscriber_id);
@@ -240,4 +240,4 @@ public:
     static bool is_valid(std::string_view topic_or_pattern) noexcept;
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

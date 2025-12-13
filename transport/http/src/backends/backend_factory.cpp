@@ -3,8 +3,8 @@
  * @brief HTTP backend factory implementation
  */
 
-#include "ipb/transport/http/http_backend.hpp"
 #include "ipb/transport/http/backends/curl_backend.hpp"
+#include "ipb/transport/http/http_backend.hpp"
 
 namespace ipb::transport::http {
 
@@ -64,4 +64,4 @@ bool is_backend_available(BackendType type) noexcept {
     }
 }
 
-} // namespace ipb::transport::http
+}  // namespace ipb::transport::http

@@ -13,10 +13,12 @@
  * - CPU feature detection
  */
 
-#include <gtest/gtest.h>
 #include <ipb/common/platform.hpp>
+
 #include <string>
 #include <thread>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::common::platform;
 
@@ -46,7 +48,7 @@ TEST_F(CPUCountTest, ConsistentResults) {
 
 TEST_F(CPUCountTest, MatchesStdThread) {
     uint32_t platform_count = get_cpu_count();
-    unsigned int std_count = std::thread::hardware_concurrency();
+    unsigned int std_count  = std::thread::hardware_concurrency();
 
     if (std_count > 0) {
         EXPECT_EQ(platform_count, std_count);
@@ -77,7 +79,7 @@ TEST_F(MemoryInfoTest, AvailableMemoryPositive) {
 }
 
 TEST_F(MemoryInfoTest, AvailableLessThanTotal) {
-    uint64_t total = get_total_memory();
+    uint64_t total     = get_total_memory();
     uint64_t available = get_available_memory();
     EXPECT_LE(available, total);
 }
@@ -149,8 +151,8 @@ TEST_F(HostnameTest, ValidCharacters) {
     std::string hostname = get_hostname();
     for (char c : hostname) {
         // Hostnames can contain alphanumeric, hyphen, and period
-        bool valid = std::isalnum(static_cast<unsigned char>(c)) ||
-                    c == '-' || c == '.' || c == '_';
+        bool valid =
+            std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '.' || c == '_';
         EXPECT_TRUE(valid) << "Invalid character in hostname: " << c;
     }
 }
@@ -197,12 +199,10 @@ TEST_F(ThreadIdTest, ConsistentResults) {
 }
 
 TEST_F(ThreadIdTest, DifferentForDifferentThreads) {
-    uint64_t main_tid = get_thread_id();
+    uint64_t main_tid  = get_thread_id();
     uint64_t other_tid = 0;
 
-    std::thread t([&other_tid]() {
-        other_tid = get_thread_id();
-    });
+    std::thread t([&other_tid]() { other_tid = get_thread_id(); });
     t.join();
 
     // Thread IDs should be different
@@ -251,7 +251,7 @@ TEST_F(EnvVarTest, GetNonexistentVariable) {
 }
 
 TEST_F(EnvVarTest, SetAndGetVariable) {
-    const std::string var_name = "IPB_TEST_VAR";
+    const std::string var_name  = "IPB_TEST_VAR";
     const std::string var_value = "test_value_12345";
 
     bool set_result = set_env(var_name, var_value);
@@ -284,7 +284,7 @@ TEST_F(EnvVarTest, SetOverwriteVariable) {
 }
 
 TEST_F(EnvVarTest, SetSpecialCharacters) {
-    const std::string var_name = "IPB_TEST_SPECIAL";
+    const std::string var_name  = "IPB_TEST_SPECIAL";
     const std::string var_value = "value with spaces=and/special:chars";
 
     bool set_result = set_env(var_name, var_value);
@@ -322,11 +322,11 @@ TEST_F(CpuFeaturesTest, ConsistentResults) {
 TEST_F(CpuFeaturesTest, X86FeaturesReasonable) {
     CpuFeatures features = detect_cpu_features();
 
-    // On x86_64, SSE2 should always be available
-    #if defined(__x86_64__) || defined(_M_X64)
+// On x86_64, SSE2 should always be available
+#if defined(__x86_64__) || defined(_M_X64)
     EXPECT_TRUE(features.has_sse);
     EXPECT_TRUE(features.has_sse2);
-    #endif
+#endif
 
     // If AVX2 is present, AVX should also be present
     if (features.has_avx2) {
@@ -359,10 +359,9 @@ TEST_F(CpuFeaturesTest, AllFieldsInitialized) {
 
     // All boolean fields should be valid (true or false)
     // This mainly just verifies no UB from uninitialized memory
-    bool dummy = features.has_sse || features.has_sse2 || features.has_sse3 ||
-                 features.has_ssse3 || features.has_sse41 || features.has_sse42 ||
-                 features.has_avx || features.has_avx2 || features.has_avx512 ||
-                 features.has_aes || features.has_sha ||
+    bool dummy = features.has_sse || features.has_sse2 || features.has_sse3 || features.has_ssse3 ||
+                 features.has_sse41 || features.has_sse42 || features.has_avx ||
+                 features.has_avx2 || features.has_avx512 || features.has_aes || features.has_sha ||
                  features.has_neon || features.has_crc32 || features.has_crypto;
     (void)dummy;
 }

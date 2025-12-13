@@ -1,7 +1,9 @@
 #include <ipb/gate/config_loader.hpp>
-#include <yaml-cpp/yaml.h>
+
 #include <fstream>
 #include <iostream>
+
+#include <yaml-cpp/yaml.h>
 
 namespace ipb {
 namespace gate {
@@ -36,7 +38,7 @@ bool ConfigLoader::load_from_string(const std::string& config_yaml) {
     }
 }
 
-GatewayConfig ConfigLoader::get_config() const {
+LoadedConfig ConfigLoader::get_config() const {
     return config_;
 }
 
@@ -55,12 +57,12 @@ bool ConfigLoader::parse_config(const YAML::Node& root) {
                 config_.gateway.worker_threads = gateway["worker_threads"].as<int>();
             }
         }
-        
+
         // Parse sinks
         if (root["sinks"]) {
             for (const auto& sink_node : root["sinks"]) {
                 SinkConfig sink_config;
-                
+
                 if (sink_node["id"]) {
                     sink_config.id = sink_node["id"].as<std::string>();
                 }
@@ -70,7 +72,7 @@ bool ConfigLoader::parse_config(const YAML::Node& root) {
                 if (sink_node["enabled"]) {
                     sink_config.enabled = sink_node["enabled"].as<bool>();
                 }
-                
+
                 // Parse sink-specific configuration
                 if (sink_config.type == "mqtt") {
                     parse_mqtt_config(sink_node, sink_config);
@@ -79,36 +81,38 @@ bool ConfigLoader::parse_config(const YAML::Node& root) {
                 } else if (sink_config.type == "syslog") {
                     parse_syslog_config(sink_node, sink_config);
                 }
-                
+
                 config_.sinks.push_back(sink_config);
             }
         }
-        
+
         // Parse routing rules
         if (root["routing"] && root["routing"]["rules"]) {
             for (const auto& rule_node : root["routing"]["rules"]) {
                 RoutingRuleConfig rule_config;
-                
+
                 if (rule_node["name"]) {
                     rule_config.name = rule_node["name"].as<std::string>();
                 }
                 if (rule_node["enabled"]) {
                     rule_config.enabled = rule_node["enabled"].as<bool>();
                 }
-                
+
                 // Parse source filter
                 if (rule_node["source_filter"]) {
                     auto filter = rule_node["source_filter"];
                     if (filter["address_pattern"]) {
-                        rule_config.source_filter.address_pattern = filter["address_pattern"].as<std::string>();
+                        rule_config.source_filter.address_pattern =
+                            filter["address_pattern"].as<std::string>();
                     }
                     if (filter["protocol_ids"]) {
                         for (const auto& protocol : filter["protocol_ids"]) {
-                            rule_config.source_filter.protocol_ids.push_back(protocol.as<std::string>());
+                            rule_config.source_filter.protocol_ids.push_back(
+                                protocol.as<std::string>());
                         }
                     }
                 }
-                
+
                 // Parse destinations
                 if (rule_node["destinations"]) {
                     for (const auto& dest_node : rule_node["destinations"]) {
@@ -122,13 +126,13 @@ bool ConfigLoader::parse_config(const YAML::Node& root) {
                         rule_config.destinations.push_back(dest_config);
                     }
                 }
-                
+
                 config_.routing_rules.push_back(rule_config);
             }
         }
-        
+
         return true;
-        
+
     } catch (const std::exception& e) {
         std::cerr << "Config parsing error: " << e.what() << std::endl;
         return false;
@@ -171,6 +175,5 @@ void ConfigLoader::parse_syslog_config(const YAML::Node& node, SinkConfig& confi
     }
 }
 
-} // namespace gate
-} // namespace ipb
-
+}  // namespace gate
+}  // namespace ipb

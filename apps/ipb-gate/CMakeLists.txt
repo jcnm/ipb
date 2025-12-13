@@ -44,6 +44,9 @@ target_include_directories(ipb-gate PRIVATE
 target_link_libraries(ipb-gate PRIVATE
     ipb-common
     ipb-router
+    ipb-core-components
+    ipb-sink-console
+    ipb-sink-syslog
     yaml-cpp
     jsoncpp_lib
     Threads::Threads

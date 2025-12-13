@@ -13,21 +13,21 @@
  * Uses the shared MQTT transport layer to avoid duplicating the MQTT client.
  */
 
-#include "ipb/common/interfaces.hpp"
-#include "ipb/common/data_point.hpp"
-#include "ipb/common/dataset.hpp"
-#include "ipb/transport/mqtt/mqtt_connection.hpp"
-
-#include <memory>
-#include <string>
-#include <vector>
 #include <atomic>
-#include <mutex>
 #include <chrono>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <optional>
-#include <regex>
 #include <queue>
+#include <regex>
+#include <string>
+#include <vector>
+
+#include "ipb/common/data_point.hpp"
+#include "ipb/common/dataset.hpp"
+#include "ipb/common/interfaces.hpp"
+#include "ipb/transport/mqtt/mqtt_connection.hpp"
 
 namespace ipb::scoop::mqtt {
 
@@ -59,17 +59,17 @@ enum class PayloadFormat {
  * @brief Mapping rule from MQTT topic to IPB address
  */
 struct TopicMapping {
-    std::string topic_pattern;          ///< MQTT topic filter (supports + and # wildcards)
-    std::string address_template;       ///< IPB address template (e.g., "mqtt/{topic}")
+    std::string topic_pattern;     ///< MQTT topic filter (supports + and # wildcards)
+    std::string address_template;  ///< IPB address template (e.g., "mqtt/{topic}")
     PayloadFormat format = PayloadFormat::RAW;
 
     // JSON-specific options
-    std::string json_value_path = "value";      ///< JSON path to value field
-    std::string json_timestamp_path = "";       ///< JSON path to timestamp (empty = use receive time)
-    std::string json_quality_path = "";         ///< JSON path to quality field
+    std::string json_value_path     = "value";  ///< JSON path to value field
+    std::string json_timestamp_path = "";  ///< JSON path to timestamp (empty = use receive time)
+    std::string json_quality_path   = "";  ///< JSON path to quality field
 
     // Metadata
-    uint16_t protocol_id = 0;           ///< Override protocol ID (0 = use default)
+    uint16_t protocol_id = 0;  ///< Override protocol ID (0 = use default)
 
     /**
      * @brief Check if a topic matches this mapping
@@ -90,12 +90,12 @@ struct TopicMapping {
  * @brief Subscription configuration
  */
 struct SubscriptionConfig {
-    std::vector<TopicMapping> mappings;         ///< Topic-to-address mappings
+    std::vector<TopicMapping> mappings;  ///< Topic-to-address mappings
     transport::mqtt::QoS default_qos = transport::mqtt::QoS::AT_LEAST_ONCE;
 
     // Filtering
-    size_t max_payload_size = 1024 * 1024;      ///< Max payload size (1MB default)
-    bool ignore_retained = false;               ///< Ignore retained messages
+    size_t max_payload_size = 1024 * 1024;  ///< Max payload size (1MB default)
+    bool ignore_retained    = false;        ///< Ignore retained messages
 };
 
 /**
@@ -103,20 +103,20 @@ struct SubscriptionConfig {
  */
 struct ProcessingConfig {
     // Timestamps
-    bool use_broker_timestamp = false;          ///< Use broker timestamp if available
-    bool use_payload_timestamp = true;          ///< Extract timestamp from payload if possible
+    bool use_broker_timestamp  = false;  ///< Use broker timestamp if available
+    bool use_payload_timestamp = true;   ///< Extract timestamp from payload if possible
 
     // Quality
     common::Quality default_quality = common::Quality::Good;
 
     // Buffering
     bool enable_buffering = true;
-    size_t buffer_size = 10000;                 ///< Max buffered DataPoints
+    size_t buffer_size    = 10000;  ///< Max buffered DataPoints
     std::chrono::milliseconds flush_interval{100};
 
     // Error handling
-    bool skip_parse_errors = true;              ///< Skip messages that fail to parse
-    size_t max_parse_errors = 100;              ///< Max errors before unhealthy
+    bool skip_parse_errors  = true;  ///< Skip messages that fail to parse
+    size_t max_parse_errors = 100;   ///< Max errors before unhealthy
 };
 
 /**
@@ -165,12 +165,12 @@ struct MQTTScoopStatistics {
     std::atomic<uint64_t> subscriptions_active{0};
 
     void reset() {
-        messages_received = 0;
-        messages_processed = 0;
-        messages_dropped = 0;
-        parse_errors = 0;
+        messages_received    = 0;
+        messages_processed   = 0;
+        messages_dropped     = 0;
+        parse_errors         = 0;
         data_points_produced = 0;
-        bytes_received = 0;
+        bytes_received       = 0;
     }
 };
 
@@ -186,9 +186,7 @@ struct MQTTScoopStatistics {
  * @return Vector of DataPoints extracted from payload, or empty on error
  */
 using CustomParserCallback = std::function<std::vector<common::DataPoint>(
-    const std::string& topic,
-    const std::vector<uint8_t>& payload
-)>;
+    const std::string& topic, const std::vector<uint8_t>& payload)>;
 
 //=============================================================================
 // MQTT Scoop
@@ -209,9 +207,9 @@ using CustomParserCallback = std::function<std::vector<common::DataPoint>(
  */
 class MQTTScoop : public common::IProtocolSourceBase {
 public:
-    static constexpr uint16_t PROTOCOL_ID = 1;
-    static constexpr std::string_view PROTOCOL_NAME = "MQTT";
-    static constexpr std::string_view COMPONENT_NAME = "MQTTScoop";
+    static constexpr uint16_t PROTOCOL_ID               = 1;
+    static constexpr std::string_view PROTOCOL_NAME     = "MQTT";
+    static constexpr std::string_view COMPONENT_NAME    = "MQTTScoop";
     static constexpr std::string_view COMPONENT_VERSION = "1.0.0";
 
     /**
@@ -222,7 +220,7 @@ public:
     ~MQTTScoop() override;
 
     // Non-copyable
-    MQTTScoop(const MQTTScoop&) = delete;
+    MQTTScoop(const MQTTScoop&)            = delete;
     MQTTScoop& operator=(const MQTTScoop&) = delete;
 
     //=========================================================================
@@ -322,17 +320,15 @@ public:
     /**
      * @brief Create MQTTScoop for specific topics
      */
-    static std::unique_ptr<MQTTScoop> create_for_topics(
-        const std::string& broker_url,
-        const std::vector<std::string>& topics);
+    static std::unique_ptr<MQTTScoop> create_for_topics(const std::string& broker_url,
+                                                        const std::vector<std::string>& topics);
 
     /**
      * @brief Create MQTTScoop with JSON parsing
      */
-    static std::unique_ptr<MQTTScoop> create_json(
-        const std::string& broker_url,
-        const std::vector<std::string>& topics,
-        const std::string& value_path = "value");
+    static std::unique_ptr<MQTTScoop> create_json(const std::string& broker_url,
+                                                  const std::vector<std::string>& topics,
+                                                  const std::string& value_path = "value");
 
     /**
      * @brief Create MQTTScoop with full configuration
@@ -345,4 +341,4 @@ public:
     static std::unique_ptr<MQTTScoop> create_high_throughput(const std::string& broker_url);
 };
 
-} // namespace ipb::scoop::mqtt
+}  // namespace ipb::scoop::mqtt

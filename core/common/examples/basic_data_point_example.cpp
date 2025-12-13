@@ -1,14 +1,15 @@
-#include <iostream>
 #include <ipb/common/data_point.hpp>
+
+#include <iostream>
 
 using namespace ipb::common;
 
 // Protocol IDs (example values)
 constexpr uint16_t PROTOCOL_MODBUS = 1;
-constexpr uint16_t PROTOCOL_OPCUA = 2;
+constexpr uint16_t PROTOCOL_OPCUA  = 2;
 
 // Helper to create Value with a specific type
-template<typename T>
+template <typename T>
 Value make_value(T val) {
     Value v;
     v.set<T>(val);

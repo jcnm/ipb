@@ -1,21 +1,23 @@
 #include "ipb/core/sink_registry/sink_registry.hpp"
-#include "ipb/core/sink_registry/load_balancer.hpp"
+
+#include <ipb/common/debug.hpp>
 #include <ipb/common/endpoint.hpp>
 #include <ipb/common/error.hpp>
-#include <ipb/common/debug.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <shared_mutex>
 #include <thread>
 #include <unordered_map>
 
+#include "ipb/core/sink_registry/load_balancer.hpp"
+
 namespace ipb::core {
 
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::ROUTER;  // Sinks are part of routing
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::ROUTER;  // Sinks are part of routing
+}  // anonymous namespace
 
 // ============================================================================
 // SinkRegistryImpl - Private Implementation
@@ -23,18 +25,15 @@ namespace {
 
 class SinkRegistryImpl {
 public:
-    explicit SinkRegistryImpl(const SinkRegistryConfig& config)
-        : config_(config) {
+    explicit SinkRegistryImpl(const SinkRegistryConfig& config) : config_(config) {
         // Create load balancers
         for (int i = 0; i <= static_cast<int>(LoadBalanceStrategy::BROADCAST); ++i) {
-            auto strategy = static_cast<LoadBalanceStrategy>(i);
+            auto strategy        = static_cast<LoadBalanceStrategy>(i);
             balancers_[strategy] = LoadBalancerFactory::create(strategy);
         }
     }
 
-    ~SinkRegistryImpl() {
-        stop();
-    }
+    ~SinkRegistryImpl() { stop(); }
 
     bool start() {
         IPB_SPAN_CAT("SinkRegistry::start", LOG_CAT);
@@ -48,9 +47,7 @@ public:
 
         if (config_.enable_health_check) {
             IPB_LOG_DEBUG(LOG_CAT, "Starting health check thread");
-            health_check_thread_ = std::thread([this]() {
-                health_check_loop();
-            });
+            health_check_thread_ = std::thread([this]() { health_check_loop(); });
         }
 
         IPB_LOG_INFO(LOG_CAT, "SinkRegistry started");
@@ -76,12 +73,10 @@ public:
         IPB_LOG_INFO(LOG_CAT, "SinkRegistry stopped");
     }
 
-    bool is_running() const noexcept {
-        return running_.load(std::memory_order_acquire);
-    }
+    bool is_running() const noexcept { return running_.load(std::memory_order_acquire); }
 
     bool register_sink(std::string_view id, std::shared_ptr<common::IIPBSink> sink,
-                      uint32_t weight) {
+                       uint32_t weight) {
         IPB_PRECONDITION(!id.empty());
         IPB_PRECONDITION(sink != nullptr);
 
@@ -93,19 +88,20 @@ public:
             return false;  // Already registered
         }
 
-        auto info = std::make_shared<SinkInfo>();
-        info->id = id_str;
-        info->sink = std::move(sink);
+        auto info    = std::make_shared<SinkInfo>();
+        info->id     = id_str;
+        info->sink   = std::move(sink);
         info->weight = weight;
-        info->type = std::string(info->sink->sink_type());
+        info->type   = std::string(info->sink->sink_type());
         info->health = SinkHealth::UNKNOWN;
 
         // Capture type before moving info
         std::string sink_type = info->type;
-        sinks_[id_str] = std::move(info);
+        sinks_[id_str]        = std::move(info);
         stats_.active_sinks.fetch_add(1, std::memory_order_relaxed);
 
-        IPB_LOG_INFO(LOG_CAT, "Registered sink: " << id << " (type=" << sink_type << ", weight=" << weight << ")");
+        IPB_LOG_INFO(LOG_CAT, "Registered sink: " << id << " (type=" << sink_type
+                                                  << ", weight=" << weight << ")");
         return true;
     }
 
@@ -153,15 +149,15 @@ public:
 
         // Copy SinkInfo (excluding atomic values)
         SinkInfo copy;
-        copy.id = it->second->id;
-        copy.type = it->second->type;
-        copy.sink = it->second->sink;
-        copy.weight = it->second->weight;
-        copy.enabled = it->second->enabled;
-        copy.priority = it->second->priority;
-        copy.health = it->second->health;
+        copy.id                = it->second->id;
+        copy.type              = it->second->type;
+        copy.sink              = it->second->sink;
+        copy.weight            = it->second->weight;
+        copy.enabled           = it->second->enabled;
+        copy.priority          = it->second->priority;
+        copy.health            = it->second->health;
         copy.last_health_check = it->second->last_health_check;
-        copy.health_message = it->second->health_message;
+        copy.health_message    = it->second->health_message;
 
         return copy;
     }
@@ -220,9 +216,8 @@ public:
         return true;
     }
 
-    SinkSelectionResult select_sink(
-            const std::vector<std::string>& candidate_ids,
-            LoadBalanceStrategy strategy) {
+    SinkSelectionResult select_sink(const std::vector<std::string>& candidate_ids,
+                                    LoadBalanceStrategy strategy) {
         SinkSelectionResult result;
         stats_.total_selections.fetch_add(1, std::memory_order_relaxed);
 
@@ -246,7 +241,7 @@ public:
         }
 
         // Select using balancer
-        auto& balancer = balancers_[strategy];
+        auto& balancer           = balancers_[strategy];
         result.selected_sink_ids = balancer->select(candidates);
 
         if (result.selected_sink_ids.empty()) {
@@ -261,10 +256,9 @@ public:
         return result;
     }
 
-    SinkSelectionResult select_sink(
-            const std::vector<std::string>& candidate_ids,
-            const common::DataPoint& data_point,
-            LoadBalanceStrategy strategy) {
+    SinkSelectionResult select_sink(const std::vector<std::string>& candidate_ids,
+                                    const common::DataPoint& data_point,
+                                    LoadBalanceStrategy strategy) {
         SinkSelectionResult result;
         stats_.total_selections.fetch_add(1, std::memory_order_relaxed);
 
@@ -288,7 +282,7 @@ public:
         }
 
         // Select using balancer with context
-        auto& balancer = balancers_[strategy];
+        auto& balancer           = balancers_[strategy];
         result.selected_sink_ids = balancer->select(candidates, data_point);
 
         if (result.selected_sink_ids.empty()) {
@@ -303,10 +297,9 @@ public:
         return result;
     }
 
-    SinkSelectionResult select_sink_filtered(
-            const std::vector<std::string>& candidate_ids,
-            std::function<bool(const SinkInfo&)> filter,
-            LoadBalanceStrategy strategy) {
+    SinkSelectionResult select_sink_filtered(const std::vector<std::string>& candidate_ids,
+                                             std::function<bool(const SinkInfo&)> filter,
+                                             LoadBalanceStrategy strategy) {
         SinkSelectionResult result;
         stats_.total_selections.fetch_add(1, std::memory_order_relaxed);
 
@@ -329,7 +322,7 @@ public:
             return result;
         }
 
-        auto& balancer = balancers_[strategy];
+        auto& balancer           = balancers_[strategy];
         result.selected_sink_ids = balancer->select(candidates);
 
         if (result.selected_sink_ids.empty()) {
@@ -344,8 +337,7 @@ public:
         return result;
     }
 
-    common::Result<> write_to_sink(std::string_view sink_id,
-                                   const common::DataPoint& data_point) {
+    common::Result<> write_to_sink(std::string_view sink_id, const common::DataPoint& data_point) {
         IPB_PRECONDITION(!sink_id.empty());
 
         std::shared_ptr<SinkInfo> info;
@@ -356,8 +348,7 @@ public:
             auto it = sinks_.find(std::string(sink_id));
             if (IPB_UNLIKELY(it == sinks_.end())) {
                 IPB_LOG_WARN(LOG_CAT, "Write to unknown sink: " << sink_id);
-                return common::Result<>(common::ErrorCode::INVALID_ARGUMENT,
-                                       "Sink not found");
+                return common::Result<>(common::ErrorCode::INVALID_ARGUMENT, "Sink not found");
             }
 
             info = it->second;
@@ -365,16 +356,16 @@ public:
 
         if (IPB_UNLIKELY(!info->enabled)) {
             IPB_LOG_DEBUG(LOG_CAT, "Write to disabled sink: " << sink_id);
-            return common::Result<>(common::ErrorCode::INVALID_ARGUMENT,
-                                   "Sink is disabled");
+            return common::Result<>(common::ErrorCode::INVALID_ARGUMENT, "Sink is disabled");
         }
 
         info->pending_count.fetch_add(1, std::memory_order_relaxed);
 
-        IPB_LOG_TRACE(LOG_CAT, "Writing to sink: " << sink_id << " address=" << data_point.address());
+        IPB_LOG_TRACE(LOG_CAT,
+                      "Writing to sink: " << sink_id << " address=" << data_point.address());
 
         common::rt::HighResolutionTimer timer;
-        auto result = info->sink->write(data_point);
+        auto result  = info->sink->write(data_point);
         auto elapsed = timer.elapsed();
 
         info->pending_count.fetch_sub(1, std::memory_order_relaxed);
@@ -385,7 +376,8 @@ public:
         } else {
             info->messages_failed.fetch_add(1, std::memory_order_relaxed);
             update_sink_health_on_failure(info);
-            IPB_LOG_WARN(LOG_CAT, "Write to sink " << sink_id << " failed: " << result.error_message());
+            IPB_LOG_WARN(LOG_CAT,
+                         "Write to sink " << sink_id << " failed: " << result.error_message());
         }
 
         return result;
@@ -400,22 +392,20 @@ public:
 
             auto it = sinks_.find(std::string(sink_id));
             if (it == sinks_.end()) {
-                return common::Result<>(common::ErrorCode::INVALID_ARGUMENT,
-                                       "Sink not found");
+                return common::Result<>(common::ErrorCode::INVALID_ARGUMENT, "Sink not found");
             }
 
             info = it->second;
         }
 
         if (!info->enabled) {
-            return common::Result<>(common::ErrorCode::INVALID_ARGUMENT,
-                                   "Sink is disabled");
+            return common::Result<>(common::ErrorCode::INVALID_ARGUMENT, "Sink is disabled");
         }
 
         info->pending_count.fetch_add(batch.size(), std::memory_order_relaxed);
 
         common::rt::HighResolutionTimer timer;
-        auto result = info->sink->write_batch(batch);
+        auto result  = info->sink->write_batch(batch);
         auto elapsed = timer.elapsed();
 
         info->pending_count.fetch_sub(batch.size(), std::memory_order_relaxed);
@@ -431,15 +421,13 @@ public:
         return result;
     }
 
-    common::Result<> write_with_load_balancing(
-            const std::vector<std::string>& candidate_ids,
-            const common::DataPoint& data_point,
-            LoadBalanceStrategy strategy) {
+    common::Result<> write_with_load_balancing(const std::vector<std::string>& candidate_ids,
+                                               const common::DataPoint& data_point,
+                                               LoadBalanceStrategy strategy) {
         auto selection = select_sink(candidate_ids, data_point, strategy);
 
         if (!selection.success) {
-            return common::Result<>(common::ErrorCode::INVALID_ARGUMENT,
-                                   selection.error_message);
+            return common::Result<>(common::ErrorCode::INVALID_ARGUMENT, selection.error_message);
         }
 
         // For broadcast, write to all selected sinks
@@ -455,8 +443,7 @@ public:
     }
 
     std::vector<std::pair<std::string, common::Result<>>> write_to_all(
-            const std::vector<std::string>& sink_ids,
-            const common::DataPoint& data_point) {
+        const std::vector<std::string>& sink_ids, const common::DataPoint& data_point) {
         std::vector<std::pair<std::string, common::Result<>>> results;
 
         for (const auto& id : sink_ids) {
@@ -493,10 +480,10 @@ public:
 
         // Check if sink is running and healthy
         if (!info->sink->is_running()) {
-            info->health = SinkHealth::UNHEALTHY;
+            info->health         = SinkHealth::UNHEALTHY;
             info->health_message = "Sink is not running";
         } else if (!info->sink->is_healthy()) {
-            info->health = SinkHealth::DEGRADED;
+            info->health         = SinkHealth::DEGRADED;
             info->health_message = info->sink->get_health_status();
         } else {
             info->health = SinkHealth::HEALTHY;
@@ -540,8 +527,8 @@ public:
 
         auto it = sinks_.find(std::string(id));
         if (it != sinks_.end()) {
-            it->second->health = SinkHealth::UNHEALTHY;
-            it->second->health_message = std::string(reason);
+            it->second->health            = SinkHealth::UNHEALTHY;
+            it->second->health_message    = std::string(reason);
             it->second->last_health_check = common::Timestamp::now();
         }
 
@@ -561,9 +548,7 @@ public:
         update_health_stats();
     }
 
-    const SinkRegistryStats& stats() const noexcept {
-        return stats_;
-    }
+    const SinkRegistryStats& stats() const noexcept { return stats_; }
 
     void reset_stats() {
         stats_.reset();
@@ -583,14 +568,14 @@ public:
         std::unordered_map<std::string, SinkInfo> result;
         for (const auto& [id, info] : sinks_) {
             SinkInfo copy;
-            copy.id = info->id;
-            copy.type = info->type;
-            copy.weight = info->weight;
-            copy.enabled = info->enabled;
-            copy.priority = info->priority;
-            copy.health = info->health;
+            copy.id                = info->id;
+            copy.type              = info->type;
+            copy.weight            = info->weight;
+            copy.enabled           = info->enabled;
+            copy.priority          = info->priority;
+            copy.health            = info->health;
             copy.last_health_check = info->last_health_check;
-            copy.health_message = info->health_message;
+            copy.health_message    = info->health_message;
 
             result[id] = copy;
         }
@@ -598,9 +583,7 @@ public:
         return result;
     }
 
-    const SinkRegistryConfig& config() const noexcept {
-        return config_;
-    }
+    const SinkRegistryConfig& config() const noexcept { return config_; }
 
 private:
     void health_check_loop() {
@@ -678,15 +661,14 @@ private:
 // SinkRegistry Public Interface
 // ============================================================================
 
-SinkRegistry::SinkRegistry()
-    : impl_(std::make_unique<SinkRegistryImpl>(SinkRegistryConfig{})) {}
+SinkRegistry::SinkRegistry() : impl_(std::make_unique<SinkRegistryImpl>(SinkRegistryConfig{})) {}
 
 SinkRegistry::SinkRegistry(const SinkRegistryConfig& config)
     : impl_(std::make_unique<SinkRegistryImpl>(config)) {}
 
 SinkRegistry::~SinkRegistry() = default;
 
-SinkRegistry::SinkRegistry(SinkRegistry&&) noexcept = default;
+SinkRegistry::SinkRegistry(SinkRegistry&&) noexcept            = default;
 SinkRegistry& SinkRegistry::operator=(SinkRegistry&&) noexcept = default;
 
 bool SinkRegistry::start() {
@@ -746,23 +728,20 @@ bool SinkRegistry::set_sink_priority(std::string_view id, uint32_t priority) {
     return impl_->set_sink_priority(id, priority);
 }
 
-SinkSelectionResult SinkRegistry::select_sink(
-        const std::vector<std::string>& candidate_ids,
-        LoadBalanceStrategy strategy) {
+SinkSelectionResult SinkRegistry::select_sink(const std::vector<std::string>& candidate_ids,
+                                              LoadBalanceStrategy strategy) {
     return impl_->select_sink(candidate_ids, strategy);
 }
 
-SinkSelectionResult SinkRegistry::select_sink(
-        const std::vector<std::string>& candidate_ids,
-        const common::DataPoint& data_point,
-        LoadBalanceStrategy strategy) {
+SinkSelectionResult SinkRegistry::select_sink(const std::vector<std::string>& candidate_ids,
+                                              const common::DataPoint& data_point,
+                                              LoadBalanceStrategy strategy) {
     return impl_->select_sink(candidate_ids, data_point, strategy);
 }
 
 SinkSelectionResult SinkRegistry::select_sink_filtered(
-        const std::vector<std::string>& candidate_ids,
-        std::function<bool(const SinkInfo&)> filter,
-        LoadBalanceStrategy strategy) {
+    const std::vector<std::string>& candidate_ids, std::function<bool(const SinkInfo&)> filter,
+    LoadBalanceStrategy strategy) {
     return impl_->select_sink_filtered(candidate_ids, std::move(filter), strategy);
 }
 
@@ -777,15 +756,13 @@ common::Result<> SinkRegistry::write_batch_to_sink(std::string_view sink_id,
 }
 
 common::Result<> SinkRegistry::write_with_load_balancing(
-        const std::vector<std::string>& candidate_ids,
-        const common::DataPoint& data_point,
-        LoadBalanceStrategy strategy) {
+    const std::vector<std::string>& candidate_ids, const common::DataPoint& data_point,
+    LoadBalanceStrategy strategy) {
     return impl_->write_with_load_balancing(candidate_ids, data_point, strategy);
 }
 
 std::vector<std::pair<std::string, common::Result<>>> SinkRegistry::write_to_all(
-        const std::vector<std::string>& sink_ids,
-        const common::DataPoint& data_point) {
+    const std::vector<std::string>& sink_ids, const common::DataPoint& data_point) {
     return impl_->write_to_all(sink_ids, data_point);
 }
 
@@ -829,4 +806,4 @@ const SinkRegistryConfig& SinkRegistry::config() const noexcept {
     return impl_->config();
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

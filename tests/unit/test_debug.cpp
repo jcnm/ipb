@@ -17,15 +17,17 @@
  * - Initialization functions
  */
 
-#include <gtest/gtest.h>
 #include <ipb/common/debug.hpp>
 #include <ipb/common/platform.hpp>
+
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <thread>
-#include <chrono>
-#include <fstream>
-#include <filesystem>
-#include <sstream>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::common::debug;
 using namespace ipb::common;
@@ -222,9 +224,7 @@ TEST_F(SpanIdTest, FromStringInvalidChars) {
 
 class LogFilterTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        filter_.reset();
-    }
+    void SetUp() override { filter_.reset(); }
 
     LogFilter filter_;
 };
@@ -295,9 +295,9 @@ TEST_F(LogRecordTest, DefaultConstruction) {
 
 TEST_F(LogRecordTest, FieldAssignment) {
     LogRecord record;
-    record.level = LogLevel::ERROR;
-    record.category = "test";
-    record.message = "Test message";
+    record.level     = LogLevel::ERROR;
+    record.category  = "test";
+    record.message   = "Test message";
     record.thread_id = 12345;
 
     EXPECT_EQ(record.level, LogLevel::ERROR);
@@ -319,7 +319,7 @@ TEST_F(ConsoleSinkTest, DefaultConstruction) {
 
 TEST_F(ConsoleSinkTest, ConfiguredConstruction) {
     ConsoleSink::Config config;
-    config.use_colors = false;
+    config.use_colors        = false;
     config.include_timestamp = true;
     config.include_thread_id = true;
 
@@ -329,15 +329,15 @@ TEST_F(ConsoleSinkTest, ConfiguredConstruction) {
 
 TEST_F(ConsoleSinkTest, WriteRecord) {
     ConsoleSink::Config config;
-    config.use_colors = false;
+    config.use_colors        = false;
     config.include_timestamp = true;
 
     ConsoleSink sink(config);
 
     LogRecord record;
-    record.level = LogLevel::INFO;
-    record.category = "test";
-    record.message = "Test message";
+    record.level     = LogLevel::INFO;
+    record.category  = "test";
+    record.message   = "Test message";
     record.timestamp = std::chrono::system_clock::now();
     record.thread_id = platform::get_thread_id();
 
@@ -350,15 +350,13 @@ TEST_F(ConsoleSinkTest, WriteAllLevels) {
     config.use_colors = false;
     ConsoleSink sink(config);
 
-    std::vector<LogLevel> levels = {
-        LogLevel::TRACE, LogLevel::DEBUG, LogLevel::INFO,
-        LogLevel::WARN, LogLevel::ERROR, LogLevel::FATAL
-    };
+    std::vector<LogLevel> levels = {LogLevel::TRACE, LogLevel::DEBUG, LogLevel::INFO,
+                                    LogLevel::WARN,  LogLevel::ERROR, LogLevel::FATAL};
 
     for (auto level : levels) {
         LogRecord record;
-        record.level = level;
-        record.message = "Test at level";
+        record.level     = level;
+        record.message   = "Test at level";
         record.timestamp = std::chrono::system_clock::now();
 
         EXPECT_NO_THROW(sink.write(record));
@@ -367,32 +365,32 @@ TEST_F(ConsoleSinkTest, WriteAllLevels) {
 
 TEST_F(ConsoleSinkTest, WriteWithTraceId) {
     ConsoleSink::Config config;
-    config.use_colors = false;
+    config.use_colors       = false;
     config.include_trace_id = true;
 
     ConsoleSink sink(config);
 
     LogRecord record;
-    record.level = LogLevel::INFO;
-    record.message = "Test with trace";
+    record.level     = LogLevel::INFO;
+    record.message   = "Test with trace";
     record.timestamp = std::chrono::system_clock::now();
-    record.trace_id = TraceId::generate();
+    record.trace_id  = TraceId::generate();
 
     EXPECT_NO_THROW(sink.write(record));
 }
 
 TEST_F(ConsoleSinkTest, WriteWithLocation) {
     ConsoleSink::Config config;
-    config.use_colors = false;
+    config.use_colors       = false;
     config.include_location = true;
 
     ConsoleSink sink(config);
 
     LogRecord record;
-    record.level = LogLevel::INFO;
-    record.message = "Test with location";
+    record.level     = LogLevel::INFO;
+    record.message   = "Test with location";
     record.timestamp = std::chrono::system_clock::now();
-    record.location = SourceLocation(__FILE__, __func__, __LINE__);
+    record.location  = SourceLocation(__FILE__, __func__, __LINE__);
 
     EXPECT_NO_THROW(sink.write(record));
 }
@@ -408,9 +406,7 @@ TEST_F(ConsoleSinkTest, Flush) {
 
 class FileSinkTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        test_file_ = "/tmp/ipb_test_log_" + std::to_string(getpid()) + ".log";
-    }
+    void SetUp() override { test_file_ = "/tmp/ipb_test_log_" + std::to_string(getpid()) + ".log"; }
 
     void TearDown() override {
         // Clean up test files
@@ -438,9 +434,9 @@ TEST_F(FileSinkTest, WriteRecord) {
     FileSink sink(config);
 
     LogRecord record;
-    record.level = LogLevel::INFO;
-    record.category = "test";
-    record.message = "Test message";
+    record.level     = LogLevel::INFO;
+    record.category  = "test";
+    record.message   = "Test message";
     record.timestamp = std::chrono::system_clock::now();
     record.thread_id = platform::get_thread_id();
 
@@ -464,11 +460,11 @@ TEST_F(FileSinkTest, WriteWithTraceContext) {
     FileSink sink(config);
 
     LogRecord record;
-    record.level = LogLevel::INFO;
-    record.message = "Traced message";
+    record.level     = LogLevel::INFO;
+    record.message   = "Traced message";
     record.timestamp = std::chrono::system_clock::now();
-    record.trace_id = TraceId::generate();
-    record.span_id = SpanId::generate();
+    record.trace_id  = TraceId::generate();
+    record.span_id   = SpanId::generate();
 
     sink.write(record);
     sink.flush();
@@ -481,16 +477,16 @@ TEST_F(FileSinkTest, WriteWithTraceContext) {
 
 TEST_F(FileSinkTest, FileRotation) {
     FileSink::Config config;
-    config.file_path = test_file_;
+    config.file_path     = test_file_;
     config.max_file_size = 100;  // Very small to trigger rotation
-    config.max_files = 3;
+    config.max_files     = 3;
 
     FileSink sink(config);
 
     // Write enough data to trigger rotation
     for (int i = 0; i < 20; ++i) {
         LogRecord record;
-        record.level = LogLevel::INFO;
+        record.level   = LogLevel::INFO;
         record.message = "Message " + std::to_string(i) + " with some extra content to fill space";
         record.timestamp = std::chrono::system_clock::now();
 
@@ -509,8 +505,8 @@ TEST_F(FileSinkTest, Flush) {
     FileSink sink(config);
 
     LogRecord record;
-    record.level = LogLevel::INFO;
-    record.message = "Flush test";
+    record.level     = LogLevel::INFO;
+    record.message   = "Flush test";
     record.timestamp = std::chrono::system_clock::now();
 
     sink.write(record);
@@ -608,7 +604,7 @@ class TraceScopeTest : public ::testing::Test {};
 
 TEST_F(TraceScopeTest, SetsCurrentIds) {
     TraceId trace = TraceId::generate();
-    SpanId span = SpanId::generate();
+    SpanId span   = SpanId::generate();
 
     {
         TraceScope scope(trace, span);
@@ -650,7 +646,7 @@ TEST_F(TraceScopeTest, AutoGenerateSpan) {
 
 TEST_F(TraceScopeTest, GetTraceAndSpanIds) {
     TraceId trace = TraceId::generate();
-    SpanId span = SpanId::generate();
+    SpanId span   = SpanId::generate();
 
     TraceScope scope(trace, span);
     EXPECT_EQ(scope.trace_id(), trace);
@@ -723,9 +719,7 @@ TEST_F(SpanTest, ChildSpan) {
 TEST_F(SpanTest, ChainedAddContext) {
     Span span("test", "test");
 
-    span.add_context("key1", "value1")
-        .add_context("key2", int64_t(42))
-        .add_context("key3", 3.14);
+    span.add_context("key1", "value1").add_context("key2", int64_t(42)).add_context("key3", 3.14);
 
     // Chaining should work
 }
@@ -755,13 +749,11 @@ static void custom_test_handler(const char* expr, const char* msg, const SourceL
 class AssertionHandlerTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        original_handler_ = get_assert_handler();
+        original_handler_       = get_assert_handler();
         g_custom_handler_called = false;
     }
 
-    void TearDown() override {
-        set_assert_handler(original_handler_);
-    }
+    void TearDown() override { set_assert_handler(original_handler_); }
 
     AssertHandler original_handler_;
 };

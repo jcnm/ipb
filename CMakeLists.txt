@@ -18,8 +18,7 @@ include(IPBPrintConfig)
 # BUILD OPTIONS
 # ============================================================================
 
-# Build profiles
-option(IPB_EMBEDDED "Build for embedded systems (minimal footprint)" OFF)
+# Component profiles (WHAT to build)
 option(IPB_FULL "Build all components" OFF)
 
 # Development options
@@ -57,11 +56,12 @@ option(IPB_BUILD_GATE "Build ipb-gate application" ON)
 option(IPB_BUILD_BRIDGE "Build ipb-bridge application" ON)
 
 # ============================================================================
-# BUILD PROFILES
+# BUILD PROFILES (based on IPB_BUILD_MODE from cmake/IPBOptions.cmake)
 # ============================================================================
 
-if(IPB_EMBEDDED)
-    message(STATUS "IPB: Embedded profile - minimal build")
+# Apply mode-specific component defaults
+if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
+    message(STATUS "IPB: EMBEDDED mode - minimal components")
     set(IPB_SINK_CONSOLE ON)
     set(IPB_SINK_SYSLOG OFF)
     set(IPB_SINK_MQTT OFF)
@@ -69,9 +69,17 @@ if(IPB_EMBEDDED)
     set(IPB_BUILD_GATE OFF)
     set(IPB_BUILD_BRIDGE ON)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os")
-    add_compile_definitions(IPB_EMBEDDED=1)
+elseif(IPB_BUILD_MODE STREQUAL "EDGE")
+    message(STATUS "IPB: EDGE mode - balanced components")
+    set(IPB_SINK_CONSOLE ON)
+    set(IPB_SINK_SYSLOG ON)
+    set(IPB_SINK_MQTT ON)
+    set(IPB_SINK_KAFKA OFF)
+    set(IPB_BUILD_GATE ON)
+    set(IPB_BUILD_BRIDGE ON)
 endif()
 
+# IPB_FULL overrides mode defaults with all components
 if(IPB_FULL)
     message(STATUS "IPB: Full profile - all components")
     set(IPB_SINK_CONSOLE ON)
@@ -118,23 +126,31 @@ endif()
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
-# Find jsoncpp
-if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
-    find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
-        pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-        add_library(jsoncpp_lib INTERFACE IMPORTED)
-        set_target_properties(jsoncpp_lib PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIRS}"
-            INTERFACE_LINK_LIBRARIES "${JSONCPP_LIBRARIES}"
-        )
+# Find jsoncpp (not required for EMBEDDED mode)
+if(NOT IPB_BUILD_MODE STREQUAL "EMBEDDED")
+    if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
+        find_package(jsoncpp QUIET)
+        if(NOT jsoncpp_FOUND)
+            pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+            add_library(jsoncpp_lib INTERFACE IMPORTED)
+            set_target_properties(jsoncpp_lib PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIRS}"
+                INTERFACE_LINK_LIBRARIES "${JSONCPP_LIBRARIES}"
+            )
+        endif()
     endif()
-endif()
 
-# Find YAML-CPP
-find_package(yaml-cpp QUIET)
-if(NOT yaml-cpp_FOUND)
-    pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+    # Find YAML-CPP (not required for EMBEDDED mode)
+    find_package(yaml-cpp QUIET)
+    if(NOT yaml-cpp_FOUND)
+        pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+    endif()
+else()
+    # EMBEDDED mode: use cJSON instead
+    pkg_check_modules(CJSON cjson)
+    if(CJSON_FOUND)
+        message(STATUS "EMBEDDED mode: using cJSON")
+    endif()
 endif()
 
 # ============================================================================
@@ -275,6 +291,12 @@ endif()
 if(BUILD_TESTING)
     enable_testing()
     ipb_add_subdirectory(tests TRUE)
+endif()
+
+# --- BENCHMARKS ---
+option(IPB_BUILD_BENCHMARKS "Build IPB benchmark suite" ON)
+if(IPB_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
 endif()
 
 # ============================================================================

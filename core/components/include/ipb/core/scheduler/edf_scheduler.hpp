@@ -14,9 +14,9 @@
  */
 
 #include <ipb/common/data_point.hpp>
+#include <ipb/common/debug.hpp>
 #include <ipb/common/endpoint.hpp>
 #include <ipb/common/error.hpp>
-#include <ipb/common/debug.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <atomic>
@@ -39,21 +39,21 @@ class TaskQueue;
  */
 enum class TaskPriority : uint8_t {
     BACKGROUND = 0,
-    LOW = 64,
-    NORMAL = 128,
-    HIGH = 192,
-    CRITICAL = 255
+    LOW        = 64,
+    NORMAL     = 128,
+    HIGH       = 192,
+    CRITICAL   = 255
 };
 
 /**
  * @brief Task state in the scheduler
  */
 enum class TaskState : uint8_t {
-    PENDING,    ///< Waiting to be executed
-    RUNNING,    ///< Currently executing
-    COMPLETED,  ///< Successfully completed
-    CANCELLED,  ///< Cancelled before execution
-    FAILED,     ///< Execution failed
+    PENDING,         ///< Waiting to be executed
+    RUNNING,         ///< Currently executing
+    COMPLETED,       ///< Successfully completed
+    CANCELLED,       ///< Cancelled before execution
+    FAILED,          ///< Execution failed
     DEADLINE_MISSED  ///< Deadline passed before execution started
 };
 
@@ -104,7 +104,7 @@ struct ScheduledTask {
  * @brief Result of task submission
  */
 struct SubmitResult {
-    bool success = false;
+    bool success     = false;
     uint64_t task_id = 0;
     std::string error_message;
 
@@ -136,22 +136,19 @@ struct EDFSchedulerStats {
     /// Calculate deadline compliance rate
     double deadline_compliance_rate() const noexcept {
         auto total = deadlines_met.load() + deadlines_missed.load();
-        return total > 0 ?
-            static_cast<double>(deadlines_met) / total * 100.0 : 100.0;
+        return total > 0 ? static_cast<double>(deadlines_met) / total * 100.0 : 100.0;
     }
 
     /// Calculate average latency in microseconds
     double avg_latency_us() const noexcept {
         auto count = tasks_completed.load() + tasks_failed.load();
-        return count > 0 ?
-            static_cast<double>(total_latency_ns) / count / 1000.0 : 0.0;
+        return count > 0 ? static_cast<double>(total_latency_ns) / count / 1000.0 : 0.0;
     }
 
     /// Calculate average execution time in microseconds
     double avg_execution_us() const noexcept {
         auto count = tasks_completed.load();
-        return count > 0 ?
-            static_cast<double>(total_execution_ns) / count / 1000.0 : 0.0;
+        return count > 0 ? static_cast<double>(total_execution_ns) / count / 1000.0 : 0.0;
     }
 
     void reset() noexcept {
@@ -199,9 +196,9 @@ struct EDFSchedulerConfig {
 
     /// Action when queue is full
     enum class OverflowPolicy {
-        REJECT,         ///< Reject new tasks
-        DROP_LOWEST,    ///< Drop lowest priority task
-        DROP_FURTHEST   ///< Drop task with furthest deadline
+        REJECT,        ///< Reject new tasks
+        DROP_LOWEST,   ///< Drop lowest priority task
+        DROP_FURTHEST  ///< Drop task with furthest deadline
     } overflow_policy = OverflowPolicy::REJECT;
 
     /// Enable deadline miss callbacks
@@ -245,7 +242,7 @@ public:
     ~EDFScheduler();
 
     // Non-copyable, movable
-    EDFScheduler(const EDFScheduler&) = delete;
+    EDFScheduler(const EDFScheduler&)            = delete;
     EDFScheduler& operator=(const EDFScheduler&) = delete;
     EDFScheduler(EDFScheduler&&) noexcept;
     EDFScheduler& operator=(EDFScheduler&&) noexcept;
@@ -270,21 +267,18 @@ public:
     SubmitResult submit(std::function<void()> task, common::Timestamp deadline);
 
     /// Submit a task with deadline offset from now
-    SubmitResult submit(std::function<void()> task,
-                       std::chrono::nanoseconds deadline_offset);
+    SubmitResult submit(std::function<void()> task, std::chrono::nanoseconds deadline_offset);
 
     /// Submit a task with default deadline
     SubmitResult submit(std::function<void()> task);
 
     /// Submit a named task
-    SubmitResult submit_named(std::string name,
-                             std::function<void()> task,
-                             common::Timestamp deadline);
+    SubmitResult submit_named(std::string name, std::function<void()> task,
+                              common::Timestamp deadline);
 
     /// Submit a task with completion callback
     SubmitResult submit_with_callback(
-        std::function<void()> task,
-        common::Timestamp deadline,
+        std::function<void()> task, common::Timestamp deadline,
         std::function<void(TaskState, std::chrono::nanoseconds)> callback);
 
     /// Submit a full task structure
@@ -293,9 +287,8 @@ public:
     // Periodic Tasks
 
     /// Submit a periodic task
-    uint64_t submit_periodic(std::function<void()> task,
-                            std::chrono::nanoseconds period,
-                            TaskPriority priority = TaskPriority::NORMAL);
+    uint64_t submit_periodic(std::function<void()> task, std::chrono::nanoseconds period,
+                             TaskPriority priority = TaskPriority::NORMAL);
 
     /// Cancel a periodic task
     bool cancel_periodic(uint64_t periodic_id);
@@ -345,4 +338,4 @@ private:
     std::unique_ptr<EDFSchedulerImpl> impl_;
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

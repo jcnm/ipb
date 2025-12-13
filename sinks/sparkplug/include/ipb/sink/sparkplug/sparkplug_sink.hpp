@@ -20,23 +20,23 @@
  * @see https://sparkplug.eclipse.org/
  */
 
-#include "ipb/common/interfaces.hpp"
-#include "ipb/common/data_point.hpp"
-#include "ipb/common/dataset.hpp"
-#include "ipb/transport/mqtt/mqtt_connection.hpp"
-
-#include <memory>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <unordered_set>
 #include <atomic>
-#include <mutex>
-#include <shared_mutex>
 #include <chrono>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <variant>
+#include <vector>
+
+#include "ipb/common/data_point.hpp"
+#include "ipb/common/dataset.hpp"
+#include "ipb/common/interfaces.hpp"
+#include "ipb/transport/mqtt/mqtt_connection.hpp"
 
 namespace ipb::sink::sparkplug {
 
@@ -47,29 +47,29 @@ namespace types {
  * @brief Sparkplug B data types
  */
 enum class DataType : uint32_t {
-    Unknown         = 0,
-    Int8            = 1,
-    Int16           = 2,
-    Int32           = 3,
-    Int64           = 4,
-    UInt8           = 5,
-    UInt16          = 6,
-    UInt32          = 7,
-    UInt64          = 8,
-    Float           = 9,
-    Double          = 10,
-    Boolean         = 11,
-    String          = 12,
-    DateTime        = 13,
-    Text            = 14,
-    UUID            = 15,
-    DataSet         = 16,
-    Bytes           = 17,
-    File            = 18,
-    Template        = 19
+    Unknown  = 0,
+    Int8     = 1,
+    Int16    = 2,
+    Int32    = 3,
+    Int64    = 4,
+    UInt8    = 5,
+    UInt16   = 6,
+    UInt32   = 7,
+    UInt64   = 8,
+    Float    = 9,
+    Double   = 10,
+    Boolean  = 11,
+    String   = 12,
+    DateTime = 13,
+    Text     = 14,
+    UUID     = 15,
+    DataSet  = 16,
+    Bytes    = 17,
+    File     = 18,
+    Template = 19
 };
 
-} // namespace types
+}  // namespace types
 
 //=============================================================================
 // Metric Definition
@@ -82,9 +82,9 @@ enum class DataType : uint32_t {
  * to declare what metrics the node/device will publish.
  */
 struct MetricDefinition {
-    std::string name;                       ///< Metric name (e.g., "Temperature/Zone1")
-    types::DataType datatype;               ///< Data type
-    uint64_t alias = 0;                     ///< Alias (auto-assigned if 0)
+    std::string name;          ///< Metric name (e.g., "Temperature/Zone1")
+    types::DataType datatype;  ///< Data type
+    uint64_t alias = 0;        ///< Alias (auto-assigned if 0)
 
     // Optional metadata
     std::optional<std::string> description;
@@ -93,8 +93,8 @@ struct MetricDefinition {
     std::optional<double> max_value;
 
     // Properties
-    bool is_transient = false;              ///< Not persisted by host
-    bool is_historical = false;             ///< Can be historical data
+    bool is_transient  = false;  ///< Not persisted by host
+    bool is_historical = false;  ///< Can be historical data
 
     /**
      * @brief Create from IPB DataPoint (infer type)
@@ -117,8 +117,8 @@ struct DeviceConfig {
     std::vector<MetricDefinition> metrics;  ///< Metrics this device publishes
 
     // Filtering - which DataPoints belong to this device
-    std::string address_prefix;             ///< Address prefix to match
-    std::vector<std::string> protocols;     ///< Protocol IDs to match (empty = all)
+    std::string address_prefix;          ///< Address prefix to match
+    std::vector<std::string> protocols;  ///< Protocol IDs to match (empty = all)
 };
 
 //=============================================================================
@@ -129,8 +129,8 @@ struct DeviceConfig {
  * @brief Sparkplug Edge Node configuration
  */
 struct EdgeNodeConfig {
-    std::string group_id;                   ///< Sparkplug group ID
-    std::string edge_node_id;               ///< Edge node identifier
+    std::string group_id;      ///< Sparkplug group ID
+    std::string edge_node_id;  ///< Edge node identifier
 
     // Node metrics (published in NBIRTH)
     std::vector<MetricDefinition> node_metrics;
@@ -139,9 +139,9 @@ struct EdgeNodeConfig {
     std::vector<DeviceConfig> devices;
 
     // Behavior
-    bool auto_discover_metrics = true;      ///< Auto-discover metrics from DataPoints
-    bool publish_bdseq = true;              ///< Include bdSeq metric
-    bool publish_node_control = true;       ///< Include Node Control/* metrics
+    bool auto_discover_metrics = true;  ///< Auto-discover metrics from DataPoints
+    bool publish_bdseq         = true;  ///< Include bdSeq metric
+    bool publish_node_control  = true;  ///< Include Node Control/* metrics
 };
 
 //=============================================================================
@@ -153,24 +153,24 @@ struct EdgeNodeConfig {
  */
 struct PublishConfig {
     // QoS settings
-    transport::mqtt::QoS data_qos = transport::mqtt::QoS::AT_MOST_ONCE;
+    transport::mqtt::QoS data_qos  = transport::mqtt::QoS::AT_MOST_ONCE;
     transport::mqtt::QoS birth_qos = transport::mqtt::QoS::AT_LEAST_ONCE;
     transport::mqtt::QoS death_qos = transport::mqtt::QoS::AT_LEAST_ONCE;
 
     // Batching
     bool enable_batching = true;
-    size_t batch_size = 100;                ///< Max metrics per NDATA/DDATA
+    size_t batch_size    = 100;  ///< Max metrics per NDATA/DDATA
     std::chrono::milliseconds batch_timeout{1000};
 
     // Alias usage
-    bool use_aliases_in_data = true;        ///< Use aliases instead of names in DATA messages
+    bool use_aliases_in_data = true;  ///< Use aliases instead of names in DATA messages
 
     // Compression
-    bool enable_compression = false;        ///< Compress payload (non-standard extension)
+    bool enable_compression = false;  ///< Compress payload (non-standard extension)
 
     // Timing
-    bool include_timestamps = true;         ///< Include timestamps in metrics
-    bool use_datapoint_timestamps = true;   ///< Use DataPoint timestamps (vs current time)
+    bool include_timestamps       = true;  ///< Include timestamps in metrics
+    bool use_datapoint_timestamps = true;  ///< Use DataPoint timestamps (vs current time)
 };
 
 /**
@@ -182,7 +182,7 @@ struct HostConfig {
     std::chrono::seconds host_timeout{30};  ///< Time to wait for host STATE
 
     // Rebirth handling
-    bool auto_rebirth_on_request = true;    ///< Respond to rebirth requests
+    bool auto_rebirth_on_request = true;  ///< Respond to rebirth requests
 };
 
 /**
@@ -204,7 +204,7 @@ struct SparkplugSinkConfig {
 
     // Performance
     size_t message_queue_size = 10000;
-    size_t worker_threads = 2;
+    size_t worker_threads     = 2;
 
     // Monitoring
     bool enable_statistics = true;
@@ -218,7 +218,7 @@ struct SparkplugSinkConfig {
     static SparkplugSinkConfig create_default(const std::string& group_id,
                                               const std::string& edge_node_id);
     static SparkplugSinkConfig create_high_throughput(const std::string& group_id,
-                                                       const std::string& edge_node_id);
+                                                      const std::string& edge_node_id);
     static SparkplugSinkConfig create_reliable(const std::string& group_id,
                                                const std::string& edge_node_id);
 };
@@ -249,13 +249,13 @@ struct SparkplugSinkStatistics {
     std::atomic<uint64_t> bytes_sent{0};
 
     void reset() {
-        births_sent = 0;
-        deaths_sent = 0;
+        births_sent        = 0;
+        deaths_sent        = 0;
         data_messages_sent = 0;
-        metrics_published = 0;
-        publish_failures = 0;
-        encode_failures = 0;
-        bytes_sent = 0;
+        metrics_published  = 0;
+        publish_failures   = 0;
+        encode_failures    = 0;
+        bytes_sent         = 0;
     }
 };
 
@@ -285,9 +285,9 @@ struct SparkplugSinkStatistics {
  */
 class SparkplugSink : public common::IIPBSinkBase {
 public:
-    static constexpr uint16_t PROTOCOL_ID = 10;
-    static constexpr std::string_view PROTOCOL_NAME = "SparkplugB";
-    static constexpr std::string_view COMPONENT_NAME = "SparkplugSink";
+    static constexpr uint16_t PROTOCOL_ID               = 10;
+    static constexpr std::string_view PROTOCOL_NAME     = "SparkplugB";
+    static constexpr std::string_view COMPONENT_NAME    = "SparkplugSink";
     static constexpr std::string_view COMPONENT_VERSION = "1.0.0";
 
     /**
@@ -298,7 +298,7 @@ public:
     ~SparkplugSink() override;
 
     // Non-copyable
-    SparkplugSink(const SparkplugSink&) = delete;
+    SparkplugSink(const SparkplugSink&)            = delete;
     SparkplugSink& operator=(const SparkplugSink&) = delete;
 
     //=========================================================================
@@ -396,18 +396,15 @@ public:
     /**
      * @brief Create basic SparkplugSink
      */
-    static std::unique_ptr<SparkplugSink> create(
-        const std::string& broker_url,
-        const std::string& group_id,
-        const std::string& edge_node_id);
+    static std::unique_ptr<SparkplugSink> create(const std::string& broker_url,
+                                                 const std::string& group_id,
+                                                 const std::string& edge_node_id);
 
     /**
      * @brief Create SparkplugSink with devices
      */
     static std::unique_ptr<SparkplugSink> create_with_devices(
-        const std::string& broker_url,
-        const std::string& group_id,
-        const std::string& edge_node_id,
+        const std::string& broker_url, const std::string& group_id, const std::string& edge_node_id,
         const std::vector<DeviceConfig>& devices);
 
     /**
@@ -418,18 +415,16 @@ public:
     /**
      * @brief Create high-throughput SparkplugSink
      */
-    static std::unique_ptr<SparkplugSink> create_high_throughput(
-        const std::string& broker_url,
-        const std::string& group_id,
-        const std::string& edge_node_id);
+    static std::unique_ptr<SparkplugSink> create_high_throughput(const std::string& broker_url,
+                                                                 const std::string& group_id,
+                                                                 const std::string& edge_node_id);
 
     /**
      * @brief Create reliable SparkplugSink (QoS 1 for all)
      */
-    static std::unique_ptr<SparkplugSink> create_reliable(
-        const std::string& broker_url,
-        const std::string& group_id,
-        const std::string& edge_node_id);
+    static std::unique_ptr<SparkplugSink> create_reliable(const std::string& broker_url,
+                                                          const std::string& group_id,
+                                                          const std::string& edge_node_id);
 };
 
-} // namespace ipb::sink::sparkplug
+}  // namespace ipb::sink::sparkplug

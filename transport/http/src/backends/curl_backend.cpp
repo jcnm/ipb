@@ -7,10 +7,11 @@
 
 #ifdef IPB_HAS_CURL
 
-#include <curl/curl.h>
-#include <thread>
-#include <future>
 #include <chrono>
+#include <future>
+#include <thread>
+
+#include <curl/curl.h>
 
 namespace ipb::transport::http {
 
@@ -25,7 +26,7 @@ struct WriteCallbackData {
 };
 
 size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdata) {
-    auto* data = static_cast<WriteCallbackData*>(userdata);
+    auto* data        = static_cast<WriteCallbackData*>(userdata);
     size_t total_size = size * nmemb;
     data->buffer->insert(data->buffer->end(), ptr, ptr + total_size);
     return total_size;
@@ -36,7 +37,7 @@ struct HeaderCallbackData {
 };
 
 size_t header_callback(char* buffer, size_t size, size_t nmemb, void* userdata) {
-    auto* data = static_cast<HeaderCallbackData*>(userdata);
+    auto* data        = static_cast<HeaderCallbackData*>(userdata);
     size_t total_size = size * nmemb;
 
     std::string line(buffer, total_size);
@@ -49,7 +50,7 @@ size_t header_callback(char* buffer, size_t size, size_t nmemb, void* userdata) 
     // Parse header line
     auto colon = line.find(':');
     if (colon != std::string::npos) {
-        std::string name = line.substr(0, colon);
+        std::string name  = line.substr(0, colon);
         std::string value = line.substr(colon + 1);
 
         // Trim whitespace
@@ -63,7 +64,7 @@ size_t header_callback(char* buffer, size_t size, size_t nmemb, void* userdata) 
     return total_size;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 //=============================================================================
 // CurlBackend Implementation
@@ -133,7 +134,7 @@ public:
         struct curl_slist* headers = nullptr;
         for (const auto& [name, value] : request.headers) {
             std::string header = name + ": " + value;
-            headers = curl_slist_append(headers, header.c_str());
+            headers            = curl_slist_append(headers, header.c_str());
         }
         if (headers) {
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -141,9 +142,8 @@ public:
 
         // Setup timeouts
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS,
-                        static_cast<long>(request.connect_timeout.count()));
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS,
-                        static_cast<long>(request.timeout.count()));
+                         static_cast<long>(request.connect_timeout.count()));
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, static_cast<long>(request.timeout.count()));
 
         // Setup TLS
         if (request.verify_ssl) {
@@ -194,8 +194,8 @@ public:
 
         CURLcode res = curl_easy_perform(curl);
 
-        auto end = std::chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        auto end            = std::chrono::steady_clock::now();
+        auto duration       = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         response.total_time = duration;
 
         if (res == CURLE_OK) {
@@ -206,8 +206,8 @@ public:
 
             double connect_time = 0;
             curl_easy_getinfo(curl, CURLINFO_CONNECT_TIME, &connect_time);
-            response.connect_time = std::chrono::microseconds(
-                static_cast<long long>(connect_time * 1000000));
+            response.connect_time =
+                std::chrono::microseconds(static_cast<long long>(connect_time * 1000000));
 
             stats.responses_received++;
             stats.bytes_received += response.body.size();
@@ -264,9 +264,9 @@ void CurlBackend::set_progress_callback(ProgressCallback callback) {
     progress_cb_ = std::move(callback);
 }
 
-} // namespace ipb::transport::http
+}  // namespace ipb::transport::http
 
-#else // !IPB_HAS_CURL
+#else  // !IPB_HAS_CURL
 
 // Stub implementation when curl is not available
 namespace ipb::transport::http {
@@ -302,6 +302,6 @@ void CurlBackend::close_all() {}
 
 void CurlBackend::set_progress_callback(ProgressCallback) {}
 
-} // namespace ipb::transport::http
+}  // namespace ipb::transport::http
 
-#endif // IPB_HAS_CURL
+#endif  // IPB_HAS_CURL

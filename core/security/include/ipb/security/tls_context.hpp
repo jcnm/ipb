@@ -18,14 +18,14 @@
 
 #include <ipb/common/platform.hpp>
 
+#include <chrono>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <functional>
-#include <chrono>
-#include <cstdint>
-#include <optional>
 
 namespace ipb::security {
 
@@ -56,7 +56,7 @@ enum class SecurityError : uint32_t {
 /**
  * @brief Result type for security operations
  */
-template<typename T>
+template <typename T>
 class SecurityResult {
 public:
     SecurityResult(T value) : value_(std::move(value)), error_(SecurityError::SUCCESS) {}
@@ -80,7 +80,7 @@ private:
     std::string error_message_;
 };
 
-template<>
+template <>
 class SecurityResult<void> {
 public:
     SecurityResult() : error_(SecurityError::SUCCESS) {}
@@ -100,7 +100,7 @@ private:
 };
 
 // Type alias for convenience
-template<typename T = void>
+template <typename T = void>
 using Result = SecurityResult<T>;
 
 // ============================================================================
@@ -130,40 +130,31 @@ enum class TLSVersion : uint8_t {
 /**
  * @brief TLS context mode
  */
-enum class TLSMode : uint8_t {
-    CLIENT,
-    SERVER
-};
+enum class TLSMode : uint8_t { CLIENT, SERVER };
 
 /**
  * @brief Certificate verification mode
  */
 enum class VerifyMode : uint8_t {
-    NONE,           // No verification (insecure)
-    OPTIONAL,       // Verify if presented
-    REQUIRED,       // Must verify successfully
-    REQUIRE_ONCE    // Verify only on first connection
+    NONE,         // No verification (insecure)
+    OPTIONAL,     // Verify if presented
+    REQUIRED,     // Must verify successfully
+    REQUIRE_ONCE  // Verify only on first connection
 };
 
 /**
  * @brief TLS handshake status
  */
-enum class HandshakeStatus : uint8_t {
-    SUCCESS,
-    WANT_READ,
-    WANT_WRITE,
-    FAILED,
-    TIMEOUT
-};
+enum class HandshakeStatus : uint8_t { SUCCESS, WANT_READ, WANT_WRITE, FAILED, TIMEOUT };
 
 /**
  * @brief Security level presets
  */
 enum class SecurityLevel : uint8_t {
-    LOW,        // Allow legacy ciphers (compatibility)
-    MEDIUM,     // Balance security and compatibility
-    HIGH,       // Strong ciphers only
-    FIPS        // FIPS-140-2 compliant
+    LOW,     // Allow legacy ciphers (compatibility)
+    MEDIUM,  // Balance security and compatibility
+    HIGH,    // Strong ciphers only
+    FIPS     // FIPS-140-2 compliant
 };
 
 // ============================================================================
@@ -181,7 +172,7 @@ public:
     Certificate(Certificate&& other) noexcept;
     Certificate& operator=(Certificate&& other) noexcept;
 
-    Certificate(const Certificate&) = delete;
+    Certificate(const Certificate&)            = delete;
     Certificate& operator=(const Certificate&) = delete;
 
     /**
@@ -259,7 +250,7 @@ public:
     PrivateKey(PrivateKey&& other) noexcept;
     PrivateKey& operator=(PrivateKey&& other) noexcept;
 
-    PrivateKey(const PrivateKey&) = delete;
+    PrivateKey(const PrivateKey&)            = delete;
     PrivateKey& operator=(const PrivateKey&) = delete;
 
     /**
@@ -267,16 +258,13 @@ public:
      * @param path Path to PEM file
      * @param password Optional password for encrypted keys
      */
-    static Result<PrivateKey> from_pem_file(
-        const std::string& path,
-        std::string_view password = {});
+    static Result<PrivateKey> from_pem_file(const std::string& path,
+                                            std::string_view password = {});
 
     /**
      * @brief Load private key from PEM string
      */
-    static Result<PrivateKey> from_pem_string(
-        std::string_view pem,
-        std::string_view password = {});
+    static Result<PrivateKey> from_pem_string(std::string_view pem, std::string_view password = {});
 
     /**
      * @brief Get the internal handle (backend-specific)
@@ -309,21 +297,21 @@ struct TLSConfig {
 
     // Verification
     VerifyMode verify_mode = VerifyMode::REQUIRED;
-    int verify_depth = 4;
+    int verify_depth       = 4;
 
     // Certificates and keys
-    std::string cert_file;          // Server/client certificate
-    std::string key_file;           // Private key
-    std::string key_password;       // Key password (if encrypted)
-    std::string ca_file;            // CA certificate(s)
-    std::string ca_path;            // CA certificate directory
+    std::string cert_file;     // Server/client certificate
+    std::string key_file;      // Private key
+    std::string key_password;  // Key password (if encrypted)
+    std::string ca_file;       // CA certificate(s)
+    std::string ca_path;       // CA certificate directory
 
     // Cipher configuration
-    std::string cipher_list;        // TLS 1.2 ciphers (OpenSSL format)
-    std::string cipher_suites;      // TLS 1.3 cipher suites
+    std::string cipher_list;    // TLS 1.2 ciphers (OpenSSL format)
+    std::string cipher_suites;  // TLS 1.3 cipher suites
 
     // SNI (Server Name Indication)
-    std::string server_name;        // Expected server name for clients
+    std::string server_name;  // Expected server name for clients
 
     // ALPN (Application-Layer Protocol Negotiation)
     std::vector<std::string> alpn_protocols;
@@ -334,8 +322,8 @@ struct TLSConfig {
 
     // Advanced options
     bool enable_ocsp_stapling = false;
-    bool enable_sct = false;         // Signed Certificate Timestamps
-    bool allow_renegotiation = false;
+    bool enable_sct           = false;  // Signed Certificate Timestamps
+    bool allow_renegotiation  = false;
 
     /**
      * @brief Create a default client configuration
@@ -405,9 +393,8 @@ public:
     /**
      * @brief Load private key from file
      */
-    virtual Result<void> load_private_key(
-        const std::string& path,
-        std::string_view password = {}) = 0;
+    virtual Result<void> load_private_key(const std::string& path,
+                                          std::string_view password = {}) = 0;
 
     /**
      * @brief Load CA certificates from file
@@ -456,8 +443,7 @@ public:
     /**
      * @brief Set ALPN protocols
      */
-    virtual Result<void> set_alpn_protocols(
-        const std::vector<std::string>& protocols) = 0;
+    virtual Result<void> set_alpn_protocols(const std::vector<std::string>& protocols) = 0;
 
     // -------------------------------------------------------------------------
     // Socket Creation
@@ -604,4 +590,4 @@ std::string_view default_cipher_list(SecurityLevel level);
  */
 std::string_view default_cipher_suites(SecurityLevel level);
 
-} // namespace ipb::security
+}  // namespace ipb::security

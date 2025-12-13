@@ -1,7 +1,7 @@
 #include <ipb/common/error.hpp>
 
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 
 namespace ipb::common {
 
@@ -13,10 +13,8 @@ std::string Error::to_string() const {
     std::ostringstream oss;
 
     // Format: [CATEGORY] ERROR_NAME (0xXXXX): message
-    oss << "[" << category_name(category()) << "] "
-        << error_name(code_)
-        << " (0x" << std::hex << std::setw(4) << std::setfill('0')
-        << static_cast<uint32_t>(code_) << ")";
+    oss << "[" << category_name(category()) << "] " << error_name(code_) << " (0x" << std::hex
+        << std::setw(4) << std::setfill('0') << static_cast<uint32_t>(code_) << ")";
 
     if (!message_.empty()) {
         oss << ": " << message_;
@@ -24,8 +22,7 @@ std::string Error::to_string() const {
 
     // Add source location if available
     if (location_.is_valid()) {
-        oss << "\n    at " << location_.file
-            << ":" << std::dec << location_.line;
+        oss << "\n    at " << location_.file << ":" << std::dec << location_.line;
         if (location_.function[0] != '\0') {
             oss << " in " << location_.function;
         }
@@ -49,4 +46,4 @@ Error& Error::with_context(std::string_view key, std::string_view value) {
     return *this;
 }
 
-} // namespace ipb::common
+}  // namespace ipb::common

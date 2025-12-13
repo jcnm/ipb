@@ -14,9 +14,9 @@
  * Target: Zero-allocation scoop selection, <100ns lookup time
  */
 
-#include <ipb/common/interfaces.hpp>
 #include <ipb/common/data_point.hpp>
 #include <ipb/common/dataset.hpp>
+#include <ipb/common/interfaces.hpp>
 
 #include <atomic>
 #include <functional>
@@ -38,23 +38,23 @@ class ScoopRegistryImpl;
  * @brief Read strategies for multi-source data access
  */
 enum class ReadStrategy : uint8_t {
-    PRIMARY_ONLY,       ///< Read from primary source only
-    FAILOVER,           ///< Read from primary, failover to backup
-    ROUND_ROBIN,        ///< Distribute reads across sources
-    BROADCAST_MERGE,    ///< Read from all and merge results
-    FASTEST_RESPONSE,   ///< Read from source with lowest latency
-    QUORUM              ///< Read from N sources, return majority
+    PRIMARY_ONLY,      ///< Read from primary source only
+    FAILOVER,          ///< Read from primary, failover to backup
+    ROUND_ROBIN,       ///< Distribute reads across sources
+    BROADCAST_MERGE,   ///< Read from all and merge results
+    FASTEST_RESPONSE,  ///< Read from source with lowest latency
+    QUORUM             ///< Read from N sources, return majority
 };
 
 /**
  * @brief Scoop health status
  */
 enum class ScoopHealth : uint8_t {
-    HEALTHY,      ///< Scoop is operating normally
-    DEGRADED,     ///< Scoop is working but with issues
-    UNHEALTHY,    ///< Scoop is not providing data
-    DISCONNECTED, ///< Scoop is disconnected
-    UNKNOWN       ///< Health status unknown
+    HEALTHY,       ///< Scoop is operating normally
+    DEGRADED,      ///< Scoop is working but with issues
+    UNHEALTHY,     ///< Scoop is not providing data
+    DISCONNECTED,  ///< Scoop is disconnected
+    UNKNOWN        ///< Health status unknown
 };
 
 /**
@@ -66,9 +66,9 @@ struct ScoopInfo {
     std::shared_ptr<common::IProtocolSource> scoop;
 
     // Configuration
-    uint32_t priority = 0;       ///< Priority for failover (lower = higher priority)
-    bool enabled = true;         ///< Whether scoop is enabled
-    bool is_primary = false;     ///< Whether this is a primary source
+    uint32_t priority = 0;      ///< Priority for failover (lower = higher priority)
+    bool enabled      = true;   ///< Whether scoop is enabled
+    bool is_primary   = false;  ///< Whether this is a primary source
 
     // Health
     ScoopHealth health = ScoopHealth::UNKNOWN;
@@ -93,62 +93,45 @@ struct ScoopInfo {
 
     // Copy constructor (atomics need explicit copy)
     ScoopInfo(const ScoopInfo& other)
-        : id(other.id)
-        , type(other.type)
-        , scoop(other.scoop)
-        , priority(other.priority)
-        , enabled(other.enabled)
-        , is_primary(other.is_primary)
-        , health(other.health)
-        , last_health_check(other.last_health_check)
-        , health_message(other.health_message)
-        , connected(other.connected)
-        , last_connect_time(other.last_connect_time)
-        , last_disconnect_time(other.last_disconnect_time)
-        , reads_attempted(other.reads_attempted.load())
-        , reads_successful(other.reads_successful.load())
-        , reads_failed(other.reads_failed.load())
-        , data_points_received(other.data_points_received.load())
-        , bytes_received(other.bytes_received.load())
-        , total_latency_ns(other.total_latency_ns.load())
-    {}
+        : id(other.id), type(other.type), scoop(other.scoop), priority(other.priority),
+          enabled(other.enabled), is_primary(other.is_primary), health(other.health),
+          last_health_check(other.last_health_check), health_message(other.health_message),
+          connected(other.connected), last_connect_time(other.last_connect_time),
+          last_disconnect_time(other.last_disconnect_time),
+          reads_attempted(other.reads_attempted.load()),
+          reads_successful(other.reads_successful.load()), reads_failed(other.reads_failed.load()),
+          data_points_received(other.data_points_received.load()),
+          bytes_received(other.bytes_received.load()),
+          total_latency_ns(other.total_latency_ns.load()) {}
 
     // Move constructor
     ScoopInfo(ScoopInfo&& other) noexcept
-        : id(std::move(other.id))
-        , type(std::move(other.type))
-        , scoop(std::move(other.scoop))
-        , priority(other.priority)
-        , enabled(other.enabled)
-        , is_primary(other.is_primary)
-        , health(other.health)
-        , last_health_check(other.last_health_check)
-        , health_message(std::move(other.health_message))
-        , connected(other.connected)
-        , last_connect_time(other.last_connect_time)
-        , last_disconnect_time(other.last_disconnect_time)
-        , reads_attempted(other.reads_attempted.load())
-        , reads_successful(other.reads_successful.load())
-        , reads_failed(other.reads_failed.load())
-        , data_points_received(other.data_points_received.load())
-        , bytes_received(other.bytes_received.load())
-        , total_latency_ns(other.total_latency_ns.load())
-    {}
+        : id(std::move(other.id)), type(std::move(other.type)), scoop(std::move(other.scoop)),
+          priority(other.priority), enabled(other.enabled), is_primary(other.is_primary),
+          health(other.health), last_health_check(other.last_health_check),
+          health_message(std::move(other.health_message)), connected(other.connected),
+          last_connect_time(other.last_connect_time),
+          last_disconnect_time(other.last_disconnect_time),
+          reads_attempted(other.reads_attempted.load()),
+          reads_successful(other.reads_successful.load()), reads_failed(other.reads_failed.load()),
+          data_points_received(other.data_points_received.load()),
+          bytes_received(other.bytes_received.load()),
+          total_latency_ns(other.total_latency_ns.load()) {}
 
     // Copy assignment
     ScoopInfo& operator=(const ScoopInfo& other) {
         if (this != &other) {
-            id = other.id;
-            type = other.type;
-            scoop = other.scoop;
-            priority = other.priority;
-            enabled = other.enabled;
-            is_primary = other.is_primary;
-            health = other.health;
-            last_health_check = other.last_health_check;
-            health_message = other.health_message;
-            connected = other.connected;
-            last_connect_time = other.last_connect_time;
+            id                   = other.id;
+            type                 = other.type;
+            scoop                = other.scoop;
+            priority             = other.priority;
+            enabled              = other.enabled;
+            is_primary           = other.is_primary;
+            health               = other.health;
+            last_health_check    = other.last_health_check;
+            health_message       = other.health_message;
+            connected            = other.connected;
+            last_connect_time    = other.last_connect_time;
             last_disconnect_time = other.last_disconnect_time;
             reads_attempted.store(other.reads_attempted.load());
             reads_successful.store(other.reads_successful.load());
@@ -163,17 +146,17 @@ struct ScoopInfo {
     // Move assignment
     ScoopInfo& operator=(ScoopInfo&& other) noexcept {
         if (this != &other) {
-            id = std::move(other.id);
-            type = std::move(other.type);
-            scoop = std::move(other.scoop);
-            priority = other.priority;
-            enabled = other.enabled;
-            is_primary = other.is_primary;
-            health = other.health;
-            last_health_check = other.last_health_check;
-            health_message = std::move(other.health_message);
-            connected = other.connected;
-            last_connect_time = other.last_connect_time;
+            id                   = std::move(other.id);
+            type                 = std::move(other.type);
+            scoop                = std::move(other.scoop);
+            priority             = other.priority;
+            enabled              = other.enabled;
+            is_primary           = other.is_primary;
+            health               = other.health;
+            last_health_check    = other.last_health_check;
+            health_message       = std::move(other.health_message);
+            connected            = other.connected;
+            last_connect_time    = other.last_connect_time;
             last_disconnect_time = other.last_disconnect_time;
             reads_attempted.store(other.reads_attempted.load());
             reads_successful.store(other.reads_successful.load());
@@ -188,15 +171,13 @@ struct ScoopInfo {
     /// Calculate success rate
     double success_rate() const noexcept {
         auto total = reads_successful.load() + reads_failed.load();
-        return total > 0 ?
-            static_cast<double>(reads_successful) / total * 100.0 : 100.0;
+        return total > 0 ? static_cast<double>(reads_successful) / total * 100.0 : 100.0;
     }
 
     /// Calculate average latency in microseconds
     double avg_latency_us() const noexcept {
         auto count = reads_successful.load();
-        return count > 0 ?
-            static_cast<double>(total_latency_ns) / count / 1000.0 : 0.0;
+        return count > 0 ? static_cast<double>(total_latency_ns) / count / 1000.0 : 0.0;
     }
 };
 
@@ -230,16 +211,12 @@ struct ScoopRegistryStats {
     ScoopRegistryStats() = default;
 
     ScoopRegistryStats(const ScoopRegistryStats& other)
-        : total_reads(other.total_reads.load())
-        , successful_reads(other.successful_reads.load())
-        , failed_reads(other.failed_reads.load())
-        , failover_events(other.failover_events.load())
-        , active_scoops(other.active_scoops.load())
-        , healthy_scoops(other.healthy_scoops.load())
-        , connected_scoops(other.connected_scoops.load())
-        , unhealthy_scoops(other.unhealthy_scoops.load())
-        , active_subscriptions(other.active_subscriptions.load())
-    {}
+        : total_reads(other.total_reads.load()), successful_reads(other.successful_reads.load()),
+          failed_reads(other.failed_reads.load()), failover_events(other.failover_events.load()),
+          active_scoops(other.active_scoops.load()), healthy_scoops(other.healthy_scoops.load()),
+          connected_scoops(other.connected_scoops.load()),
+          unhealthy_scoops(other.unhealthy_scoops.load()),
+          active_subscriptions(other.active_subscriptions.load()) {}
 
     ScoopRegistryStats& operator=(const ScoopRegistryStats& other) {
         if (this != &other) {
@@ -302,13 +279,14 @@ struct ScoopRegistryConfig {
 class AggregatedSubscription {
 public:
     using DataCallback = std::function<void(const common::DataSet&, std::string_view source_id)>;
-    using ErrorCallback = std::function<void(std::string_view source_id, common::ErrorCode, std::string_view)>;
+    using ErrorCallback =
+        std::function<void(std::string_view source_id, common::ErrorCode, std::string_view)>;
 
     AggregatedSubscription() = default;
     ~AggregatedSubscription();
 
     // Non-copyable, movable
-    AggregatedSubscription(const AggregatedSubscription&) = delete;
+    AggregatedSubscription(const AggregatedSubscription&)            = delete;
     AggregatedSubscription& operator=(const AggregatedSubscription&) = delete;
     AggregatedSubscription(AggregatedSubscription&&) noexcept;
     AggregatedSubscription& operator=(AggregatedSubscription&&) noexcept;
@@ -371,7 +349,7 @@ public:
     ~ScoopRegistry();
 
     // Non-copyable, movable
-    ScoopRegistry(const ScoopRegistry&) = delete;
+    ScoopRegistry(const ScoopRegistry&)            = delete;
     ScoopRegistry& operator=(const ScoopRegistry&) = delete;
     ScoopRegistry(ScoopRegistry&&) noexcept;
     ScoopRegistry& operator=(ScoopRegistry&&) noexcept;
@@ -394,11 +372,11 @@ public:
 
     /// Register a scoop with primary flag
     bool register_scoop(std::string_view id, std::shared_ptr<common::IProtocolSource> scoop,
-                       bool is_primary);
+                        bool is_primary);
 
     /// Register a scoop with priority
     bool register_scoop(std::string_view id, std::shared_ptr<common::IProtocolSource> scoop,
-                       bool is_primary, uint32_t priority);
+                        bool is_primary, uint32_t priority);
 
     /// Unregister a scoop
     bool unregister_scoop(std::string_view id);
@@ -432,21 +410,18 @@ public:
     // Reading Data
 
     /// Select scoop(s) from a set using specified strategy
-    ScoopSelectionResult select_scoop(
-        const std::vector<std::string>& candidate_ids,
-        ReadStrategy strategy = ReadStrategy::FAILOVER);
+    ScoopSelectionResult select_scoop(const std::vector<std::string>& candidate_ids,
+                                      ReadStrategy strategy = ReadStrategy::FAILOVER);
 
     /// Read from selected scoop(s)
-    common::Result<common::DataSet> read_from(
-        const std::vector<std::string>& candidate_ids,
-        ReadStrategy strategy = ReadStrategy::FAILOVER);
+    common::Result<common::DataSet> read_from(const std::vector<std::string>& candidate_ids,
+                                              ReadStrategy strategy = ReadStrategy::FAILOVER);
 
     /// Read from a specific scoop
     common::Result<common::DataSet> read_from_scoop(std::string_view scoop_id);
 
     /// Read and merge from multiple scoops
-    common::Result<common::DataSet> read_merged(
-        const std::vector<std::string>& scoop_ids);
+    common::Result<common::DataSet> read_merged(const std::vector<std::string>& scoop_ids);
 
     // Subscriptions
 
@@ -531,4 +506,4 @@ private:
     std::unique_ptr<ScoopRegistryImpl> impl_;
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

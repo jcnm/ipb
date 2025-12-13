@@ -1,10 +1,10 @@
 #include "ipb/core/scheduler/task_queue.hpp"
+
 #include <algorithm>
 
 namespace ipb::core {
 
-TaskQueue::TaskQueue(size_t max_size)
-    : max_size_(max_size) {}
+TaskQueue::TaskQueue(size_t max_size) : max_size_(max_size) {}
 
 bool TaskQueue::push(ScheduledTask task) {
     std::lock_guard lock(mutex_);
@@ -106,4 +106,4 @@ std::optional<common::Timestamp> TaskQueue::nearest_deadline() const {
     return queue_.top().deadline;
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core
