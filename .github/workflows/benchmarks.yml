@@ -374,20 +374,20 @@ jobs:
         fetch-depth: 0
 
     - name: Download benchmark results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: benchmark-results-${{ github.sha }}
         path: results/
 
     - name: Download memory results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: memory-benchmark-results-${{ github.sha }}
         path: memory-results/
       continue-on-error: true
 
     - name: Download scalability results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: scalability-results-${{ github.sha }}
         path: scalability-results/
