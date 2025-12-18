@@ -193,7 +193,8 @@ public:
             });
 
         connection_->set_message_callback(
-            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS /*qos*/,
+            [this](const std::string& topic, const std::string& payload,
+                   transport::mqtt::QoS /*qos*/,
                    bool /*retained*/) { handle_message(topic, payload); });
 
         // Connect
@@ -316,12 +317,11 @@ public:
     }
 
     std::future<common::Result<void>> write_async(const common::DataPoint& data_point) {
-        return std::async(std::launch::async, [this, data_point]() {
-            return write(data_point);
-        });
+        return std::async(std::launch::async, [this, data_point]() { return write(data_point); });
     }
 
-    std::future<common::Result<void>> write_batch_async(std::span<const common::DataPoint> data_points) {
+    std::future<common::Result<void>> write_batch_async(
+        std::span<const common::DataPoint> data_points) {
         std::vector<common::DataPoint> data_copy(data_points.begin(), data_points.end());
         return std::async(std::launch::async, [this, data_copy = std::move(data_copy)]() {
             return write_batch(data_copy);
@@ -343,9 +343,7 @@ public:
         return running_.load() && message_queue_.size() < config_.message_queue_size;
     }
 
-    size_t max_batch_size() const noexcept {
-        return config_.publishing.batch_size;
-    }
+    size_t max_batch_size() const noexcept { return config_.publishing.batch_size; }
 
     common::Result<void> rebirth() {
         IPB_LOG_INFO(LOG_CAT, "Rebirth requested");
@@ -763,7 +761,8 @@ std::future<common::Result<void>> SparkplugSink::write_async(const common::DataP
     return impl_->write_async(data_point);
 }
 
-std::future<common::Result<void>> SparkplugSink::write_batch_async(std::span<const common::DataPoint> data_points) {
+std::future<common::Result<void>> SparkplugSink::write_batch_async(
+    std::span<const common::DataPoint> data_points) {
     return impl_->write_batch_async(data_points);
 }
 

@@ -33,13 +33,13 @@ namespace ipb::common {
  * @brief Memory profile presets
  */
 enum class MemoryProfile : uint8_t {
-    EMBEDDED     = 0,  ///< < 64MB total RAM - minimal footprint
-    IOT          = 1,  ///< 64-256MB RAM - constrained environment
-    EDGE         = 2,  ///< 256MB-1GB RAM - edge computing
-    STANDARD     = 3,  ///< 1-8GB RAM - typical deployment
-    HIGH_PERF    = 4,  ///< 8GB+ RAM - maximum performance
-    CUSTOM       = 5,  ///< User-defined configuration
-    AUTO_DETECT  = 255 ///< Detect at runtime based on available memory
+    EMBEDDED    = 0,   ///< < 64MB total RAM - minimal footprint
+    IOT         = 1,   ///< 64-256MB RAM - constrained environment
+    EDGE        = 2,   ///< 256MB-1GB RAM - edge computing
+    STANDARD    = 3,   ///< 1-8GB RAM - typical deployment
+    HIGH_PERF   = 4,   ///< 8GB+ RAM - maximum performance
+    CUSTOM      = 5,   ///< User-defined configuration
+    AUTO_DETECT = 255  ///< Detect at runtime based on available memory
 };
 
 /**
@@ -115,15 +115,14 @@ struct MemoryConfig {
     /// Get estimated total memory footprint in bytes
     [[nodiscard]] constexpr size_t estimated_footprint() const noexcept {
         // Rough estimation based on structure sizes
-        constexpr size_t TASK_SIZE = 256;        // ScheduledTask ~200 bytes + padding
-        constexpr size_t MESSAGE_SIZE = 384;     // Message ~300 bytes + slot overhead
-        constexpr size_t CHANNEL_OVERHEAD = 256; // Per-channel overhead
+        constexpr size_t TASK_SIZE        = 256;  // ScheduledTask ~200 bytes + padding
+        constexpr size_t MESSAGE_SIZE     = 384;  // Message ~300 bytes + slot overhead
+        constexpr size_t CHANNEL_OVERHEAD = 256;  // Per-channel overhead
 
         size_t scheduler_mem = scheduler_max_queue_size * TASK_SIZE;
-        size_t message_bus_mem = message_bus_max_channels *
-                                 (message_bus_buffer_size * MESSAGE_SIZE + CHANNEL_OVERHEAD);
-        size_t pool_mem = (pool_small_capacity * 64) +
-                          (pool_medium_capacity * 256) +
+        size_t message_bus_mem =
+            message_bus_max_channels * (message_bus_buffer_size * MESSAGE_SIZE + CHANNEL_OVERHEAD);
+        size_t pool_mem = (pool_small_capacity * 64) + (pool_medium_capacity * 256) +
                           (pool_large_capacity * 1024);
 
         return scheduler_mem + message_bus_mem + pool_mem;
@@ -146,21 +145,19 @@ struct MemoryConfig {
      * - Suitable for microcontrollers and constrained devices
      */
     static constexpr MemoryConfig embedded() noexcept {
-        return MemoryConfig{
-            .scheduler_max_queue_size = 256,
-            .scheduler_worker_threads = 1,
-            .message_bus_max_channels = 8,
-            .message_bus_buffer_size = 256,  // Power of 2
-            .message_bus_dispatcher_threads = 1,
-            .pool_small_capacity = 128,
-            .pool_medium_capacity = 64,
-            .pool_large_capacity = 32,
-            .pool_block_size = 16,
-            .router_max_rules = 32,
-            .router_max_sinks = 8,
-            .router_batch_size = 4,
-            .pattern_cache_size = 16
-        };
+        return MemoryConfig{.scheduler_max_queue_size       = 256,
+                            .scheduler_worker_threads       = 1,
+                            .message_bus_max_channels       = 8,
+                            .message_bus_buffer_size        = 256,  // Power of 2
+                            .message_bus_dispatcher_threads = 1,
+                            .pool_small_capacity            = 128,
+                            .pool_medium_capacity           = 64,
+                            .pool_large_capacity            = 32,
+                            .pool_block_size                = 16,
+                            .router_max_rules               = 32,
+                            .router_max_sinks               = 8,
+                            .router_batch_size              = 4,
+                            .pattern_cache_size             = 16};
     }
 
     /**
@@ -171,21 +168,19 @@ struct MemoryConfig {
      * - Suitable for Raspberry Pi, industrial IoT gateways
      */
     static constexpr MemoryConfig iot() noexcept {
-        return MemoryConfig{
-            .scheduler_max_queue_size = 1000,
-            .scheduler_worker_threads = 2,
-            .message_bus_max_channels = 16,
-            .message_bus_buffer_size = 1024,  // Power of 2
-            .message_bus_dispatcher_threads = 2,
-            .pool_small_capacity = 256,
-            .pool_medium_capacity = 128,
-            .pool_large_capacity = 64,
-            .pool_block_size = 32,
-            .router_max_rules = 64,
-            .router_max_sinks = 16,
-            .router_batch_size = 8,
-            .pattern_cache_size = 32
-        };
+        return MemoryConfig{.scheduler_max_queue_size       = 1000,
+                            .scheduler_worker_threads       = 2,
+                            .message_bus_max_channels       = 16,
+                            .message_bus_buffer_size        = 1024,  // Power of 2
+                            .message_bus_dispatcher_threads = 2,
+                            .pool_small_capacity            = 256,
+                            .pool_medium_capacity           = 128,
+                            .pool_large_capacity            = 64,
+                            .pool_block_size                = 32,
+                            .router_max_rules               = 64,
+                            .router_max_sinks               = 16,
+                            .router_batch_size              = 8,
+                            .pattern_cache_size             = 32};
     }
 
     /**
@@ -196,21 +191,19 @@ struct MemoryConfig {
      * - Suitable for edge servers, industrial PCs
      */
     static constexpr MemoryConfig edge() noexcept {
-        return MemoryConfig{
-            .scheduler_max_queue_size = 5000,
-            .scheduler_worker_threads = 0,  // Auto-detect
-            .message_bus_max_channels = 32,
-            .message_bus_buffer_size = 2048,  // Power of 2
-            .message_bus_dispatcher_threads = 0,  // Auto-detect
-            .pool_small_capacity = 512,
-            .pool_medium_capacity = 256,
-            .pool_large_capacity = 128,
-            .pool_block_size = 64,
-            .router_max_rules = 128,
-            .router_max_sinks = 24,
-            .router_batch_size = 16,
-            .pattern_cache_size = 64
-        };
+        return MemoryConfig{.scheduler_max_queue_size       = 5000,
+                            .scheduler_worker_threads       = 0,  // Auto-detect
+                            .message_bus_max_channels       = 32,
+                            .message_bus_buffer_size        = 2048,  // Power of 2
+                            .message_bus_dispatcher_threads = 0,     // Auto-detect
+                            .pool_small_capacity            = 512,
+                            .pool_medium_capacity           = 256,
+                            .pool_large_capacity            = 128,
+                            .pool_block_size                = 64,
+                            .router_max_rules               = 128,
+                            .router_max_sinks               = 24,
+                            .router_batch_size              = 16,
+                            .pattern_cache_size             = 64};
     }
 
     /**
@@ -221,21 +214,19 @@ struct MemoryConfig {
      * - Good throughput with reasonable memory usage
      */
     static constexpr MemoryConfig standard() noexcept {
-        return MemoryConfig{
-            .scheduler_max_queue_size = 10000,
-            .scheduler_worker_threads = 0,  // Auto-detect
-            .message_bus_max_channels = 64,
-            .message_bus_buffer_size = 4096,  // Power of 2
-            .message_bus_dispatcher_threads = 0,  // Auto-detect
-            .pool_small_capacity = 1024,
-            .pool_medium_capacity = 512,
-            .pool_large_capacity = 256,
-            .pool_block_size = 64,
-            .router_max_rules = 256,
-            .router_max_sinks = 32,
-            .router_batch_size = 16,
-            .pattern_cache_size = 128
-        };
+        return MemoryConfig{.scheduler_max_queue_size       = 10000,
+                            .scheduler_worker_threads       = 0,  // Auto-detect
+                            .message_bus_max_channels       = 64,
+                            .message_bus_buffer_size        = 4096,  // Power of 2
+                            .message_bus_dispatcher_threads = 0,     // Auto-detect
+                            .pool_small_capacity            = 1024,
+                            .pool_medium_capacity           = 512,
+                            .pool_large_capacity            = 256,
+                            .pool_block_size                = 64,
+                            .router_max_rules               = 256,
+                            .router_max_sinks               = 32,
+                            .router_batch_size              = 16,
+                            .pattern_cache_size             = 128};
     }
 
     /**
@@ -246,21 +237,19 @@ struct MemoryConfig {
      * - Optimized for >5M messages/second
      */
     static constexpr MemoryConfig high_performance() noexcept {
-        return MemoryConfig{
-            .scheduler_max_queue_size = 50000,
-            .scheduler_worker_threads = 0,  // Auto-detect
-            .message_bus_max_channels = 256,
-            .message_bus_buffer_size = 16384,  // Power of 2
-            .message_bus_dispatcher_threads = 0,  // Auto-detect
-            .pool_small_capacity = 4096,
-            .pool_medium_capacity = 2048,
-            .pool_large_capacity = 1024,
-            .pool_block_size = 128,
-            .router_max_rules = 1024,
-            .router_max_sinks = 128,
-            .router_batch_size = 64,
-            .pattern_cache_size = 512
-        };
+        return MemoryConfig{.scheduler_max_queue_size       = 50000,
+                            .scheduler_worker_threads       = 0,  // Auto-detect
+                            .message_bus_max_channels       = 256,
+                            .message_bus_buffer_size        = 16384,  // Power of 2
+                            .message_bus_dispatcher_threads = 0,      // Auto-detect
+                            .pool_small_capacity            = 4096,
+                            .pool_medium_capacity           = 2048,
+                            .pool_large_capacity            = 1024,
+                            .pool_block_size                = 128,
+                            .router_max_rules               = 1024,
+                            .router_max_sinks               = 128,
+                            .router_batch_size              = 64,
+                            .pattern_cache_size             = 512};
     }
 
     /**
@@ -342,15 +331,15 @@ struct MemoryConfig {
         scaled.message_bus_max_channels = scale_size(message_bus_max_channels, 4);
 
         // Buffer size must be power of 2
-        size_t new_buffer = scale_size(message_bus_buffer_size, 256);
+        size_t new_buffer              = scale_size(message_bus_buffer_size, 256);
         scaled.message_bus_buffer_size = next_power_of_2(new_buffer);
 
-        scaled.pool_small_capacity = scale_size(pool_small_capacity, 32);
+        scaled.pool_small_capacity  = scale_size(pool_small_capacity, 32);
         scaled.pool_medium_capacity = scale_size(pool_medium_capacity, 16);
-        scaled.pool_large_capacity = scale_size(pool_large_capacity, 8);
-        scaled.router_max_rules = scale_size(router_max_rules, 16);
-        scaled.router_max_sinks = scale_size(router_max_sinks, 4);
-        scaled.pattern_cache_size = scale_size(pattern_cache_size, 8);
+        scaled.pool_large_capacity  = scale_size(pool_large_capacity, 8);
+        scaled.router_max_rules     = scale_size(router_max_rules, 16);
+        scaled.router_max_sinks     = scale_size(router_max_sinks, 4);
+        scaled.pattern_cache_size   = scale_size(pattern_cache_size, 8);
 
         return scaled;
     }
@@ -366,16 +355,20 @@ struct MemoryConfig {
         }
 
         // Check minimum values
-        if (scheduler_max_queue_size < 10) return false;
-        if (message_bus_max_channels < 1) return false;
-        if (message_bus_buffer_size < 64) return false;
+        if (scheduler_max_queue_size < 10)
+            return false;
+        if (message_bus_max_channels < 1)
+            return false;
+        if (message_bus_buffer_size < 64)
+            return false;
 
         return true;
     }
 
 private:
     static constexpr size_t next_power_of_2(size_t n) noexcept {
-        if (n == 0) return 1;
+        if (n == 0)
+            return 1;
         n--;
         n |= n >> 1;
         n |= n >> 2;
@@ -430,9 +423,7 @@ public:
         return config;
     }
 
-    static void set(const MemoryConfig& config) noexcept {
-        instance() = config;
-    }
+    static void set(const MemoryConfig& config) noexcept { instance() = config; }
 
     static void set_profile(MemoryProfile profile) noexcept {
         if (profile == MemoryProfile::AUTO_DETECT) {
