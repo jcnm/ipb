@@ -31,6 +31,8 @@ endif()
 # ==============================================================================
 if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
     message(STATUS "Config Loader: EMBEDDED mode - using ryml + cJSON")
+    # Define to indicate embedded build mode (regardless of whether ryml/cJSON are found)
+    add_compile_definitions(IPB_BUILD_EMBEDDED)
 
     # Find rapidyaml (ryml) - header-only or compiled
     find_path(RYML_INCLUDE_DIR ryml.hpp
@@ -131,15 +133,17 @@ set(SOURCES
 
     # Scoop Registry
     src/scoop_registry/scoop_registry.cpp
-
-    # Config Loader (platform-specific)
-    src/config/config_loader.cpp
 )
 
-# Add embedded config loader if enabled (requires EMBEDDED build mode)
-if(IPB_CONFIG_EMBEDDED_LOADER AND IPB_BUILD_MODE STREQUAL "EMBEDDED")
+# Config Loader: select platform-appropriate implementation
+if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
+    # EMBEDDED mode: use embedded config loader (ryml + cJSON)
     list(APPEND SOURCES src/config/config_loader_embedded.cpp)
-    message(STATUS "Embedded config loader enabled")
+    message(STATUS "Config loader: embedded implementation (ryml + cJSON)")
+else()
+    # Server/Edge mode: use full config loader (yaml-cpp + jsoncpp)
+    list(APPEND SOURCES src/config/config_loader.cpp)
+    message(STATUS "Config loader: full implementation (yaml-cpp + jsoncpp)")
 endif()
 
 add_library(ipb-core-components ${SOURCES})

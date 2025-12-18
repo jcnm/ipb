@@ -21,11 +21,13 @@
 #endif
 
 // Fallback to standard libraries if embedded libs not available
-#ifndef IPB_CONFIG_USE_RYML
+// NOTE: In EMBEDDED build mode (IPB_BUILD_EMBEDDED), we don't include these
+// fallbacks since yaml-cpp/jsoncpp aren't available
+#if !defined(IPB_CONFIG_USE_RYML) && !defined(IPB_BUILD_EMBEDDED)
 #include <yaml-cpp/yaml.h>
 #endif
 
-#ifndef IPB_CONFIG_USE_CJSON
+#if !defined(IPB_CONFIG_USE_CJSON) && !defined(IPB_BUILD_EMBEDDED)
 #include <json/json.h>
 #endif
 
@@ -956,31 +958,20 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(std::s
             CJsonGuard guard(json);
             config = parse_application_config_cjson(json);
 #else
-            // Fallback to jsoncpp
-            Json::Value root;
-            Json::CharReaderBuilder builder;
-            std::string errors;
-            std::istringstream stream(std::string(content));
-            if (!Json::parseFromStream(builder, stream, &root, &errors)) {
-                return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
-                                                         "JSON parse error: " + errors);
-            }
-            // Use standard parser (not shown for brevity)
+            // No JSON parser available in embedded mode
             return common::Result<ApplicationConfig>(
                 common::ErrorCode::NOT_IMPLEMENTED,
-                "Fallback JSON parsing not implemented in embedded mode");
+                "JSON parsing requires cJSON library in embedded mode");
 #endif
         } else {
 #ifdef IPB_CONFIG_USE_RYML
             ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
             config          = parse_application_config_ryml(tree.rootref());
 #else
-            // Fallback to yaml-cpp
-            YAML::Node root = YAML::Load(std::string(content));
-            // Use standard parser (not shown for brevity)
+            // No YAML parser available in embedded mode
             return common::Result<ApplicationConfig>(
                 common::ErrorCode::NOT_IMPLEMENTED,
-                "Fallback YAML parsing not implemented in embedded mode");
+                "YAML parsing requires rapidyaml library in embedded mode");
 #endif
         }
 
@@ -1255,7 +1246,13 @@ std::unique_ptr<ConfigLoader> create_config_loader_for_platform(
         case common::DeploymentPlatform::SERVER_CLOUD:
         case common::DeploymentPlatform::SERVER_CONTAINERIZED:
         default:
+            // In EMBEDDED build mode, always use embedded config loader
+            // (full config loader requires yaml-cpp + jsoncpp which aren't available)
+#if defined(IPB_BUILD_EMBEDDED)
+            return std::make_unique<EmbeddedConfigLoader>(constraints);
+#else
             return create_config_loader();
+#endif
     }
 }
 
