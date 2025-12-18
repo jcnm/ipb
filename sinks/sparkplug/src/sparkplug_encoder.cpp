@@ -32,8 +32,9 @@ namespace encoder {
 
 /**
  * @brief Get current timestamp in milliseconds since epoch
+ * @note Currently unused but kept for future protobuf implementation
  */
-inline uint64_t get_timestamp_ms() {
+[[maybe_unused]] inline uint64_t get_timestamp_ms() {
     auto now = std::chrono::system_clock::now();
     auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
     return static_cast<uint64_t>(ms.count());
