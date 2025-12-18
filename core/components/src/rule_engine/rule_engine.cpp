@@ -372,6 +372,8 @@ public:
         common::rt::HighResolutionTimer timer;
 
         std::vector<RuleMatchResult> results;
+        // PERFORMANCE: Reserve space for typical number of matches to reduce reallocations
+        results.reserve(4);
         std::string address(dp.address());
 
         IPB_LOG_TRACE(LOG_CAT, "Evaluating rules for address: " << address);
@@ -449,6 +451,8 @@ public:
     std::vector<RuleMatchResult> evaluate_priority(const common::DataPoint& dp,
                                                    RulePriority min_priority) {
         std::vector<RuleMatchResult> results;
+        // PERFORMANCE: Reserve space for typical number of matches
+        results.reserve(4);
 
         std::shared_lock lock(rules_mutex_);
 

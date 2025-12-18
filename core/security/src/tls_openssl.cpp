@@ -41,18 +41,27 @@ std::string get_openssl_error() {
 }
 
 // Version conversion
+// SECURITY: TLS 1.0 and 1.1 are deprecated (RFC 8996) and vulnerable to POODLE, BEAST attacks
+// Minimum enforced version is TLS 1.2
 int tls_version_to_openssl(TLSVersion version) {
     switch (version) {
         case TLSVersion::TLS_1_0:
-            return TLS1_VERSION;
+            // SECURITY: TLS 1.0 is deprecated - upgrade to TLS 1.2
+            std::cerr << "[SECURITY WARNING] TLS 1.0 requested but deprecated (RFC 8996). "
+                      << "Using TLS 1.2 minimum instead." << std::endl;
+            return TLS1_2_VERSION;
         case TLSVersion::TLS_1_1:
-            return TLS1_1_VERSION;
+            // SECURITY: TLS 1.1 is deprecated - upgrade to TLS 1.2
+            std::cerr << "[SECURITY WARNING] TLS 1.1 requested but deprecated (RFC 8996). "
+                      << "Using TLS 1.2 minimum instead." << std::endl;
+            return TLS1_2_VERSION;
         case TLSVersion::TLS_1_2:
             return TLS1_2_VERSION;
         case TLSVersion::TLS_1_3:
             return TLS1_3_VERSION;
         case TLSVersion::AUTO:
-            return 0;
+            // AUTO now defaults to TLS 1.2 minimum for security
+            return TLS1_2_VERSION;
         default:
             return TLS1_2_VERSION;
     }
