@@ -6,7 +6,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop, 'release/*', 'feature/*']
+    branches: [main, develop, 'release/*', 'feature/*', 'claude/*']
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -273,13 +273,26 @@ jobs:
       - name: Install Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format-18 cppcheck
+          sudo apt-get install -y cppcheck
+          # Install clang-format (try version 18 first, fallback to available version)
+          if apt-cache show clang-format-18 >/dev/null 2>&1; then
+            sudo apt-get install -y clang-format-18
+            echo "CLANG_FORMAT=clang-format-18" >> $GITHUB_ENV
+          else
+            sudo apt-get install -y clang-format
+            echo "CLANG_FORMAT=clang-format" >> $GITHUB_ENV
+          fi
 
       - name: Check Formatting
         run: |
-          find core sinks scoops apps transport examples tests benchmarks \
-            \( -name '*.cpp' -o -name '*.hpp' \) -type f 2>/dev/null | \
-            xargs -r clang-format-18 --dry-run --Werror
+          # Find all source files and check formatting
+          FILES=$(find core sinks scoops apps transport examples tests benchmarks \
+            \( -name '*.cpp' -o -name '*.hpp' \) -type f 2>/dev/null || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs $CLANG_FORMAT --dry-run --Werror
+          else
+            echo "No source files found to check"
+          fi
 
       - name: Run cppcheck
         run: |
