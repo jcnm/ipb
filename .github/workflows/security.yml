@@ -164,7 +164,7 @@ jobs:
           cat dependency-report.md
 
       - name: Scan with OSV-Scanner
-        uses: google/osv-scanner-action@v1
+        uses: google/osv-scanner-action@v2.3.1
         continue-on-error: true
 
       - name: Upload Dependency Report
