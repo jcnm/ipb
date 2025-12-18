@@ -237,7 +237,8 @@ public:
 
     constexpr bool operator==(const FixedString& other) const noexcept {
         if (size_ != other.size_) return false;
-        return std::equal(data_.data(), data_.data() + size_, other.data_.data());
+        return std::equal(data_.data(), data_.data() + size_,
+                          other.data_.data(), other.data_.data() + other.size_);
     }
 
     constexpr bool operator!=(const FixedString& other) const noexcept {
