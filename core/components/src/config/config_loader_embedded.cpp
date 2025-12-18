@@ -51,14 +51,14 @@ void reset_memory_tracking() {
     g_peak_memory    = 0;
 }
 
-void track_allocation(size_t size) {
+[[maybe_unused]] void track_allocation(size_t size) {
     g_current_memory += size;
     if (g_current_memory > g_peak_memory) {
         g_peak_memory = g_current_memory;
     }
 }
 
-void track_deallocation(size_t size) {
+[[maybe_unused]] void track_deallocation(size_t size) {
     if (size <= g_current_memory) {
         g_current_memory -= size;
     }

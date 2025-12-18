@@ -225,7 +225,7 @@ private:
  *
  * Supports:
  * - Exact matching: "sensors/temp1"
- * - Single-level wildcard (*): "sensors/*" matches "sensors/temp1"
+ * - Single-level wildcard (*): "sensors/+" matches "sensors/temp1"
  * - Multi-level wildcard (#): "sensors/#" matches "sensors/temp1/value"
  */
 class TopicMatcher {

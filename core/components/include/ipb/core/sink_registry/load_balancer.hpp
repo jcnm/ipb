@@ -30,7 +30,7 @@ public:
 
     /// Select with data point context (for hash-based strategies)
     virtual std::vector<std::string> select(const std::vector<const SinkInfo*>& candidates,
-                                            const common::DataPoint& context) {
+                                            [[maybe_unused]] const common::DataPoint& context) {
         return select(candidates);  // Default ignores context
     }
 

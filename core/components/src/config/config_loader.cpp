@@ -1765,6 +1765,21 @@ common::Result<void> ConfigLoaderImpl::validate(const ScoopConfig& config) {
         return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop ID is required");
     }
 
+    // Validate connection endpoint if specified
+    if (!config.connection.endpoint.host.empty()) {
+        auto endpoint_result = validate_endpoint(config.connection.endpoint);
+        if (!endpoint_result) {
+            return endpoint_result;
+        }
+    }
+
+    // Validate timeouts
+    if (config.connection.connect_timeout.count() < 0 ||
+        config.connection.connect_timeout > std::chrono::minutes(5)) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                    "Scoop '" + config.id + "': connect_timeout out of range (0-5min)");
+    }
+
     return common::Result<void>();
 }
 
@@ -1773,11 +1788,85 @@ common::Result<void> ConfigLoaderImpl::validate(const SinkConfig& config) {
         return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink ID is required");
     }
 
+    // Validate connection endpoint if specified
+    if (!config.connection.endpoint.host.empty()) {
+        auto endpoint_result = validate_endpoint(config.connection.endpoint);
+        if (!endpoint_result) {
+            return endpoint_result;
+        }
+    }
+
+    // Validate timeouts
+    if (config.connection.connect_timeout.count() < 0 ||
+        config.connection.connect_timeout > std::chrono::minutes(5)) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                    "Sink '" + config.id + "': connect_timeout out of range (0-5min)");
+    }
+
     return common::Result<void>();
 }
 
 common::Result<void> ConfigLoaderImpl::validate(const RouterConfig& /*config*/) {
     // Router has sensible defaults, no required fields
+    return common::Result<void>();
+}
+
+common::Result<void> ConfigLoaderImpl::validate_endpoint(const EndpointConfig& config) {
+    // Validate port range (0 means auto/default, 1-65535 are valid)
+    if (config.port > 65535) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                    "Port " + std::to_string(config.port) + " is out of range (0-65535)");
+    }
+
+    // Validate hostname/IP (basic validation - no special characters that could cause issues)
+    if (!config.host.empty()) {
+        // Check for potentially dangerous characters in hostname
+        const std::string forbidden_chars = ";|&$`\\\"'<>(){}[]";
+        for (char c : config.host) {
+            if (forbidden_chars.find(c) != std::string::npos) {
+                return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                            "Host contains invalid character: " + std::string(1, c));
+            }
+        }
+
+        // Check maximum hostname length (RFC 1035)
+        if (config.host.length() > 253) {
+            return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                        "Hostname exceeds maximum length (253 characters)");
+        }
+    }
+
+    // Validate serial port settings if device is specified
+    if (!config.device.empty()) {
+        // Validate baud rate (common values)
+        const std::vector<uint32_t> valid_bauds = {
+            300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
+        };
+        bool valid_baud = std::find(valid_bauds.begin(), valid_bauds.end(), config.baud_rate) != valid_bauds.end();
+        if (!valid_baud && config.baud_rate != 0) {
+            // Just warn, don't fail - custom baud rates may be valid
+            // Future: add logging here
+        }
+
+        // Validate data bits (5-8)
+        if (config.data_bits < 5 || config.data_bits > 8) {
+            return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                        "data_bits must be between 5 and 8");
+        }
+
+        // Validate stop bits (1-2)
+        if (config.stop_bits < 1 || config.stop_bits > 2) {
+            return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                        "stop_bits must be 1 or 2");
+        }
+
+        // Validate parity
+        if (config.parity != 'N' && config.parity != 'E' && config.parity != 'O') {
+            return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                        "parity must be 'N' (none), 'E' (even), or 'O' (odd)");
+        }
+    }
+
     return common::Result<void>();
 }
 

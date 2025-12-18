@@ -193,7 +193,7 @@ private:
  *
  * // Add patterns with their associated data
  * matcher.add_pattern("sensors/temp1", 1, PatternType::EXACT);
- * matcher.add_pattern("sensors/*", 2, PatternType::PREFIX);
+ * matcher.add_pattern("sensors/+", 2, PatternType::PREFIX);
  * matcher.add_pattern("alarms/.*", 3, PatternType::REGEX);
  *
  * // Fast lookup

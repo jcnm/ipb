@@ -715,7 +715,7 @@ bool MQTTScoop::is_running() const noexcept {
     return impl_->is_running();
 }
 
-common::Result<> MQTTScoop::configure(const common::ConfigurationBase& config) {
+common::Result<> MQTTScoop::configure([[maybe_unused]] const common::ConfigurationBase& config) {
     // Configuration should be done via constructor
     return common::ok();
 }

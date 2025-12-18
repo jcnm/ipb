@@ -6,6 +6,7 @@
 #include <regex>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 
 namespace ipb::router {
 
@@ -505,7 +506,8 @@ Router::Router(const RouterConfig& config)
 
 Router::~Router() {
     IPB_LOG_DEBUG(category::ROUTER, "Router destructor called");
-    stop();
+    // Ignore return value in destructor - we can't handle errors here anyway
+    std::ignore = stop();
 }
 
 Router::Router(Router&& other) noexcept
@@ -600,7 +602,7 @@ bool Router::is_running() const noexcept {
     return running_.load(std::memory_order_acquire);
 }
 
-Result<> Router::configure(const ConfigurationBase& config) {
+Result<> Router::configure(const ConfigurationBase& /*config*/) {
     // TODO: Implement runtime configuration
     IPB_LOG_WARN(category::ROUTER, "Runtime configuration not yet supported");
     return err(ErrorCode::NOT_IMPLEMENTED, "Runtime configuration not supported");
@@ -1001,13 +1003,15 @@ void Router::reset_metrics() {
 // ============================================================================
 
 void Router::handle_message(const core::Message& msg) {
+    // Note: Results are intentionally ignored here as this is a fire-and-forget callback
+    // Errors are already logged within the route functions
     if (msg.type == core::Message::Type::DATA_POINT) {
-        route(msg.payload);
+        std::ignore = route(msg.payload);
     } else if (msg.type == core::Message::Type::DATA_BATCH) {
-        route_batch(msg.batch_payload);
+        std::ignore = route_batch(msg.batch_payload);
     } else if (msg.type == core::Message::Type::DEADLINE_TASK) {
         Timestamp deadline(std::chrono::nanoseconds(msg.deadline_ns));
-        route_with_deadline(msg.payload, deadline);
+        std::ignore = route_with_deadline(msg.payload, deadline);
     }
 }
 
