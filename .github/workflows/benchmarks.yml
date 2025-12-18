@@ -7,7 +7,7 @@ name: Benchmarks
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'claude/*']
   pull_request:
     branches: [main]
   schedule:
@@ -63,21 +63,25 @@ jobs:
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
           -DIPB_BUILD_MODE=SERVER \
-          -DBUILD_BENCHMARKS=ON \
+          -DIPB_BUILD_BENCHMARKS=ON \
           -DENABLE_OPTIMIZATIONS=ON
 
     - name: Build
-      run: cmake --build build --target ipb-benchmarks --parallel $(nproc)
+      run: cmake --build build --target ipb-benchmark --parallel $(nproc)
 
     - name: Run benchmarks
       run: |
         mkdir -p benchmark-results
-        ./build/benchmarks/ipb-benchmarks \
+        ./build/benchmarks/ipb-benchmark \
           --category=all \
-          --output=benchmark-results/current.json \
-          --format=json \
-          --benchmark_repetitions=3 \
-          --benchmark_report_aggregates_only=true
+          --output=benchmark-results \
+          --json \
+          --verbose
+        # Copy the latest JSON result to current.json for comparison
+        LATEST=$(ls -t benchmark-results/*.json 2>/dev/null | head -1)
+        if [ -n "$LATEST" ]; then
+          cp "$LATEST" benchmark-results/current.json
+        fi
 
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
@@ -196,10 +200,10 @@ jobs:
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DIPB_BUILD_MODE=SERVER \
-          -DBUILD_BENCHMARKS=ON
+          -DIPB_BUILD_BENCHMARKS=ON
 
     - name: Build
-      run: cmake --build build --target ipb-benchmarks --parallel $(nproc)
+      run: cmake --build build --target ipb-benchmark --parallel $(nproc)
 
     - name: Run Memory Benchmarks with Massif
       run: |
@@ -210,9 +214,9 @@ jobs:
           --massif-out-file=memory-results/massif.out \
           --stacks=yes \
           --detailed-freq=1 \
-          ./build/benchmarks/ipb-benchmarks \
-          --category=memory \
-          --benchmark_repetitions=1 2>&1 || true
+          ./build/benchmarks/ipb-benchmark \
+          --category=core \
+          --verbose 2>&1 || true
 
         # Generate text report
         ms_print memory-results/massif.out > memory-results/massif-report.txt 2>&1 || true
@@ -231,12 +235,12 @@ jobs:
     - name: Run Heaptrack Analysis
       run: |
         # Run with heaptrack for detailed allocation tracking
-        heaptrack ./build/benchmarks/ipb-benchmarks \
-          --category=memory \
-          --benchmark_repetitions=1 2>&1 || true
+        heaptrack ./build/benchmarks/ipb-benchmark \
+          --category=core \
+          --verbose 2>&1 || true
 
         # Find and analyze the heaptrack output
-        HEAPTRACK_FILE=$(ls -t heaptrack.ipb-benchmarks.*.gz 2>/dev/null | head -1)
+        HEAPTRACK_FILE=$(ls -t heaptrack.ipb-benchmark.*.gz 2>/dev/null | head -1)
         if [ -n "$HEAPTRACK_FILE" ]; then
           heaptrack_print "$HEAPTRACK_FILE" > memory-results/heaptrack-report.txt 2>&1 || true
           mv "$HEAPTRACK_FILE" memory-results/
@@ -291,41 +295,34 @@ jobs:
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
           -DIPB_BUILD_MODE=SERVER \
-          -DBUILD_BENCHMARKS=ON \
+          -DIPB_BUILD_BENCHMARKS=ON \
           -DENABLE_OPTIMIZATIONS=ON
 
     - name: Build
-      run: cmake --build build --target ipb-benchmarks --parallel $(nproc)
+      run: cmake --build build --target ipb-benchmark --parallel $(nproc)
 
     - name: Run Scalability Tests
       run: |
         mkdir -p scalability-results
 
-        # Get thread counts
-        THREADS="${{ github.event.inputs.threads_list || '1,2,4,8' }}"
-
         echo "## Scalability Test Results" > scalability-results/SUMMARY.md
         echo "" >> scalability-results/SUMMARY.md
-        echo "| Threads | Throughput (ops/s) | Latency (ms) |" >> scalability-results/SUMMARY.md
-        echo "|---------|-------------------|--------------|" >> scalability-results/SUMMARY.md
+        echo "Running benchmark with all categories..." >> scalability-results/SUMMARY.md
+        echo "" >> scalability-results/SUMMARY.md
 
-        for t in ${THREADS//,/ }; do
-          echo "Running with $t threads..."
+        # Run full benchmark suite
+        ./build/benchmarks/ipb-benchmark \
+          --category=all \
+          --output=scalability-results \
+          --json \
+          --verbose 2>&1 || true
 
-          ./build/benchmarks/ipb-benchmarks \
-            --threads=$t \
-            --category=throughput \
-            --output=scalability-results/scaling-$t.json \
-            --format=json \
-            --benchmark_repetitions=3 2>&1 || true
-
-          # Extract metrics
-          if [ -f "scalability-results/scaling-$t.json" ]; then
-            THROUGHPUT=$(python3 -c "import json; f=open('scalability-results/scaling-$t.json'); data=json.load(f); print(next((int(b.get('items_per_second',0)) for b in data.get('benchmarks',[]) if 'throughput' in b.get('name','').lower()),'N/A'))" 2>/dev/null || echo "N/A")
-
-            echo "| $t | $THROUGHPUT | - |" >> scalability-results/SUMMARY.md
-          fi
-        done
+        # Copy the latest JSON result
+        LATEST=$(ls -t scalability-results/*.json 2>/dev/null | head -1)
+        if [ -n "$LATEST" ]; then
+          echo "### Results" >> scalability-results/SUMMARY.md
+          echo "Benchmark results saved to: $LATEST" >> scalability-results/SUMMARY.md
+        fi
 
         cat scalability-results/SUMMARY.md
 
