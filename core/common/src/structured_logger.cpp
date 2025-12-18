@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <ctime>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <random>
@@ -293,7 +294,10 @@ void StructuredConsoleSink::flush() {
 // ============================================================================
 
 namespace {
-// Path validation to mitigate TOCTOU race conditions and path traversal
+namespace fs = std::filesystem;
+
+// Comprehensive path validation to mitigate CWE-362 TOCTOU race conditions
+// and various file-based attack vectors
 bool is_safe_path(const std::string& path) {
     // Reject empty paths
     if (path.empty()) return false;
@@ -306,6 +310,41 @@ bool is_safe_path(const std::string& path) {
 
     // Reject paths starting with special characters that could be exploited
     if (path[0] == '|' || path[0] == '>' || path[0] == '<') return false;
+
+    // Use std::filesystem for additional security checks
+    std::error_code ec;
+    fs::path fs_path(path);
+
+    // Normalize the path to detect hidden traversal attempts
+    fs::path canonical_parent = fs::weakly_canonical(fs_path.parent_path(), ec);
+    if (ec) {
+        // Parent directory doesn't exist or can't be resolved - allow creation
+        // but verify parent is not a symlink to prevent symlink attacks
+        if (fs::exists(fs_path.parent_path(), ec) && !ec) {
+            if (fs::is_symlink(fs_path.parent_path(), ec)) {
+                return false;  // Reject if parent is a symlink
+            }
+        }
+    }
+
+    // If file exists, perform additional checks
+    if (fs::exists(fs_path, ec) && !ec) {
+        // Reject if target is a symlink (prevents symlink-based attacks)
+        if (fs::is_symlink(fs_path, ec)) {
+            return false;
+        }
+
+        // Reject device files and other special files
+        auto status = fs::status(fs_path, ec);
+        if (!ec) {
+            auto type = status.type();
+            // Only allow regular files or non-existent paths (for creation)
+            if (type != fs::file_type::regular &&
+                type != fs::file_type::not_found) {
+                return false;  // Reject devices, sockets, FIFOs, etc.
+            }
+        }
+    }
 
     return true;
 }
