@@ -102,12 +102,12 @@ public:
         stop();
     }
 
-    common::Result<> start() {
+    common::Result<void> start() {
         IPB_SPAN_CAT("SparkplugScoop::start", LOG_CAT);
 
         if (IPB_UNLIKELY(running_.load())) {
             IPB_LOG_WARN(LOG_CAT, "SparkplugScoop already running");
-            return common::Result<>::success();
+            return common::Result<void>{};
         }
 
         IPB_LOG_INFO(LOG_CAT, "Starting SparkplugScoop...");
@@ -118,12 +118,13 @@ public:
 
         if (IPB_UNLIKELY(!connection_)) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to create MQTT connection");
-            return common::Result<>::failure("Failed to create MQTT connection");
+            return common::Result<void>(common::ErrorCode::CONNECTION_ERROR,
+                                        "Failed to create MQTT connection");
         }
 
         // Setup callbacks
         connection_->set_message_callback(
-            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS qos,
+            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS /*qos*/,
                    bool retained) { handle_message(topic, payload, retained); });
 
         connection_->set_connection_callback(
@@ -134,7 +135,8 @@ public:
         // Connect
         if (IPB_UNLIKELY(!connection_->connect())) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to connect to MQTT broker");
-            return common::Result<>::failure("Failed to connect to MQTT broker");
+            return common::Result<void>(common::ErrorCode::CONNECTION_ERROR,
+                                        "Failed to connect to MQTT broker");
         }
 
         running_.store(true);
@@ -146,15 +148,15 @@ public:
         subscribe_all();
 
         IPB_LOG_INFO(LOG_CAT, "SparkplugScoop started successfully");
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
-    common::Result<> stop() {
+    common::Result<void> stop() {
         IPB_SPAN_CAT("SparkplugScoop::stop", LOG_CAT);
 
         if (!running_.load()) {
             IPB_LOG_DEBUG(LOG_CAT, "SparkplugScoop already stopped");
-            return common::Result<>::success();
+            return common::Result<void>{};
         }
 
         IPB_LOG_INFO(LOG_CAT, "Stopping SparkplugScoop...");
@@ -184,7 +186,7 @@ public:
         connected_.store(false);
 
         IPB_LOG_INFO(LOG_CAT, "SparkplugScoop stopped successfully");
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
     bool is_running() const noexcept { return running_.load(); }
@@ -198,28 +200,28 @@ public:
 
         common::DataSet result;
         while (!data_buffer_.empty()) {
-            result.add(std::move(data_buffer_.front()));
+            result.push_back(std::move(data_buffer_.front()));
             data_buffer_.pop();
         }
 
-        return common::Result<common::DataSet>::success(std::move(result));
+        return common::Result<common::DataSet>(std::move(result));
     }
 
-    common::Result<> subscribe(DataCallback data_cb, ErrorCallback error_cb) {
+    common::Result<void> subscribe(DataCallback data_cb, ErrorCallback error_cb) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
         data_callback_  = std::move(data_cb);
         error_callback_ = std::move(error_cb);
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
-    common::Result<> unsubscribe() {
+    common::Result<void> unsubscribe() {
         std::lock_guard<std::mutex> lock(callback_mutex_);
         data_callback_  = nullptr;
         error_callback_ = nullptr;
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
-    common::Result<> add_address(std::string_view address) {
+    common::Result<void> add_address(std::string_view address) {
         // For Sparkplug, address is a topic pattern
         SubscriptionFilter filter;
         filter.group_id_pattern  = std::string(address);
@@ -237,10 +239,10 @@ public:
             }
         }
 
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
-    common::Result<> remove_address(std::string_view address) {
+    common::Result<void> remove_address(std::string_view address) {
         std::string addr(address);
 
         std::lock_guard<std::mutex> lock(filters_mutex_);
@@ -250,7 +252,7 @@ public:
                            [&](const SubscriptionFilter& f) { return f.group_id_pattern == addr; }),
             filters.end());
 
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
     std::vector<std::string> get_addresses() const {
@@ -683,7 +685,7 @@ private:
                 if (data_callback_) {
                     common::DataSet ds;
                     for (auto& dp : batch) {
-                        ds.add(std::move(dp));
+                        ds.push_back(std::move(dp));
                     }
                     data_callback_(std::move(ds));
                 }
@@ -736,19 +738,19 @@ common::Result<common::DataSet> SparkplugScoop::read_async() {
     return impl_->read();
 }
 
-common::Result<> SparkplugScoop::subscribe(DataCallback data_cb, ErrorCallback error_cb) {
+common::Result<void> SparkplugScoop::subscribe(DataCallback data_cb, ErrorCallback error_cb) {
     return impl_->subscribe(std::move(data_cb), std::move(error_cb));
 }
 
-common::Result<> SparkplugScoop::unsubscribe() {
+common::Result<void> SparkplugScoop::unsubscribe() {
     return impl_->unsubscribe();
 }
 
-common::Result<> SparkplugScoop::add_address(std::string_view address) {
+common::Result<void> SparkplugScoop::add_address(std::string_view address) {
     return impl_->add_address(address);
 }
 
-common::Result<> SparkplugScoop::remove_address(std::string_view address) {
+common::Result<void> SparkplugScoop::remove_address(std::string_view address) {
     return impl_->remove_address(address);
 }
 
@@ -756,11 +758,11 @@ std::vector<std::string> SparkplugScoop::get_addresses() const {
     return impl_->get_addresses();
 }
 
-common::Result<> SparkplugScoop::connect() {
+common::Result<void> SparkplugScoop::connect() {
     return impl_->start();
 }
 
-common::Result<> SparkplugScoop::disconnect() {
+common::Result<void> SparkplugScoop::disconnect() {
     return impl_->stop();
 }
 
@@ -768,11 +770,11 @@ bool SparkplugScoop::is_connected() const noexcept {
     return impl_->is_connected();
 }
 
-common::Result<> SparkplugScoop::start() {
+common::Result<void> SparkplugScoop::start() {
     return impl_->start();
 }
 
-common::Result<> SparkplugScoop::stop() {
+common::Result<void> SparkplugScoop::stop() {
     return impl_->stop();
 }
 
@@ -780,8 +782,8 @@ bool SparkplugScoop::is_running() const noexcept {
     return impl_->is_running();
 }
 
-common::Result<> SparkplugScoop::configure(const common::ConfigurationBase& config) {
-    return common::Result<>::success();
+common::Result<void> SparkplugScoop::configure(const common::ConfigurationBase& /*config*/) {
+    return common::Result<void>{};
 }
 
 std::unique_ptr<common::ConfigurationBase> SparkplugScoop::get_configuration() const {
@@ -790,10 +792,9 @@ std::unique_ptr<common::ConfigurationBase> SparkplugScoop::get_configuration() c
 
 common::Statistics SparkplugScoop::get_statistics() const noexcept {
     common::Statistics stats;
-    stats.messages_received  = impl_->stats_.messages_received.load();
-    stats.messages_processed = impl_->stats_.messages_processed.load();
-    stats.messages_dropped   = impl_->stats_.messages_dropped.load();
-    stats.errors             = impl_->stats_.decode_errors.load();
+    stats.total_messages      = impl_->stats_.messages_received.load();
+    stats.successful_messages = impl_->stats_.messages_processed.load();
+    stats.failed_messages     = impl_->stats_.decode_errors.load();
     return stats;
 }
 

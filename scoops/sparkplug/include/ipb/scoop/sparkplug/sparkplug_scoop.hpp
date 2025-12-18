@@ -338,15 +338,15 @@ public:
     common::Result<common::DataSet> read() override;
     common::Result<common::DataSet> read_async() override;
 
-    common::Result<> subscribe(DataCallback data_cb, ErrorCallback error_cb) override;
-    common::Result<> unsubscribe() override;
+    common::Result<void> subscribe(DataCallback data_cb, ErrorCallback error_cb) override;
+    common::Result<void> unsubscribe() override;
 
-    common::Result<> add_address(std::string_view address) override;
-    common::Result<> remove_address(std::string_view address) override;
+    common::Result<void> add_address(std::string_view address) override;
+    common::Result<void> remove_address(std::string_view address) override;
     std::vector<std::string> get_addresses() const override;
 
-    common::Result<> connect() override;
-    common::Result<> disconnect() override;
+    common::Result<void> connect() override;
+    common::Result<void> disconnect() override;
     bool is_connected() const noexcept override;
 
     uint16_t protocol_id() const noexcept override { return PROTOCOL_ID; }
@@ -356,11 +356,11 @@ public:
     // IIPBComponent Implementation
     //=========================================================================
 
-    common::Result<> start() override;
-    common::Result<> stop() override;
+    common::Result<void> start() override;
+    common::Result<void> stop() override;
     bool is_running() const noexcept override;
 
-    common::Result<> configure(const common::ConfigurationBase& config) override;
+    common::Result<void> configure(const common::ConfigurationBase& config) override;
     std::unique_ptr<common::ConfigurationBase> get_configuration() const override;
 
     common::Statistics get_statistics() const noexcept override;
