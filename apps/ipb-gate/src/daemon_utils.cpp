@@ -59,7 +59,10 @@ bool DaemonUtils::daemonize() {
     }
 
     // Set file permissions
-    umask(0);
+    // SECURITY: umask(027) ensures files are created with secure permissions
+    // Owner: rwx (7), Group: rx (5), Others: none (0)
+    // This prevents world-readable files which could expose sensitive data
+    umask(027);
 
     // Close standard file descriptors
     close(STDIN_FILENO);
