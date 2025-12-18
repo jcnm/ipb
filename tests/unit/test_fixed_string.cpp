@@ -187,7 +187,7 @@ TEST_F(FixedStringAssignmentTest, AssignWithLengthZero) {
 TEST_F(FixedStringAssignmentTest, AssignWithLengthExceedingCapacity) {
     FixedString<8> str;
     str.assign("very long string", 100);  // Length exceeds both string and capacity
-    EXPECT_EQ(str.size(), 7u);  // Capped at MAX_LENGTH
+    EXPECT_EQ(str.size(), 7u);            // Capped at MAX_LENGTH
 }
 
 // ============================================================================
@@ -248,7 +248,7 @@ TEST_F(FixedStringAccessorTest, LengthEqualsSize) {
 TEST_F(FixedStringAccessorTest, MutableDataAccess) {
     FixedString<32> str("abc");
     char* data = str.data();
-    data[1] = 'X';
+    data[1]    = 'X';
     EXPECT_STREQ(str.c_str(), "aXc");
 }
 
@@ -300,14 +300,14 @@ TEST_F(FixedStringModifierTest, PushBack) {
 }
 
 TEST_F(FixedStringModifierTest, PushBackAtCapacity) {
-    FixedString<4> str("abc");  // 3 chars, max is 3
+    FixedString<4> str("abc");         // 3 chars, max is 3
     EXPECT_FALSE(str.push_back('d'));  // Should fail
     EXPECT_STREQ(str.c_str(), "abc");
 }
 
 TEST_F(FixedStringModifierTest, PushBackToExactCapacity) {
-    FixedString<4> str("ab");  // 2 chars, max is 3
-    EXPECT_TRUE(str.push_back('c'));  // Should succeed
+    FixedString<4> str("ab");          // 2 chars, max is 3
+    EXPECT_TRUE(str.push_back('c'));   // Should succeed
     EXPECT_FALSE(str.push_back('d'));  // Should fail
     EXPECT_STREQ(str.c_str(), "abc");
 }
@@ -351,15 +351,15 @@ TEST_F(FixedStringModifierTest, Append) {
 
 TEST_F(FixedStringModifierTest, AppendTruncates) {
     FixedString<10> str("hello");
-    str.append(" world!");  // Would exceed capacity
+    str.append(" world!");      // Would exceed capacity
     EXPECT_EQ(str.size(), 9u);  // Max length is 9
 }
 
 TEST_F(FixedStringModifierTest, AppendReturnsFalseOnTruncation) {
-    FixedString<8> str("hello");  // 5 chars
+    FixedString<8> str("hello");      // 5 chars
     bool result = str.append("abc");  // Would need 8 chars, only 2 available
-    EXPECT_FALSE(result);  // Partial append
-    EXPECT_EQ(str.size(), 7u);  // Max available
+    EXPECT_FALSE(result);             // Partial append
+    EXPECT_EQ(str.size(), 7u);        // Max available
 }
 
 TEST_F(FixedStringModifierTest, AppendEmptyString) {
@@ -789,7 +789,7 @@ TEST_F(FixedStringEdgeCaseTest, SpacesAndTabs) {
 TEST_F(FixedStringEdgeCaseTest, UnicodeCharacters) {
     // UTF-8 multibyte characters will be stored as individual bytes
     FixedString<32> str("\xC3\xA9");  // UTF-8 for 'é'
-    EXPECT_EQ(str.size(), 2u);  // Two bytes for UTF-8
+    EXPECT_EQ(str.size(), 2u);        // Two bytes for UTF-8
 }
 
 TEST_F(FixedStringEdgeCaseTest, RepeatedModifications) {
@@ -838,7 +838,7 @@ TEST_F(FixedStringEdgeCaseTest, ConsecutiveAppends) {
     EXPECT_EQ(str.size(), 30u);
 
     // One more append should truncate
-    str.append("xyz");  // Would need 33, but max is 31
+    str.append("xyz");           // Would need 33, but max is 31
     EXPECT_EQ(str.size(), 31u);  // Truncated to max
 }
 

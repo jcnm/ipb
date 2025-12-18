@@ -265,27 +265,27 @@ struct SparkplugSinkStatisticsInternal {
  * @brief Sparkplug Sink statistics (copyable snapshot)
  */
 struct SparkplugSinkStatistics {
-    uint64_t births_sent         = 0;
-    uint64_t deaths_sent         = 0;
-    uint64_t data_messages_sent  = 0;
-    uint64_t metrics_published   = 0;
-    uint64_t publish_failures    = 0;
-    uint64_t encode_failures     = 0;
-    uint64_t sequence_number     = 0;
+    uint64_t births_sent          = 0;
+    uint64_t deaths_sent          = 0;
+    uint64_t data_messages_sent   = 0;
+    uint64_t metrics_published    = 0;
+    uint64_t publish_failures     = 0;
+    uint64_t encode_failures      = 0;
+    uint64_t sequence_number      = 0;
     uint64_t birth_death_sequence = 0;
-    uint64_t bytes_sent          = 0;
+    uint64_t bytes_sent           = 0;
 
     static SparkplugSinkStatistics from_internal(const SparkplugSinkStatisticsInternal& internal) {
         SparkplugSinkStatistics stats;
-        stats.births_sent         = internal.births_sent.load();
-        stats.deaths_sent         = internal.deaths_sent.load();
-        stats.data_messages_sent  = internal.data_messages_sent.load();
-        stats.metrics_published   = internal.metrics_published.load();
-        stats.publish_failures    = internal.publish_failures.load();
-        stats.encode_failures     = internal.encode_failures.load();
-        stats.sequence_number     = internal.sequence_number.load();
+        stats.births_sent          = internal.births_sent.load();
+        stats.deaths_sent          = internal.deaths_sent.load();
+        stats.data_messages_sent   = internal.data_messages_sent.load();
+        stats.metrics_published    = internal.metrics_published.load();
+        stats.publish_failures     = internal.publish_failures.load();
+        stats.encode_failures      = internal.encode_failures.load();
+        stats.sequence_number      = internal.sequence_number.load();
         stats.birth_death_sequence = internal.birth_death_sequence.load();
-        stats.bytes_sent          = internal.bytes_sent.load();
+        stats.bytes_sent           = internal.bytes_sent.load();
         return stats;
     }
 };
@@ -341,7 +341,8 @@ public:
     common::Result<void> write_dataset(const common::DataSet& dataset) override;
 
     std::future<common::Result<void>> write_async(const common::DataPoint& data_point) override;
-    std::future<common::Result<void>> write_batch_async(std::span<const common::DataPoint> data_points) override;
+    std::future<common::Result<void>> write_batch_async(
+        std::span<const common::DataPoint> data_points) override;
 
     common::Result<void> flush() override;
     size_t pending_count() const noexcept override;

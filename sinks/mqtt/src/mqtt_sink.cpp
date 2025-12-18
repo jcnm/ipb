@@ -678,9 +678,9 @@ Json::Value MQTTSink::data_point_to_json(const common::DataPoint& data_point) co
     json["address"] = std::string(data_point.get_address());
 
     if (config_.messages.include_timestamp) {
-        auto timestamp    = data_point.get_timestamp();
+        auto timestamp = data_point.get_timestamp();
         // Convert IPB Timestamp (nanoseconds since epoch) to system_clock time_point
-        auto system_tp    = std::chrono::system_clock::time_point(
+        auto system_tp = std::chrono::system_clock::time_point(
             std::chrono::duration_cast<std::chrono::system_clock::duration>(
                 std::chrono::nanoseconds(timestamp.nanoseconds())));
         auto time_t_val   = std::chrono::system_clock::to_time_t(system_tp);
@@ -791,7 +791,7 @@ common::Result<void> MQTTSink::publish_batch_internal(const std::vector<common::
     }
 
     auto batch_message = format_batch_message(data_set);
-    auto topic = config_.messages.base_topic + "/batch";
+    auto topic         = config_.messages.base_topic + "/batch";
 
     return publish_message(topic, batch_message, config_.messages.qos, config_.messages.retain);
 }
@@ -816,8 +816,7 @@ bool MQTTSink::should_flush_batch() const {
 
 std::string MQTTSink::data_point_to_csv(const common::DataPoint& data_point) const {
     std::ostringstream oss;
-    oss << data_point.get_address() << ","
-        << data_point.get_timestamp().nanoseconds() << ","
+    oss << data_point.get_address() << "," << data_point.get_timestamp().nanoseconds() << ","
         << static_cast<int>(data_point.get_quality());
     return oss.str();
 }
@@ -825,8 +824,8 @@ std::string MQTTSink::data_point_to_csv(const common::DataPoint& data_point) con
 std::string MQTTSink::data_point_to_influx_line(const common::DataPoint& data_point) const {
     std::ostringstream oss;
     oss << "datapoint,address=" << data_point.get_address()
-        << " quality=" << static_cast<int>(data_point.get_quality())
-        << " " << data_point.get_timestamp().nanoseconds();
+        << " quality=" << static_cast<int>(data_point.get_quality()) << " "
+        << data_point.get_timestamp().nanoseconds();
     return oss.str();
 }
 

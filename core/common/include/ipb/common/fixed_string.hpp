@@ -38,12 +38,10 @@ class FixedString {
 
 public:
     static constexpr size_t MAX_LENGTH = N - 1;
-    static constexpr size_t CAPACITY = N;
+    static constexpr size_t CAPACITY   = N;
 
     /// Default constructor - empty string
-    constexpr FixedString() noexcept : size_(0) {
-        data_[0] = '\0';
-    }
+    constexpr FixedString() noexcept : size_(0) { data_[0] = '\0'; }
 
     /// Construct from C string
     constexpr FixedString(const char* str) noexcept : size_(0) {
@@ -55,24 +53,18 @@ public:
     }
 
     /// Construct from string_view
-    constexpr FixedString(std::string_view sv) noexcept : size_(0) {
-        assign(sv);
-    }
+    constexpr FixedString(std::string_view sv) noexcept : size_(0) { assign(sv); }
 
     /// Construct from std::string
-    FixedString(const std::string& str) noexcept : size_(0) {
-        assign(str);
-    }
+    FixedString(const std::string& str) noexcept : size_(0) { assign(str); }
 
     /// Copy constructor
-    constexpr FixedString(const FixedString& other) noexcept
-        : size_(other.size_) {
+    constexpr FixedString(const FixedString& other) noexcept : size_(other.size_) {
         std::copy_n(other.data_.data(), size_ + 1, data_.data());
     }
 
     /// Move constructor (same as copy for fixed-size)
-    constexpr FixedString(FixedString&& other) noexcept
-        : size_(other.size_) {
+    constexpr FixedString(FixedString&& other) noexcept : size_(other.size_) {
         std::copy_n(other.data_.data(), size_ + 1, data_.data());
     }
 
@@ -86,9 +78,7 @@ public:
     }
 
     /// Move assignment
-    constexpr FixedString& operator=(FixedString&& other) noexcept {
-        return *this = other;
-    }
+    constexpr FixedString& operator=(FixedString&& other) noexcept { return *this = other; }
 
     /// Assign from C string
     constexpr FixedString& operator=(const char* str) noexcept {
@@ -116,7 +106,7 @@ public:
             data_[len] = str[len];
             ++len;
         }
-        size_ = len;
+        size_        = len;
         data_[size_] = '\0';
     }
 
@@ -151,14 +141,10 @@ public:
     }
 
     /// Implicit conversion to string_view
-    constexpr operator std::string_view() const noexcept {
-        return view();
-    }
+    constexpr operator std::string_view() const noexcept { return view(); }
 
     /// Convert to std::string
-    std::string to_string() const {
-        return std::string(data_.data(), size_);
-    }
+    std::string to_string() const { return std::string(data_.data(), size_); }
 
     /// Get length
     constexpr size_t size() const noexcept { return size_; }
@@ -172,13 +158,9 @@ public:
     static constexpr size_t capacity() noexcept { return CAPACITY; }
 
     /// Element access
-    constexpr char operator[](size_t pos) const noexcept {
-        return data_[pos];
-    }
+    constexpr char operator[](size_t pos) const noexcept { return data_[pos]; }
 
-    constexpr char& operator[](size_t pos) noexcept {
-        return data_[pos];
-    }
+    constexpr char& operator[](size_t pos) noexcept { return data_[pos]; }
 
     /// Front and back
     constexpr char front() const noexcept { return data_[0]; }
@@ -190,7 +172,7 @@ public:
 
     /// Clear the string
     constexpr void clear() noexcept {
-        size_ = 0;
+        size_    = 0;
         data_[0] = '\0';
     }
 
@@ -198,7 +180,7 @@ public:
     constexpr bool push_back(char c) noexcept {
         if (size_ < MAX_LENGTH) {
             data_[size_++] = c;
-            data_[size_] = '\0';
+            data_[size_]   = '\0';
             return true;
         }
         return false;
@@ -236,22 +218,17 @@ public:
     // =========================================================================
 
     constexpr bool operator==(const FixedString& other) const noexcept {
-        if (size_ != other.size_) return false;
-        return std::equal(data_.data(), data_.data() + size_,
-                          other.data_.data(), other.data_.data() + other.size_);
+        if (size_ != other.size_)
+            return false;
+        return std::equal(data_.data(), data_.data() + size_, other.data_.data(),
+                          other.data_.data() + other.size_);
     }
 
-    constexpr bool operator!=(const FixedString& other) const noexcept {
-        return !(*this == other);
-    }
+    constexpr bool operator!=(const FixedString& other) const noexcept { return !(*this == other); }
 
-    constexpr bool operator==(std::string_view sv) const noexcept {
-        return view() == sv;
-    }
+    constexpr bool operator==(std::string_view sv) const noexcept { return view() == sv; }
 
-    constexpr bool operator!=(std::string_view sv) const noexcept {
-        return view() != sv;
-    }
+    constexpr bool operator!=(std::string_view sv) const noexcept { return view() != sv; }
 
     constexpr bool operator<(const FixedString& other) const noexcept {
         return view() < other.view();
@@ -275,7 +252,8 @@ public:
 
     constexpr size_t find(char c, size_t pos = 0) const noexcept {
         for (size_t i = pos; i < size_; ++i) {
-            if (data_[i] == c) return i;
+            if (data_[i] == c)
+                return i;
         }
         return std::string_view::npos;
     }
@@ -284,9 +262,7 @@ public:
         return view().find(sv, pos);
     }
 
-    constexpr bool contains(char c) const noexcept {
-        return find(c) != std::string_view::npos;
-    }
+    constexpr bool contains(char c) const noexcept { return find(c) != std::string_view::npos; }
 
     constexpr bool contains(std::string_view sv) const noexcept {
         return find(sv) != std::string_view::npos;
@@ -297,7 +273,8 @@ public:
     }
 
     constexpr bool ends_with(std::string_view sv) const noexcept {
-        if (sv.size() > size_) return false;
+        if (sv.size() > size_)
+            return false;
         return view().substr(size_ - sv.size()) == sv;
     }
 
@@ -314,9 +291,7 @@ public:
     // Hash support
     // =========================================================================
 
-    size_t hash() const noexcept {
-        return std::hash<std::string_view>{}(view());
-    }
+    size_t hash() const noexcept { return std::hash<std::string_view>{}(view()); }
 
 private:
     std::array<char, N> data_;
@@ -352,9 +327,7 @@ namespace std {
 
 template <size_t N>
 struct hash<ipb::common::FixedString<N>> {
-    size_t operator()(const ipb::common::FixedString<N>& s) const noexcept {
-        return s.hash();
-    }
+    size_t operator()(const ipb::common::FixedString<N>& s) const noexcept { return s.hash(); }
 };
 
 }  // namespace std
