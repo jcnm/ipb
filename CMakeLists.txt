@@ -129,21 +129,122 @@ find_package(Threads REQUIRED)
 # Find jsoncpp (not required for EMBEDDED mode)
 if(NOT IPB_BUILD_MODE STREQUAL "EMBEDDED")
     if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
-        find_package(jsoncpp QUIET)
-        if(NOT jsoncpp_FOUND)
-            pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-            add_library(jsoncpp_lib INTERFACE IMPORTED)
-            set_target_properties(jsoncpp_lib PROPERTIES
-                INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIRS}"
-                INTERFACE_LINK_LIBRARIES "${JSONCPP_LIBRARIES}"
+        set(JSONCPP_FOUND FALSE)
+
+        # Method 1: CMake find_package
+        find_package(jsoncpp CONFIG QUIET)
+        if(jsoncpp_FOUND OR TARGET JsonCpp::JsonCpp)
+            set(JSONCPP_FOUND TRUE)
+            if(TARGET JsonCpp::JsonCpp AND NOT TARGET jsoncpp_lib)
+                add_library(jsoncpp_lib ALIAS JsonCpp::JsonCpp)
+            endif()
+            message(STATUS "Found jsoncpp via CMake config")
+        endif()
+
+        # Method 2: Try find_path and find_library
+        if(NOT JSONCPP_FOUND)
+            find_path(JSONCPP_INCLUDE_DIR json/json.h
+                PATHS /usr/include /usr/local/include
+                PATH_SUFFIXES jsoncpp
             )
+            find_library(JSONCPP_LIBRARY
+                NAMES jsoncpp libjsoncpp
+                PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+            )
+            if(JSONCPP_INCLUDE_DIR AND JSONCPP_LIBRARY)
+                set(JSONCPP_FOUND TRUE)
+                if(NOT TARGET jsoncpp_lib)
+                    add_library(jsoncpp_lib UNKNOWN IMPORTED)
+                    set_target_properties(jsoncpp_lib PROPERTIES
+                        IMPORTED_LOCATION "${JSONCPP_LIBRARY}"
+                        INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIR}"
+                    )
+                endif()
+                message(STATUS "Found jsoncpp: ${JSONCPP_LIBRARY}")
+            endif()
+        endif()
+
+        # Method 3: Try pkg-config
+        if(NOT JSONCPP_FOUND)
+            pkg_check_modules(JSONCPP_PKG QUIET jsoncpp)
+            if(JSONCPP_PKG_FOUND)
+                set(JSONCPP_FOUND TRUE)
+                if(NOT TARGET jsoncpp_lib)
+                    add_library(jsoncpp_lib INTERFACE IMPORTED)
+                    set_target_properties(jsoncpp_lib PROPERTIES
+                        INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_PKG_INCLUDE_DIRS}"
+                        INTERFACE_LINK_LIBRARIES "${JSONCPP_PKG_LIBRARIES}"
+                    )
+                endif()
+                message(STATUS "Found jsoncpp via pkg-config")
+            endif()
+        endif()
+
+        if(NOT JSONCPP_FOUND)
+            message(FATAL_ERROR "jsoncpp not found. Install it via:\n"
+                "  Ubuntu/Debian: sudo apt-get install libjsoncpp-dev\n"
+                "  Fedora/RHEL:   sudo dnf install jsoncpp-devel\n"
+                "  macOS:         brew install jsoncpp\n"
+                "Or use -DIPB_BUILD_MODE=EMBEDDED to build without jsoncpp")
         endif()
     endif()
 
     # Find YAML-CPP (not required for EMBEDDED mode)
-    find_package(yaml-cpp QUIET)
-    if(NOT yaml-cpp_FOUND)
-        pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+    # Try multiple methods to find yaml-cpp
+    set(YAML_CPP_FOUND FALSE)
+
+    # Method 1: CMake find_package (CONFIG mode)
+    find_package(yaml-cpp CONFIG QUIET)
+    if(yaml-cpp_FOUND)
+        set(YAML_CPP_FOUND TRUE)
+        message(STATUS "Found yaml-cpp via CMake config")
+    endif()
+
+    # Method 2: Try find_path and find_library
+    if(NOT YAML_CPP_FOUND)
+        find_path(YAML_CPP_INCLUDE_DIR yaml-cpp/yaml.h
+            PATHS /usr/include /usr/local/include
+        )
+        find_library(YAML_CPP_LIBRARY
+            NAMES yaml-cpp libyaml-cpp
+            PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+        )
+        if(YAML_CPP_INCLUDE_DIR AND YAML_CPP_LIBRARY)
+            set(YAML_CPP_FOUND TRUE)
+            # Create imported target for consistency
+            if(NOT TARGET yaml-cpp)
+                add_library(yaml-cpp UNKNOWN IMPORTED)
+                set_target_properties(yaml-cpp PROPERTIES
+                    IMPORTED_LOCATION "${YAML_CPP_LIBRARY}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${YAML_CPP_INCLUDE_DIR}"
+                )
+            endif()
+            message(STATUS "Found yaml-cpp: ${YAML_CPP_LIBRARY}")
+        endif()
+    endif()
+
+    # Method 3: Try pkg-config
+    if(NOT YAML_CPP_FOUND)
+        pkg_check_modules(YAML_CPP_PKG QUIET yaml-cpp)
+        if(YAML_CPP_PKG_FOUND)
+            set(YAML_CPP_FOUND TRUE)
+            if(NOT TARGET yaml-cpp)
+                add_library(yaml-cpp INTERFACE IMPORTED)
+                set_target_properties(yaml-cpp PROPERTIES
+                    INTERFACE_INCLUDE_DIRECTORIES "${YAML_CPP_PKG_INCLUDE_DIRS}"
+                    INTERFACE_LINK_LIBRARIES "${YAML_CPP_PKG_LIBRARIES}"
+                )
+            endif()
+            message(STATUS "Found yaml-cpp via pkg-config")
+        endif()
+    endif()
+
+    if(NOT YAML_CPP_FOUND)
+        message(FATAL_ERROR "yaml-cpp not found. Install it via:\n"
+            "  Ubuntu/Debian: sudo apt-get install libyaml-cpp-dev\n"
+            "  Fedora/RHEL:   sudo dnf install yaml-cpp-devel\n"
+            "  macOS:         brew install yaml-cpp\n"
+            "Or use -DIPB_BUILD_MODE=EMBEDDED to build without yaml-cpp")
     endif()
 else()
     # EMBEDDED mode: use cJSON instead
