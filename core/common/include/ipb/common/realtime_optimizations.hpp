@@ -36,7 +36,7 @@ namespace ipb::common::rt {
  * @return Estimated memory footprint in bytes
  */
 inline size_t initialize(MemoryProfile profile = MemoryProfile::AUTO_DETECT,
-                         size_t max_memory_mb = 0) noexcept {
+                         size_t max_memory_mb  = 0) noexcept {
     // Set memory profile
     GlobalMemoryConfig::set_profile(profile);
 
@@ -152,24 +152,22 @@ public:
 
     template <typename... Args>
     explicit AlignedPtr(Args&&... args)
-        : ptr_(new (::operator new(sizeof(T), std::align_val_t{Alignment}))
+        : ptr_(new(::operator new(sizeof(T), std::align_val_t{Alignment}))
                    T(std::forward<Args>(args)...)) {}
 
     ~AlignedPtr() { aligned_free<T, Alignment>(ptr_); }
 
     // Non-copyable
-    AlignedPtr(const AlignedPtr&) = delete;
+    AlignedPtr(const AlignedPtr&)            = delete;
     AlignedPtr& operator=(const AlignedPtr&) = delete;
 
     // Movable
-    AlignedPtr(AlignedPtr&& other) noexcept : ptr_(other.ptr_) {
-        other.ptr_ = nullptr;
-    }
+    AlignedPtr(AlignedPtr&& other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
 
     AlignedPtr& operator=(AlignedPtr&& other) noexcept {
         if (this != &other) {
             aligned_free<T, Alignment>(ptr_);
-            ptr_ = other.ptr_;
+            ptr_       = other.ptr_;
             other.ptr_ = nullptr;
         }
         return *this;
@@ -195,8 +193,7 @@ private:
  */
 inline int64_t timestamp_ns() noexcept {
     auto now = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(
-        now.time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
 }
 
 /**
@@ -207,19 +204,13 @@ public:
     LatencyMeasure() noexcept : start_(timestamp_ns()) {}
 
     /// Get elapsed time in nanoseconds
-    int64_t elapsed_ns() const noexcept {
-        return timestamp_ns() - start_;
-    }
+    int64_t elapsed_ns() const noexcept { return timestamp_ns() - start_; }
 
     /// Get elapsed time in microseconds
-    double elapsed_us() const noexcept {
-        return static_cast<double>(elapsed_ns()) / 1000.0;
-    }
+    double elapsed_us() const noexcept { return static_cast<double>(elapsed_ns()) / 1000.0; }
 
     /// Reset the timer
-    void reset() noexcept {
-        start_ = timestamp_ns();
-    }
+    void reset() noexcept { start_ = timestamp_ns(); }
 
 private:
     int64_t start_;
@@ -234,9 +225,7 @@ public:
     explicit ScopedLatency(Callback&& cb) noexcept
         : callback_(std::forward<Callback>(cb)), start_(timestamp_ns()) {}
 
-    ~ScopedLatency() {
-        callback_(timestamp_ns() - start_);
-    }
+    ~ScopedLatency() { callback_(timestamp_ns() - start_); }
 
 private:
     Callback callback_;

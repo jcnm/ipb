@@ -124,7 +124,8 @@ public:
 
         // Setup callbacks
         connection_->set_message_callback(
-            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS /*qos*/,
+            [this](const std::string& topic, const std::string& payload,
+                   transport::mqtt::QoS /*qos*/,
                    bool retained) { handle_message(topic, payload, retained); });
 
         connection_->set_connection_callback(

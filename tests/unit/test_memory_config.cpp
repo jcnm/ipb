@@ -89,10 +89,10 @@ TEST_F(MemoryProfileTest, AllProfilesAreValid) {
 }
 
 TEST_F(MemoryProfileTest, ProfilesHaveIncreasingFootprint) {
-    auto embedded = MemoryConfig::embedded();
-    auto iot = MemoryConfig::iot();
-    auto edge = MemoryConfig::edge();
-    auto standard = MemoryConfig::standard();
+    auto embedded  = MemoryConfig::embedded();
+    auto iot       = MemoryConfig::iot();
+    auto edge      = MemoryConfig::edge();
+    auto standard  = MemoryConfig::standard();
     auto high_perf = MemoryConfig::high_performance();
 
     EXPECT_LT(embedded.estimated_footprint(), iot.estimated_footprint());
@@ -102,7 +102,7 @@ TEST_F(MemoryProfileTest, ProfilesHaveIncreasingFootprint) {
 }
 
 TEST_F(MemoryProfileTest, FromProfileCustomReturnsStandard) {
-    auto custom = MemoryConfig::from_profile(MemoryProfile::CUSTOM);
+    auto custom   = MemoryConfig::from_profile(MemoryProfile::CUSTOM);
     auto standard = MemoryConfig::standard();
 
     // CUSTOM should default to STANDARD
@@ -111,7 +111,7 @@ TEST_F(MemoryProfileTest, FromProfileCustomReturnsStandard) {
 
 TEST_F(MemoryProfileTest, FromProfileAutoDetectReturnsStandard) {
     auto auto_detect = MemoryConfig::from_profile(MemoryProfile::AUTO_DETECT);
-    auto standard = MemoryConfig::standard();
+    auto standard    = MemoryConfig::standard();
 
     // AUTO_DETECT in from_profile should default to STANDARD
     EXPECT_EQ(auto_detect.scheduler_max_queue_size, standard.scheduler_max_queue_size);
@@ -135,7 +135,7 @@ TEST_F(ConfigValidationTest, InvalidBufferSizeFailsValidation) {
 }
 
 TEST_F(ConfigValidationTest, ZeroQueueSizeFailsValidation) {
-    MemoryConfig config = MemoryConfig::standard();
+    MemoryConfig config             = MemoryConfig::standard();
     config.scheduler_max_queue_size = 5;  // Less than minimum 10
     EXPECT_FALSE(config.is_valid());
 }
@@ -172,31 +172,31 @@ TEST_F(ConfigValidationTest, BoundaryQueueSizeValidation) {
 }
 
 TEST_F(ConfigValidationTest, ZeroChannelsFailsValidation) {
-    MemoryConfig config = MemoryConfig::standard();
+    MemoryConfig config             = MemoryConfig::standard();
     config.message_bus_max_channels = 0;
     EXPECT_FALSE(config.is_valid());
 }
 
 TEST_F(ConfigValidationTest, MinimumChannelsPassesValidation) {
-    MemoryConfig config = MemoryConfig::standard();
+    MemoryConfig config             = MemoryConfig::standard();
     config.message_bus_max_channels = 1;
     EXPECT_TRUE(config.is_valid());
 }
 
 TEST_F(ConfigValidationTest, BufferSizeBelowMinimumFails) {
-    MemoryConfig config = MemoryConfig::standard();
+    MemoryConfig config            = MemoryConfig::standard();
     config.message_bus_buffer_size = 32;  // Below minimum of 64
     EXPECT_FALSE(config.is_valid());
 }
 
 TEST_F(ConfigValidationTest, BufferSizeAtMinimumPasses) {
-    MemoryConfig config = MemoryConfig::standard();
+    MemoryConfig config            = MemoryConfig::standard();
     config.message_bus_buffer_size = 64;  // Exactly minimum
     EXPECT_TRUE(config.is_valid());
 }
 
 TEST_F(ConfigValidationTest, VeryLargeBufferSizePasses) {
-    MemoryConfig config = MemoryConfig::standard();
+    MemoryConfig config            = MemoryConfig::standard();
     config.message_bus_buffer_size = 1024 * 1024;  // 1MB, power of 2
     EXPECT_TRUE(config.is_valid());
 }
@@ -208,8 +208,8 @@ TEST_F(ConfigValidationTest, VeryLargeBufferSizePasses) {
 class FootprintTest : public ::testing::Test {};
 
 TEST_F(FootprintTest, EmbeddedHasSmallestFootprint) {
-    auto embedded = MemoryConfig::embedded();
-    auto standard = MemoryConfig::standard();
+    auto embedded  = MemoryConfig::embedded();
+    auto standard  = MemoryConfig::standard();
     auto high_perf = MemoryConfig::high_performance();
 
     EXPECT_LT(embedded.estimated_footprint(), standard.estimated_footprint());
@@ -233,24 +233,24 @@ TEST_F(FootprintTest, FootprintIsPositive) {
 }
 
 TEST_F(FootprintTest, FootprintIncreasesWithQueueSize) {
-    MemoryConfig config1 = MemoryConfig::standard();
-    MemoryConfig config2 = MemoryConfig::standard();
+    MemoryConfig config1             = MemoryConfig::standard();
+    MemoryConfig config2             = MemoryConfig::standard();
     config2.scheduler_max_queue_size = config1.scheduler_max_queue_size * 2;
 
     EXPECT_GT(config2.estimated_footprint(), config1.estimated_footprint());
 }
 
 TEST_F(FootprintTest, FootprintIncreasesWithChannels) {
-    MemoryConfig config1 = MemoryConfig::standard();
-    MemoryConfig config2 = MemoryConfig::standard();
+    MemoryConfig config1             = MemoryConfig::standard();
+    MemoryConfig config2             = MemoryConfig::standard();
     config2.message_bus_max_channels = config1.message_bus_max_channels * 2;
 
     EXPECT_GT(config2.estimated_footprint(), config1.estimated_footprint());
 }
 
 TEST_F(FootprintTest, FootprintIncreasesWithBufferSize) {
-    MemoryConfig config1 = MemoryConfig::standard();
-    MemoryConfig config2 = MemoryConfig::standard();
+    MemoryConfig config1            = MemoryConfig::standard();
+    MemoryConfig config2            = MemoryConfig::standard();
     config2.message_bus_buffer_size = config1.message_bus_buffer_size * 2;
 
     EXPECT_GT(config2.estimated_footprint(), config1.estimated_footprint());
@@ -260,10 +260,10 @@ TEST_F(FootprintTest, MinimalConfigFootprint) {
     MemoryConfig config;
     config.scheduler_max_queue_size = 10;
     config.message_bus_max_channels = 1;
-    config.message_bus_buffer_size = 64;
-    config.pool_small_capacity = 0;
-    config.pool_medium_capacity = 0;
-    config.pool_large_capacity = 0;
+    config.message_bus_buffer_size  = 64;
+    config.pool_small_capacity      = 0;
+    config.pool_medium_capacity     = 0;
+    config.pool_large_capacity      = 0;
 
     // Should be very small but positive
     EXPECT_GT(config.estimated_footprint(), 0u);
@@ -271,9 +271,9 @@ TEST_F(FootprintTest, MinimalConfigFootprint) {
 }
 
 TEST_F(FootprintTest, FootprintMBConsistentWithBytes) {
-    auto config = MemoryConfig::standard();
+    auto config  = MemoryConfig::standard();
     size_t bytes = config.estimated_footprint();
-    size_t mb = config.estimated_footprint_mb();
+    size_t mb    = config.estimated_footprint_mb();
 
     EXPECT_EQ(mb, bytes / (1024 * 1024));
 }
@@ -392,7 +392,8 @@ TEST_F(AutoDetectTest, LowMemoryGetsEmbeddedProfile) {
 
 TEST_F(AutoDetectTest, HighMemoryGetsHighPerfProfile) {
     auto config = MemoryConfig::create_for_memory(16ULL * 1024 * 1024 * 1024);  // 16GB
-    EXPECT_EQ(config.scheduler_max_queue_size, MemoryConfig::high_performance().scheduler_max_queue_size);
+    EXPECT_EQ(config.scheduler_max_queue_size,
+              MemoryConfig::high_performance().scheduler_max_queue_size);
 }
 
 TEST_F(AutoDetectTest, AutoDetectReturnsValidConfig) {
@@ -405,7 +406,7 @@ TEST_F(AutoDetectTest, MemoryBoundary64MB) {
     constexpr uint64_t MB = 1024ULL * 1024ULL;
 
     auto below = MemoryConfig::create_for_memory(63 * MB);
-    auto at = MemoryConfig::create_for_memory(64 * MB);
+    auto at    = MemoryConfig::create_for_memory(64 * MB);
 
     EXPECT_EQ(below.scheduler_max_queue_size, MemoryConfig::embedded().scheduler_max_queue_size);
     EXPECT_EQ(at.scheduler_max_queue_size, MemoryConfig::iot().scheduler_max_queue_size);
@@ -415,7 +416,7 @@ TEST_F(AutoDetectTest, MemoryBoundary256MB) {
     constexpr uint64_t MB = 1024ULL * 1024ULL;
 
     auto below = MemoryConfig::create_for_memory(255 * MB);
-    auto at = MemoryConfig::create_for_memory(256 * MB);
+    auto at    = MemoryConfig::create_for_memory(256 * MB);
 
     EXPECT_EQ(below.scheduler_max_queue_size, MemoryConfig::iot().scheduler_max_queue_size);
     EXPECT_EQ(at.scheduler_max_queue_size, MemoryConfig::edge().scheduler_max_queue_size);
@@ -426,7 +427,7 @@ TEST_F(AutoDetectTest, MemoryBoundary1GB) {
     constexpr uint64_t GB = 1024ULL * MB;
 
     auto below = MemoryConfig::create_for_memory(GB - 1);
-    auto at = MemoryConfig::create_for_memory(GB);
+    auto at    = MemoryConfig::create_for_memory(GB);
 
     EXPECT_EQ(below.scheduler_max_queue_size, MemoryConfig::edge().scheduler_max_queue_size);
     EXPECT_EQ(at.scheduler_max_queue_size, MemoryConfig::standard().scheduler_max_queue_size);
@@ -437,10 +438,11 @@ TEST_F(AutoDetectTest, MemoryBoundary8GB) {
     constexpr uint64_t GB = 1024ULL * MB;
 
     auto below = MemoryConfig::create_for_memory(8 * GB - 1);
-    auto at = MemoryConfig::create_for_memory(8 * GB);
+    auto at    = MemoryConfig::create_for_memory(8 * GB);
 
     EXPECT_EQ(below.scheduler_max_queue_size, MemoryConfig::standard().scheduler_max_queue_size);
-    EXPECT_EQ(at.scheduler_max_queue_size, MemoryConfig::high_performance().scheduler_max_queue_size);
+    EXPECT_EQ(at.scheduler_max_queue_size,
+              MemoryConfig::high_performance().scheduler_max_queue_size);
 }
 
 TEST_F(AutoDetectTest, ZeroMemoryGetsEmbedded) {
@@ -450,12 +452,14 @@ TEST_F(AutoDetectTest, ZeroMemoryGetsEmbedded) {
 
 TEST_F(AutoDetectTest, VeryLargeMemoryGetsHighPerf) {
     auto config = MemoryConfig::create_for_memory(1024ULL * 1024 * 1024 * 1024);  // 1TB
-    EXPECT_EQ(config.scheduler_max_queue_size, MemoryConfig::high_performance().scheduler_max_queue_size);
+    EXPECT_EQ(config.scheduler_max_queue_size,
+              MemoryConfig::high_performance().scheduler_max_queue_size);
 }
 
 TEST_F(AutoDetectTest, MaxUint64MemoryGetsHighPerf) {
     auto config = MemoryConfig::create_for_memory(std::numeric_limits<uint64_t>::max());
-    EXPECT_EQ(config.scheduler_max_queue_size, MemoryConfig::high_performance().scheduler_max_queue_size);
+    EXPECT_EQ(config.scheduler_max_queue_size,
+              MemoryConfig::high_performance().scheduler_max_queue_size);
 }
 
 // ============================================================================
@@ -480,7 +484,7 @@ TEST_F(GlobalConfigTest, SetProfileUpdatesInstance) {
 TEST_F(GlobalConfigTest, SetCustomConfigWorks) {
     MemoryConfig custom;
     custom.scheduler_max_queue_size = 12345;
-    custom.message_bus_buffer_size = 1024;
+    custom.message_bus_buffer_size  = 1024;
     custom.message_bus_max_channels = 10;
 
     GlobalMemoryConfig::set(custom);
@@ -580,7 +584,7 @@ TEST_F(MemoryConfigEdgeCaseTest, DefaultConstructedConfig) {
 }
 
 TEST_F(MemoryConfigEdgeCaseTest, CopyConstruction) {
-    auto original = MemoryConfig::embedded();
+    auto original     = MemoryConfig::embedded();
     MemoryConfig copy = original;
 
     EXPECT_EQ(copy.scheduler_max_queue_size, original.scheduler_max_queue_size);
@@ -597,15 +601,15 @@ TEST_F(MemoryConfigEdgeCaseTest, CopyAssignment) {
 }
 
 TEST_F(MemoryConfigEdgeCaseTest, MoveConstruction) {
-    auto original = MemoryConfig::embedded();
+    auto original         = MemoryConfig::embedded();
     size_t expected_queue = original.scheduler_max_queue_size;
-    MemoryConfig moved = std::move(original);
+    MemoryConfig moved    = std::move(original);
 
     EXPECT_EQ(moved.scheduler_max_queue_size, expected_queue);
 }
 
 TEST_F(MemoryConfigEdgeCaseTest, ExtremeSchedulerQueueSize) {
-    MemoryConfig config = MemoryConfig::standard();
+    MemoryConfig config             = MemoryConfig::standard();
     config.scheduler_max_queue_size = std::numeric_limits<size_t>::max();
 
     // Should still be valid as long as buffer size is valid
@@ -626,29 +630,29 @@ TEST_F(MemoryConfigEdgeCaseTest, LargeBufferSizePowerOf2) {
 
 TEST_F(MemoryConfigEdgeCaseTest, AllFieldsModified) {
     MemoryConfig config;
-    config.scheduler_max_queue_size = 1000;
-    config.scheduler_worker_threads = 4;
-    config.message_bus_max_channels = 32;
-    config.message_bus_buffer_size = 2048;
+    config.scheduler_max_queue_size       = 1000;
+    config.scheduler_worker_threads       = 4;
+    config.message_bus_max_channels       = 32;
+    config.message_bus_buffer_size        = 2048;
     config.message_bus_dispatcher_threads = 2;
-    config.pool_small_capacity = 500;
-    config.pool_medium_capacity = 250;
-    config.pool_large_capacity = 125;
-    config.pool_block_size = 32;
-    config.router_max_rules = 128;
-    config.router_max_sinks = 16;
-    config.router_batch_size = 8;
-    config.pattern_cache_size = 64;
+    config.pool_small_capacity            = 500;
+    config.pool_medium_capacity           = 250;
+    config.pool_large_capacity            = 125;
+    config.pool_block_size                = 32;
+    config.router_max_rules               = 128;
+    config.router_max_sinks               = 16;
+    config.router_batch_size              = 8;
+    config.pattern_cache_size             = 64;
 
     EXPECT_TRUE(config.is_valid());
     EXPECT_GT(config.estimated_footprint(), 0u);
 }
 
 TEST_F(MemoryConfigEdgeCaseTest, ZeroPoolCapacities) {
-    MemoryConfig config = MemoryConfig::standard();
-    config.pool_small_capacity = 0;
+    MemoryConfig config         = MemoryConfig::standard();
+    config.pool_small_capacity  = 0;
     config.pool_medium_capacity = 0;
-    config.pool_large_capacity = 0;
+    config.pool_large_capacity  = 0;
 
     // Should still be valid - pools are optional
     EXPECT_TRUE(config.is_valid());
@@ -657,10 +661,10 @@ TEST_F(MemoryConfigEdgeCaseTest, ZeroPoolCapacities) {
 
 TEST_F(MemoryConfigEdgeCaseTest, ConstexprCompileTimeProfile) {
     // Verify constexpr factory methods work at compile time
-    constexpr auto embedded = MemoryConfig::embedded();
-    constexpr auto iot = MemoryConfig::iot();
-    constexpr auto edge = MemoryConfig::edge();
-    constexpr auto standard = MemoryConfig::standard();
+    constexpr auto embedded  = MemoryConfig::embedded();
+    constexpr auto iot       = MemoryConfig::iot();
+    constexpr auto edge      = MemoryConfig::edge();
+    constexpr auto standard  = MemoryConfig::standard();
     constexpr auto high_perf = MemoryConfig::high_performance();
 
     // These should compile and have expected values
@@ -679,7 +683,7 @@ TEST_F(MemoryConfigEdgeCaseTest, ConstexprValidation) {
 
 TEST_F(MemoryConfigEdgeCaseTest, ConstexprFootprint) {
     // Verify footprint calculation works at compile time
-    constexpr auto config = MemoryConfig::standard();
+    constexpr auto config      = MemoryConfig::standard();
     constexpr size_t footprint = config.estimated_footprint();
     static_assert(footprint > 0);
 }

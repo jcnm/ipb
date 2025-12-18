@@ -472,25 +472,29 @@ std::string ConsoleSink::format_json(const common::DataPoint& data_point) const 
     }
 
     if (config_.include_protocol_id) {
-        if (!first) oss << ",";
+        if (!first)
+            oss << ",";
         oss << "\"protocol_id\":" << data_point.get_protocol_id();
         first = false;
     }
 
     if (config_.include_address) {
-        if (!first) oss << ",";
+        if (!first)
+            oss << ",";
         oss << "\"address\":\"" << data_point.get_address() << "\"";
         first = false;
     }
 
     if (config_.include_value && data_point.get_value().has_value()) {
-        if (!first) oss << ",";
+        if (!first)
+            oss << ",";
         oss << "\"value\":\"" << format_value(data_point.get_value().value()) << "\"";
         first = false;
     }
 
     if (config_.include_quality) {
-        if (!first) oss << ",";
+        if (!first)
+            oss << ",";
         oss << "\"quality\":\"" << format_quality(data_point.get_quality()) << "\"";
     }
 

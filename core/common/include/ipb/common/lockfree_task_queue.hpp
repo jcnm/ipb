@@ -44,11 +44,11 @@ class LockFreeSkipList;
  * @brief Task state flags
  */
 enum class TaskState : uint8_t {
-    PENDING = 0,
-    RUNNING = 1,
+    PENDING   = 0,
+    RUNNING   = 1,
     COMPLETED = 2,
     CANCELLED = 3,
-    FAILED = 4
+    FAILED    = 4
 };
 
 /**
@@ -83,14 +83,15 @@ struct alignas(64) LockFreeTask {
     TaskState state = TaskState::PENDING;
 
     /// Task function pointer (lightweight alternative to std::function)
-    using TaskFunction = void(*)(void* context);
+    using TaskFunction   = void (*)(void* context);
     TaskFunction task_fn = nullptr;
-    void* task_context = nullptr;
+    void* task_context   = nullptr;
 
     /// Callback on completion
-    using CompletionCallback = void(*)(uint64_t task_id, TaskState state, int64_t execution_ns, void* context);
+    using CompletionCallback = void (*)(uint64_t task_id, TaskState state, int64_t execution_ns,
+                                        void* context);
     CompletionCallback completion_cb = nullptr;
-    void* completion_context = nullptr;
+    void* completion_context         = nullptr;
 
     /// Execution time (set after completion)
     int64_t execution_time_ns = 0;
@@ -118,13 +119,9 @@ struct alignas(64) LockFreeTask {
         return deadline_ns > other.deadline_ns;
     }
 
-    bool operator<(const LockFreeTask& other) const noexcept {
-        return other > *this;
-    }
+    bool operator<(const LockFreeTask& other) const noexcept { return other > *this; }
 
-    bool operator==(const LockFreeTask& other) const noexcept {
-        return id == other.id;
-    }
+    bool operator==(const LockFreeTask& other) const noexcept { return id == other.id; }
 
     /// Set task name from string_view
     void set_name(std::string_view n) noexcept {
@@ -134,9 +131,7 @@ struct alignas(64) LockFreeTask {
     }
 
     /// Get task name as string_view
-    std::string_view get_name() const noexcept {
-        return std::string_view(name.data());
-    }
+    std::string_view get_name() const noexcept { return std::string_view(name.data()); }
 
     /// Mark task as cancelled
     bool try_cancel() noexcept {
@@ -148,14 +143,10 @@ struct alignas(64) LockFreeTask {
     }
 
     /// Check if task is still valid for execution
-    bool is_pending() const noexcept {
-        return state == TaskState::PENDING;
-    }
+    bool is_pending() const noexcept { return state == TaskState::PENDING; }
 
     /// Check if task is cancelled
-    bool is_cancelled() const noexcept {
-        return state == TaskState::CANCELLED;
-    }
+    bool is_cancelled() const noexcept { return state == TaskState::CANCELLED; }
 };
 
 // ============================================================================
@@ -177,9 +168,7 @@ struct TaggedPtr {
         return ptr == other.ptr && tag == other.tag;
     }
 
-    bool operator!=(const TaggedPtr& other) const noexcept {
-        return !(*this == other);
-    }
+    bool operator!=(const TaggedPtr& other) const noexcept { return !(*this == other); }
 };
 
 // ============================================================================
@@ -192,29 +181,26 @@ struct TaggedPtr {
 template <typename T, size_t MaxLevel = 16>
 struct alignas(64) SkipListNode {
     T value;
-    std::atomic<bool> marked{false};  // For logical deletion
+    std::atomic<bool> marked{false};        // For logical deletion
     std::atomic<bool> fully_linked{false};  // Node is fully inserted
-    uint8_t top_level;  // Highest level this node appears at
+    uint8_t top_level;                      // Highest level this node appears at
 
     // Next pointers for each level (cache-line aligned)
     std::array<std::atomic<SkipListNode*>, MaxLevel> next;
 
-    explicit SkipListNode(uint8_t level = 1) noexcept
-        : top_level(level) {
+    explicit SkipListNode(uint8_t level = 1) noexcept : top_level(level) {
         for (auto& n : next) {
             n.store(nullptr, std::memory_order_relaxed);
         }
     }
 
-    SkipListNode(const T& val, uint8_t level) noexcept
-        : value(val), top_level(level) {
+    SkipListNode(const T& val, uint8_t level) noexcept : value(val), top_level(level) {
         for (auto& n : next) {
             n.store(nullptr, std::memory_order_relaxed);
         }
     }
 
-    SkipListNode(T&& val, uint8_t level) noexcept
-        : value(std::move(val)), top_level(level) {
+    SkipListNode(T&& val, uint8_t level) noexcept : value(std::move(val)), top_level(level) {
         for (auto& n : next) {
             n.store(nullptr, std::memory_order_relaxed);
         }
@@ -239,12 +225,10 @@ template <typename T, typename Compare = std::less<T>>
 class LockFreeSkipList {
 public:
     static constexpr size_t MAX_LEVEL = 16;
-    using Node = SkipListNode<T, MAX_LEVEL>;
+    using Node                        = SkipListNode<T, MAX_LEVEL>;
 
     LockFreeSkipList() noexcept
-        : head_(new Node(MAX_LEVEL)),
-          size_(0),
-          random_gen_(std::random_device{}()) {
+        : head_(new Node(MAX_LEVEL)), size_(0), random_gen_(std::random_device{}()) {
         // Initialize head with maximum level sentinel values
         tail_ = new Node(MAX_LEVEL);
         for (size_t i = 0; i < MAX_LEVEL; ++i) {
@@ -265,7 +249,7 @@ public:
     }
 
     // Non-copyable
-    LockFreeSkipList(const LockFreeSkipList&) = delete;
+    LockFreeSkipList(const LockFreeSkipList&)            = delete;
     LockFreeSkipList& operator=(const LockFreeSkipList&) = delete;
 
     /**
@@ -306,9 +290,8 @@ public:
             Node* pred = preds[0];
             Node* succ = succs[0];
 
-            if (!pred->next[0].compare_exchange_strong(succ, new_node,
-                                                        std::memory_order_release,
-                                                        std::memory_order_relaxed)) {
+            if (!pred->next[0].compare_exchange_strong(succ, new_node, std::memory_order_release,
+                                                       std::memory_order_relaxed)) {
                 delete new_node;
                 continue;  // Retry
             }
@@ -319,9 +302,8 @@ public:
                     pred = preds[level];
                     succ = succs[level];
 
-                    if (pred->next[level].compare_exchange_strong(succ, new_node,
-                                                                   std::memory_order_release,
-                                                                   std::memory_order_relaxed)) {
+                    if (pred->next[level].compare_exchange_strong(
+                            succ, new_node, std::memory_order_release, std::memory_order_relaxed)) {
                         break;
                     }
                     // Re-find predecessors and successors
@@ -361,9 +343,8 @@ public:
 
             // Mark for deletion
             bool expected = false;
-            if (!node_to_remove->marked.compare_exchange_strong(expected, true,
-                                                                 std::memory_order_release,
-                                                                 std::memory_order_relaxed)) {
+            if (!node_to_remove->marked.compare_exchange_strong(
+                    expected, true, std::memory_order_release, std::memory_order_relaxed)) {
                 return false;  // Already marked by another thread
             }
 
@@ -373,9 +354,8 @@ public:
                 Node* pred = preds[level];
 
                 // Try to unlink
-                pred->next[level].compare_exchange_strong(node_to_remove, succ,
-                                                          std::memory_order_release,
-                                                          std::memory_order_relaxed);
+                pred->next[level].compare_exchange_strong(
+                    node_to_remove, succ, std::memory_order_release, std::memory_order_relaxed);
             }
 
             size_.fetch_sub(1, std::memory_order_relaxed);
@@ -403,10 +383,9 @@ public:
             // Check if already marked
             if (first->marked.load(std::memory_order_acquire)) {
                 // Help remove it
-                head_->next[0].compare_exchange_strong(first,
-                    first->next[0].load(std::memory_order_relaxed),
-                    std::memory_order_release,
-                    std::memory_order_relaxed);
+                head_->next[0].compare_exchange_strong(
+                    first, first->next[0].load(std::memory_order_relaxed),
+                    std::memory_order_release, std::memory_order_relaxed);
                 continue;
             }
 
@@ -418,9 +397,8 @@ public:
 
             // Try to mark for deletion
             bool expected = false;
-            if (first->marked.compare_exchange_strong(expected, true,
-                                                       std::memory_order_release,
-                                                       std::memory_order_relaxed)) {
+            if (first->marked.compare_exchange_strong(expected, true, std::memory_order_release,
+                                                      std::memory_order_relaxed)) {
                 // Successfully marked, now unlink
                 T result = std::move(first->value);
 
@@ -436,9 +414,8 @@ public:
 
                     if (curr == first) {
                         Node* succ = first->next[level].load(std::memory_order_relaxed);
-                        pred->next[level].compare_exchange_strong(curr, succ,
-                                                                  std::memory_order_release,
-                                                                  std::memory_order_relaxed);
+                        pred->next[level].compare_exchange_strong(
+                            curr, succ, std::memory_order_release, std::memory_order_relaxed);
                     }
                 }
 
@@ -476,16 +453,12 @@ public:
     /**
      * @brief Get approximate size
      */
-    size_t size() const noexcept {
-        return size_.load(std::memory_order_relaxed);
-    }
+    size_t size() const noexcept { return size_.load(std::memory_order_relaxed); }
 
     /**
      * @brief Check if empty
      */
-    bool empty() const noexcept {
-        return head_->next[0].load(std::memory_order_acquire) == tail_;
-    }
+    bool empty() const noexcept { return head_->next[0].load(std::memory_order_acquire) == tail_; }
 
     /**
      * @brief Remove a task by ID (for cancellation)
@@ -497,8 +470,7 @@ public:
 
         while (curr != tail_) {
             if (!curr->marked.load(std::memory_order_acquire) &&
-                curr->fully_linked.load(std::memory_order_acquire) &&
-                pred(curr->value)) {
+                curr->fully_linked.load(std::memory_order_acquire) && pred(curr->value)) {
                 return remove(curr->value);
             }
             curr = curr->next[0].load(std::memory_order_acquire);
@@ -546,7 +518,8 @@ private:
                     curr = curr->next[level].load(std::memory_order_acquire);
                 }
 
-                if (curr == tail_) break;
+                if (curr == tail_)
+                    break;
 
                 if (compare_(curr->value, value)) {
                     pred = curr;
@@ -559,8 +532,8 @@ private:
             preds[level] = pred;
             succs[level] = curr;
 
-            if (level == 0 && curr != tail_ &&
-                !compare_(value, curr->value) && !compare_(curr->value, value)) {
+            if (level == 0 && curr != tail_ && !compare_(value, curr->value) &&
+                !compare_(curr->value, value)) {
                 found = true;
             }
         }
@@ -591,13 +564,12 @@ public:
      *
      * Note: max_size is advisory for lock-free implementation
      */
-    explicit LockFreeTaskQueue(size_t max_size = 10000) noexcept
-        : max_size_(max_size) {}
+    explicit LockFreeTaskQueue(size_t max_size = 10000) noexcept : max_size_(max_size) {}
 
     ~LockFreeTaskQueue() = default;
 
     // Non-copyable
-    LockFreeTaskQueue(const LockFreeTaskQueue&) = delete;
+    LockFreeTaskQueue(const LockFreeTaskQueue&)            = delete;
     LockFreeTaskQueue& operator=(const LockFreeTaskQueue&) = delete;
 
     /**
@@ -633,9 +605,7 @@ public:
     /**
      * @brief Try to pop without blocking (same as pop for lock-free)
      */
-    bool try_pop(Task& task) noexcept {
-        return pop(task);
-    }
+    bool try_pop(Task& task) noexcept { return pop(task); }
 
     /**
      * @brief Peek at the earliest deadline task
@@ -655,9 +625,7 @@ public:
      * Uses lazy deletion - marks task as cancelled.
      */
     bool remove(uint64_t task_id) noexcept {
-        return skip_list_.remove_if([task_id](const Task& t) {
-            return t.id == task_id;
-        });
+        return skip_list_.remove_if([task_id](const Task& t) { return t.id == task_id; });
     }
 
     /**
@@ -675,23 +643,17 @@ public:
     /**
      * @brief Check if queue is empty
      */
-    bool empty() const noexcept {
-        return skip_list_.empty();
-    }
+    bool empty() const noexcept { return skip_list_.empty(); }
 
     /**
      * @brief Get current size
      */
-    size_t size() const noexcept {
-        return skip_list_.size();
-    }
+    size_t size() const noexcept { return skip_list_.size(); }
 
     /**
      * @brief Get maximum size
      */
-    size_t max_size() const noexcept {
-        return max_size_;
-    }
+    size_t max_size() const noexcept { return max_size_; }
 
     /**
      * @brief Get nearest deadline (if any)
