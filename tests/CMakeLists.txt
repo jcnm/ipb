@@ -40,6 +40,11 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/system/CMakeLists.txt")
     add_subdirectory(system)
 endif()
 
+# E2E tests (if directory exists)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/e2e/CMakeLists.txt")
+    add_subdirectory(e2e)
+endif()
+
 # Custom test targets
 add_custom_target(test-unit
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L unit
