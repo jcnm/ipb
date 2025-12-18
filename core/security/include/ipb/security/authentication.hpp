@@ -8,11 +8,13 @@
  * - API Key authentication
  * - JWT token validation
  * - Bearer token support
- * - Credential store with secure hashing
+ * - Credential store with secure hashing (SHA-256 via OpenSSL)
  * - Session management
  * - Rate limiting per identity
  *
  * Thread-safe and designed for high-performance scenarios.
+ *
+ * Security: Uses OpenSSL for cryptographic operations (SHA-256, CSPRNG)
  */
 
 #include <algorithm>
@@ -20,15 +22,21 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <iomanip>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <random>
 #include <shared_mutex>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+
+// OpenSSL for cryptographic operations
+#include <openssl/evp.h>
+#include <openssl/rand.h>
 
 namespace ipb::security {
 
@@ -143,26 +151,56 @@ struct SessionToken {
 //=============================================================================
 
 /**
- * @brief Secure hash utilities
+ * @brief Secure hash utilities using OpenSSL
+ *
+ * Security features:
+ * - SHA-256 via OpenSSL EVP API (not std::hash)
+ * - CSPRNG via OpenSSL RAND_bytes (not std::mt19937)
+ * - Constant-time comparison to prevent timing attacks
  */
 class SecureHash {
 public:
     /**
-     * @brief SHA-256 hash of string
+     * @brief SHA-256 hash of string using OpenSSL
+     * @param input The string to hash
+     * @return 64-character hexadecimal string representing the SHA-256 hash
+     * @throws std::runtime_error if OpenSSL operations fail
      */
     static std::string sha256(std::string_view input) {
-        // Simple hash for demonstration - in production use OpenSSL or similar
-        // This is a placeholder implementation
-        std::hash<std::string_view> hasher;
-        size_t h = hasher(input);
+        unsigned char hash[EVP_MAX_MD_SIZE];
+        unsigned int hash_len = 0;
 
-        char hex[17];
-        snprintf(hex, sizeof(hex), "%016zx", h);
-        return std::string(hex) + std::string(hex);  // 32 chars
+        // Create and initialize the context
+        EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+        if (!ctx) {
+            throw std::runtime_error("Failed to create EVP_MD_CTX");
+        }
+
+        // Initialize, update, and finalize the hash
+        bool success = (EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) == 1) &&
+                       (EVP_DigestUpdate(ctx, input.data(), input.size()) == 1) &&
+                       (EVP_DigestFinal_ex(ctx, hash, &hash_len) == 1);
+
+        EVP_MD_CTX_free(ctx);
+
+        if (!success) {
+            throw std::runtime_error("SHA-256 computation failed");
+        }
+
+        // Convert to hexadecimal string
+        std::ostringstream oss;
+        oss << std::hex << std::setfill('0');
+        for (unsigned int i = 0; i < hash_len; ++i) {
+            oss << std::setw(2) << static_cast<int>(hash[i]);
+        }
+        return oss.str();
     }
 
     /**
-     * @brief Hash password with salt
+     * @brief Hash password with salt using SHA-256
+     * @param password The password to hash
+     * @param salt The salt to use
+     * @return SHA-256 hash of salt:password
      */
     static std::string hash_password(std::string_view password, std::string_view salt) {
         std::string combined = std::string(salt) + ":" + std::string(password);
@@ -170,36 +208,61 @@ public:
     }
 
     /**
-     * @brief Generate random salt
+     * @brief Generate cryptographically secure random bytes
+     * @param length Number of random bytes to generate
+     * @return Vector of random bytes
+     * @throws std::runtime_error if CSPRNG fails
+     */
+    static std::vector<unsigned char> random_bytes(size_t length) {
+        std::vector<unsigned char> buffer(length);
+        if (RAND_bytes(buffer.data(), static_cast<int>(length)) != 1) {
+            throw std::runtime_error("CSPRNG failed to generate random bytes");
+        }
+        return buffer;
+    }
+
+    /**
+     * @brief Generate random salt using CSPRNG (OpenSSL RAND_bytes)
+     * @param length Length of the salt in characters
+     * @return Cryptographically secure random alphanumeric string
      */
     static std::string generate_salt(size_t length = 16) {
         static constexpr char chars[] =
             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        static constexpr size_t chars_len = sizeof(chars) - 1;
 
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dist(0, sizeof(chars) - 2);
+        auto bytes = random_bytes(length);
 
         std::string salt;
         salt.reserve(length);
         for (size_t i = 0; i < length; ++i) {
-            salt += chars[dist(gen)];
+            salt += chars[bytes[i] % chars_len];
         }
         return salt;
     }
 
     /**
-     * @brief Generate API key
+     * @brief Generate cryptographically secure API key
+     * @param length Length of the API key
+     * @return Secure random API key
      */
     static std::string generate_api_key(size_t length = 32) { return generate_salt(length); }
 
     /**
-     * @brief Generate session token
+     * @brief Generate cryptographically secure session token
+     * @param length Length of the session token
+     * @return Secure random session token
      */
     static std::string generate_token(size_t length = 64) { return generate_salt(length); }
 
     /**
      * @brief Constant-time string comparison (timing-attack safe)
+     * @param a First string to compare
+     * @param b Second string to compare
+     * @return true if strings are equal, false otherwise
+     *
+     * This function compares all bytes regardless of where differences occur,
+     * preventing timing attacks that could reveal information about the strings.
      */
     static bool secure_compare(std::string_view a, std::string_view b) {
         if (a.size() != b.size())

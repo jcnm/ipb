@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <iostream>
 #include <mutex>
 
 #include <openssl/bio.h>
@@ -550,6 +551,11 @@ void OpenSSLContext::set_verify_mode(VerifyMode mode) {
     int ssl_mode;
     switch (mode) {
         case VerifyMode::NONE:
+            // SECURITY WARNING: Certificate verification is DISABLED
+            // This makes the connection vulnerable to man-in-the-middle attacks
+            // Only use this mode for development/testing purposes
+            std::cerr << "[SECURITY WARNING] TLS certificate verification DISABLED - "
+                      << "connection is vulnerable to MITM attacks!" << std::endl;
             ssl_mode = SSL_VERIFY_NONE;
             break;
         case VerifyMode::OPTIONAL:

@@ -122,16 +122,29 @@ endif()
 # ============================================================================
 # DEPENDENCIES
 # ============================================================================
+# Security Note: Minimum versions specified to avoid known CVEs
+# Review and update these versions periodically
 
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
+# OpenSSL - Required for cryptographic operations (SHA-256, TLS, CSPRNG)
+# Minimum version 1.1.1 for TLS 1.3 support, prefer 3.x for active support
+find_package(OpenSSL 1.1.1 REQUIRED)
+if(OpenSSL_FOUND)
+    message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
+    if(OPENSSL_VERSION VERSION_LESS "3.0.0")
+        message(WARNING "OpenSSL ${OPENSSL_VERSION} is EOL. Consider upgrading to OpenSSL 3.x")
+    endif()
+endif()
+
 # Find jsoncpp (not required for EMBEDDED mode)
+# Minimum version 1.9.4 to avoid CVE-2022-40734 (DoS via crafted JSON)
 if(NOT IPB_BUILD_MODE STREQUAL "EMBEDDED")
     if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
-        find_package(jsoncpp QUIET)
+        find_package(jsoncpp 1.9.4 QUIET)
         if(NOT jsoncpp_FOUND)
-            pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+            pkg_check_modules(JSONCPP REQUIRED jsoncpp>=1.9.4)
             add_library(jsoncpp_lib INTERFACE IMPORTED)
             set_target_properties(jsoncpp_lib PROPERTIES
                 INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIRS}"
@@ -141,9 +154,10 @@ if(NOT IPB_BUILD_MODE STREQUAL "EMBEDDED")
     endif()
 
     # Find YAML-CPP (not required for EMBEDDED mode)
-    find_package(yaml-cpp QUIET)
+    # Minimum version 0.7.0 for security fixes
+    find_package(yaml-cpp 0.7.0 QUIET)
     if(NOT yaml-cpp_FOUND)
-        pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+        pkg_check_modules(YAML_CPP REQUIRED yaml-cpp>=0.7.0)
     endif()
 else()
     # EMBEDDED mode: use cJSON instead
@@ -164,6 +178,49 @@ if(ENABLE_OPTIMIZATIONS)
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
     endif()
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+endif()
+
+# ============================================================================
+# SECURITY HARDENING FLAGS
+# ============================================================================
+# These flags provide defense-in-depth against common attacks
+option(ENABLE_SECURITY_FLAGS "Enable security hardening compiler flags" ON)
+
+if(ENABLE_SECURITY_FLAGS)
+    # Check if compiler supports security flags
+    include(CheckCXXCompilerFlag)
+
+    # Stack protection (canaries to detect buffer overflows)
+    check_cxx_compiler_flag("-fstack-protector-strong" HAS_STACK_PROTECTOR)
+    if(HAS_STACK_PROTECTOR)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector-strong")
+    endif()
+
+    # Format string vulnerability detection
+    check_cxx_compiler_flag("-Wformat-security" HAS_FORMAT_SECURITY)
+    if(HAS_FORMAT_SECURITY)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat -Wformat-security")
+    endif()
+
+    # Buffer overflow detection (requires optimization)
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_definitions(-D_FORTIFY_SOURCE=2)
+    endif()
+
+    # Position Independent Executable (ASLR support)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+    # Linker security flags (Linux only)
+    if(UNIX AND NOT APPLE)
+        # Read-only relocations
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,relro")
+        # Immediate binding (resolve all symbols at load time)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,now")
+        # Non-executable stack
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,noexecstack")
+    endif()
+
+    message(STATUS "Security hardening flags enabled")
 endif()
 
 if(ENABLE_LTO)
