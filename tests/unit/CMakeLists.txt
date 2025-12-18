@@ -91,6 +91,51 @@ set_tests_properties(test_debug PROPERTIES
     TIMEOUT 120
 )
 
+# DataSet test (covers DataSet, DataSetBuilder, filtering, sorting, grouping)
+add_executable(test_dataset test_dataset.cpp)
+target_link_libraries(test_dataset PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_dataset COMMAND test_dataset)
+set_tests_properties(test_dataset PROPERTIES
+    LABELS "unit;core;common"
+    TIMEOUT 120
+)
+
+# MemoryPool test (covers ObjectPool, PooledPtr, TieredMemoryPool, PoolAllocator)
+add_executable(test_memory_pool test_memory_pool.cpp)
+target_link_libraries(test_memory_pool PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_memory_pool COMMAND test_memory_pool)
+set_tests_properties(test_memory_pool PROPERTIES
+    LABELS "unit;core;common"
+    TIMEOUT 180
+)
+
+# StructuredLogger test (covers LogEntry, StructuredLogger, CorrelationContext, RequestContext)
+add_executable(test_structured_logger test_structured_logger.cpp)
+target_link_libraries(test_structured_logger PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_structured_logger COMMAND test_structured_logger)
+set_tests_properties(test_structured_logger PROPERTIES
+    LABELS "unit;core;common"
+    TIMEOUT 120
+)
+
 # ============================================================================
 # Core/Components Tests - Coverage of scheduler, message_bus, rule_engine, etc.
 # ============================================================================
@@ -277,6 +322,52 @@ set_tests_properties(test_router PROPERTIES
 )
 
 # ============================================================================
+# Transport Tests - Coverage of MQTT and HTTP transport layers
+# ============================================================================
+
+# MQTT Transport test (covers MQTTConnection, MQTTConnectionManager, configs, utilities)
+if(TARGET ipb-mqtt-transport)
+    add_executable(test_mqtt_transport test_mqtt_transport.cpp)
+    target_include_directories(test_mqtt_transport PRIVATE
+        ${CMAKE_SOURCE_DIR}/transport/mqtt/include
+    )
+    target_link_libraries(test_mqtt_transport PRIVATE
+        ipb-mqtt-transport
+        ipb-common
+        GTest::gtest
+        GTest::gtest_main
+        Threads::Threads
+    )
+
+    add_test(NAME test_mqtt_transport COMMAND test_mqtt_transport)
+    set_tests_properties(test_mqtt_transport PROPERTIES
+        LABELS "unit;transport;mqtt"
+        TIMEOUT 180
+    )
+endif()
+
+# HTTP Transport test (covers HTTPClient, HTTPConfig, Request, Response, utilities)
+if(TARGET ipb-http-transport)
+    add_executable(test_http_transport test_http_transport.cpp)
+    target_include_directories(test_http_transport PRIVATE
+        ${CMAKE_SOURCE_DIR}/transport/http/include
+    )
+    target_link_libraries(test_http_transport PRIVATE
+        ipb-http-transport
+        ipb-common
+        GTest::gtest
+        GTest::gtest_main
+        Threads::Threads
+    )
+
+    add_test(NAME test_http_transport COMMAND test_http_transport)
+    set_tests_properties(test_http_transport PROPERTIES
+        LABELS "unit;transport;http"
+        TIMEOUT 180
+    )
+endif()
+
+# ============================================================================
 # Coverage Configuration
 # ============================================================================
 
@@ -292,6 +383,12 @@ if(ENABLE_COVERAGE)
     target_link_options(test_platform PRIVATE --coverage)
     target_compile_options(test_debug PRIVATE --coverage)
     target_link_options(test_debug PRIVATE --coverage)
+    target_compile_options(test_dataset PRIVATE --coverage)
+    target_link_options(test_dataset PRIVATE --coverage)
+    target_compile_options(test_memory_pool PRIVATE --coverage)
+    target_link_options(test_memory_pool PRIVATE --coverage)
+    target_compile_options(test_structured_logger PRIVATE --coverage)
+    target_link_options(test_structured_logger PRIVATE --coverage)
 
     # Core/Components tests
     target_compile_options(test_scheduler PRIVATE --coverage)
@@ -320,6 +417,16 @@ if(ENABLE_COVERAGE)
     target_link_options(test_cached_pattern_matcher PRIVATE --coverage)
     target_compile_options(test_lockfree_task_queue PRIVATE --coverage)
     target_link_options(test_lockfree_task_queue PRIVATE --coverage)
+
+    # Transport tests
+    if(TARGET ipb-mqtt-transport)
+        target_compile_options(test_mqtt_transport PRIVATE --coverage)
+        target_link_options(test_mqtt_transport PRIVATE --coverage)
+    endif()
+    if(TARGET ipb-http-transport)
+        target_compile_options(test_http_transport PRIVATE --coverage)
+        target_link_options(test_http_transport PRIVATE --coverage)
+    endif()
 endif()
 
 # ============================================================================
@@ -333,6 +440,9 @@ message(STATUS "    - test_error (ErrorCode, Error, Result, SourceLocation)")
 message(STATUS "    - test_endpoint (EndPoint, ConnectionStats, rt::SPSCRingBuffer, rt::MemoryPool)")
 message(STATUS "    - test_platform (CPU detection, memory info, env vars, CPU features)")
 message(STATUS "    - test_debug (Logger, TraceId, SpanId, LogFilter, Span)")
+message(STATUS "    - test_dataset (DataSet, DataSetBuilder, filtering, sorting, grouping)")
+message(STATUS "    - test_memory_pool (ObjectPool, PooledPtr, TieredMemoryPool, PoolAllocator)")
+message(STATUS "    - test_structured_logger (LogEntry, StructuredLogger, CorrelationContext, RequestContext)")
 message(STATUS "  Core/Components:")
 message(STATUS "    - test_scheduler (EDFScheduler, ScheduledTask, TaskQueue)")
 message(STATUS "    - test_message_bus (MessageBus, Message, Subscription, Channel)")
@@ -347,3 +457,6 @@ message(STATUS "    - test_memory_config (MemoryProfile, MemoryConfig, GlobalMem
 message(STATUS "    - test_fixed_string (FixedString, TopicString, IdentifierString)")
 message(STATUS "    - test_cached_pattern_matcher (CompiledPattern, PatternCache, PatternType)")
 message(STATUS "    - test_lockfree_task_queue (LockFreeTask, LockFreeSkipList, LockFreeTaskQueue)")
+message(STATUS "  Transport:")
+message(STATUS "    - test_mqtt_transport (MQTTConnection, MQTTConnectionManager, configs, utilities)")
+message(STATUS "    - test_http_transport (HTTPClient, HTTPConfig, Request, Response, utilities)")
