@@ -986,7 +986,7 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(std::s
         return common::Result<ApplicationConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<ApplicationConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                  std::string("Parse error: ") + e.what());
     }
 }
@@ -1009,7 +1009,7 @@ common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(std::string_view c
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<ScoopConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<ScoopConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                    "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1031,7 +1031,7 @@ common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(std::string_view c
         return common::Result<ScoopConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<ScoopConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<ScoopConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                            std::string("Parse error: ") + e.what());
     }
 }
@@ -1054,7 +1054,7 @@ common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(std::string_view con
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<SinkConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<SinkConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                   "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1076,7 +1076,7 @@ common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(std::string_view con
         return common::Result<SinkConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<SinkConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<SinkConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                           std::string("Parse error: ") + e.what());
     }
 }
@@ -1099,7 +1099,7 @@ common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(std::string_view
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<RouterConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<RouterConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                     "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1121,7 +1121,7 @@ common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(std::string_view
         return common::Result<RouterConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<RouterConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<RouterConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                             std::string("Parse error: ") + e.what());
     }
 }
@@ -1195,8 +1195,8 @@ common::Result<void> EmbeddedConfigLoader::validate(const ScoopConfig& config) {
     if (config.id.empty()) {
         return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop ID is required");
     }
-    if (config.type.empty()) {
-        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop type is required");
+    if (config.name.empty()) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop name is required");
     }
     return common::Result<void>();
 }
@@ -1205,8 +1205,8 @@ common::Result<void> EmbeddedConfigLoader::validate(const SinkConfig& config) {
     if (config.id.empty()) {
         return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink ID is required");
     }
-    if (config.type.empty()) {
-        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink type is required");
+    if (config.name.empty()) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink name is required");
     }
     return common::Result<void>();
 }
