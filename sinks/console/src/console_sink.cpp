@@ -8,7 +8,9 @@
 #include <iomanip>
 #include <sstream>
 
+#ifdef IPB_CONSOLE_HAS_JSONCPP
 #include <json/json.h>
+#endif
 
 namespace ipb::sink::console {
 
@@ -265,6 +267,7 @@ common::SinkMetrics ConsoleSink::get_metrics() const {
 }
 
 std::string ConsoleSink::get_sink_info() const {
+#ifdef IPB_CONSOLE_HAS_JSONCPP
     Json::Value info;
     info["type"]                = "console";
     info["format"]              = static_cast<int>(config_.output_format);
@@ -279,6 +282,22 @@ std::string ConsoleSink::get_sink_info() const {
 
     Json::StreamWriterBuilder builder;
     return Json::writeString(builder, info);
+#else
+    // Fallback: simple JSON formatting without jsoncpp
+    std::ostringstream oss;
+    oss << "{";
+    oss << "\"type\":\"console\",";
+    oss << "\"format\":" << static_cast<int>(config_.output_format) << ",";
+    oss << "\"async_enabled\":" << (config_.enable_async_output ? "true" : "false") << ",";
+    oss << "\"file_output_enabled\":" << (config_.enable_file_output ? "true" : "false") << ",";
+    oss << "\"filtering_enabled\":" << (config_.enable_filtering ? "true" : "false") << ",";
+    oss << "\"statistics_enabled\":" << (config_.enable_statistics ? "true" : "false");
+    if (config_.enable_file_output) {
+        oss << ",\"output_file\":\"" << config_.output_file_path << "\"";
+    }
+    oss << "}";
+    return oss.str();
+#endif
 }
 
 void ConsoleSink::worker_loop() {
@@ -415,6 +434,7 @@ std::string ConsoleSink::format_plain(const common::DataPoint& data_point) const
 }
 
 std::string ConsoleSink::format_json(const common::DataPoint& data_point) const {
+#ifdef IPB_CONSOLE_HAS_JSONCPP
     Json::Value json;
 
     if (config_.include_timestamp) {
@@ -440,6 +460,43 @@ std::string ConsoleSink::format_json(const common::DataPoint& data_point) const 
     Json::StreamWriterBuilder builder;
     builder["indentation"] = "";
     return Json::writeString(builder, json) + config_.line_suffix;
+#else
+    // Fallback: simple JSON formatting without jsoncpp
+    std::ostringstream oss;
+    oss << "{";
+    bool first = true;
+
+    if (config_.include_timestamp) {
+        oss << "\"timestamp\":\"" << format_timestamp(data_point.get_timestamp()) << "\"";
+        first = false;
+    }
+
+    if (config_.include_protocol_id) {
+        if (!first) oss << ",";
+        oss << "\"protocol_id\":" << data_point.get_protocol_id();
+        first = false;
+    }
+
+    if (config_.include_address) {
+        if (!first) oss << ",";
+        oss << "\"address\":\"" << data_point.get_address() << "\"";
+        first = false;
+    }
+
+    if (config_.include_value && data_point.get_value().has_value()) {
+        if (!first) oss << ",";
+        oss << "\"value\":\"" << format_value(data_point.get_value().value()) << "\"";
+        first = false;
+    }
+
+    if (config_.include_quality) {
+        if (!first) oss << ",";
+        oss << "\"quality\":\"" << format_quality(data_point.get_quality()) << "\"";
+    }
+
+    oss << "}" << config_.line_suffix;
+    return oss.str();
+#endif
 }
 
 std::string ConsoleSink::format_csv(const common::DataPoint& data_point) const {

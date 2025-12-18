@@ -11,14 +11,17 @@ include_directories(
 )
 
 # Find dependencies
-# Find jsoncpp (avoid conflicts)
-if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
-    find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
-        pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+find_package(Threads REQUIRED)
+
+# jsoncpp is optional for EMBEDDED mode
+if(NOT IPB_BUILD_MODE STREQUAL "EMBEDDED")
+    if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
+        find_package(jsoncpp QUIET)
+        if(NOT jsoncpp_FOUND)
+            pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+        endif()
     endif()
 endif()
-find_package(Threads REQUIRED)
 
 # TODO: Enable these examples once all dependencies are implemented
 # These examples depend on adapters, sinks, and transports that are not yet complete

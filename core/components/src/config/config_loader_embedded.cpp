@@ -21,11 +21,13 @@
 #endif
 
 // Fallback to standard libraries if embedded libs not available
-#ifndef IPB_CONFIG_USE_RYML
+// NOTE: In EMBEDDED build mode (IPB_BUILD_EMBEDDED), we don't include these
+// fallbacks since yaml-cpp/jsoncpp aren't available
+#if !defined(IPB_CONFIG_USE_RYML) && !defined(IPB_BUILD_EMBEDDED)
 #include <yaml-cpp/yaml.h>
 #endif
 
-#ifndef IPB_CONFIG_USE_CJSON
+#if !defined(IPB_CONFIG_USE_CJSON) && !defined(IPB_BUILD_EMBEDDED)
 #include <json/json.h>
 #endif
 
@@ -956,31 +958,20 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(std::s
             CJsonGuard guard(json);
             config = parse_application_config_cjson(json);
 #else
-            // Fallback to jsoncpp
-            Json::Value root;
-            Json::CharReaderBuilder builder;
-            std::string errors;
-            std::istringstream stream(std::string(content));
-            if (!Json::parseFromStream(builder, stream, &root, &errors)) {
-                return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
-                                                         "JSON parse error: " + errors);
-            }
-            // Use standard parser (not shown for brevity)
+            // No JSON parser available in embedded mode
             return common::Result<ApplicationConfig>(
                 common::ErrorCode::NOT_IMPLEMENTED,
-                "Fallback JSON parsing not implemented in embedded mode");
+                "JSON parsing requires cJSON library in embedded mode");
 #endif
         } else {
 #ifdef IPB_CONFIG_USE_RYML
             ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
             config          = parse_application_config_ryml(tree.rootref());
 #else
-            // Fallback to yaml-cpp
-            YAML::Node root = YAML::Load(std::string(content));
-            // Use standard parser (not shown for brevity)
+            // No YAML parser available in embedded mode
             return common::Result<ApplicationConfig>(
                 common::ErrorCode::NOT_IMPLEMENTED,
-                "Fallback YAML parsing not implemented in embedded mode");
+                "YAML parsing requires rapidyaml library in embedded mode");
 #endif
         }
 
@@ -995,7 +986,7 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(std::s
         return common::Result<ApplicationConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<ApplicationConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                  std::string("Parse error: ") + e.what());
     }
 }
@@ -1018,7 +1009,7 @@ common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(std::string_view c
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<ScoopConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<ScoopConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                    "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1040,7 +1031,7 @@ common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(std::string_view c
         return common::Result<ScoopConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<ScoopConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<ScoopConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                            std::string("Parse error: ") + e.what());
     }
 }
@@ -1063,7 +1054,7 @@ common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(std::string_view con
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<SinkConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<SinkConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                   "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1085,7 +1076,7 @@ common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(std::string_view con
         return common::Result<SinkConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<SinkConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<SinkConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                           std::string("Parse error: ") + e.what());
     }
 }
@@ -1108,7 +1099,7 @@ common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(std::string_view
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<RouterConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<RouterConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                     "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1130,7 +1121,7 @@ common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(std::string_view
         return common::Result<RouterConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<RouterConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<RouterConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                             std::string("Parse error: ") + e.what());
     }
 }
@@ -1204,8 +1195,8 @@ common::Result<void> EmbeddedConfigLoader::validate(const ScoopConfig& config) {
     if (config.id.empty()) {
         return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop ID is required");
     }
-    if (config.type.empty()) {
-        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop type is required");
+    if (config.name.empty()) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop name is required");
     }
     return common::Result<void>();
 }
@@ -1214,8 +1205,8 @@ common::Result<void> EmbeddedConfigLoader::validate(const SinkConfig& config) {
     if (config.id.empty()) {
         return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink ID is required");
     }
-    if (config.type.empty()) {
-        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink type is required");
+    if (config.name.empty()) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink name is required");
     }
     return common::Result<void>();
 }
@@ -1255,7 +1246,13 @@ std::unique_ptr<ConfigLoader> create_config_loader_for_platform(
         case common::DeploymentPlatform::SERVER_CLOUD:
         case common::DeploymentPlatform::SERVER_CONTAINERIZED:
         default:
+            // In EMBEDDED build mode, always use embedded config loader
+            // (full config loader requires yaml-cpp + jsoncpp which aren't available)
+#if defined(IPB_BUILD_EMBEDDED)
+            return std::make_unique<EmbeddedConfigLoader>(constraints);
+#else
             return create_config_loader();
+#endif
     }
 }
 

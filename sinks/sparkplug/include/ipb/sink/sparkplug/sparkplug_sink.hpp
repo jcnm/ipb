@@ -23,10 +23,12 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -228,9 +230,9 @@ struct SparkplugSinkConfig {
 //=============================================================================
 
 /**
- * @brief Sparkplug Sink statistics
+ * @brief Sparkplug Sink statistics (internal atomic counters)
  */
-struct SparkplugSinkStatistics {
+struct SparkplugSinkStatisticsInternal {
     // Message counts
     std::atomic<uint64_t> births_sent{0};
     std::atomic<uint64_t> deaths_sent{0};
@@ -256,6 +258,35 @@ struct SparkplugSinkStatistics {
         publish_failures   = 0;
         encode_failures    = 0;
         bytes_sent         = 0;
+    }
+};
+
+/**
+ * @brief Sparkplug Sink statistics (copyable snapshot)
+ */
+struct SparkplugSinkStatistics {
+    uint64_t births_sent         = 0;
+    uint64_t deaths_sent         = 0;
+    uint64_t data_messages_sent  = 0;
+    uint64_t metrics_published   = 0;
+    uint64_t publish_failures    = 0;
+    uint64_t encode_failures     = 0;
+    uint64_t sequence_number     = 0;
+    uint64_t birth_death_sequence = 0;
+    uint64_t bytes_sent          = 0;
+
+    static SparkplugSinkStatistics from_internal(const SparkplugSinkStatisticsInternal& internal) {
+        SparkplugSinkStatistics stats;
+        stats.births_sent         = internal.births_sent.load();
+        stats.deaths_sent         = internal.deaths_sent.load();
+        stats.data_messages_sent  = internal.data_messages_sent.load();
+        stats.metrics_published   = internal.metrics_published.load();
+        stats.publish_failures    = internal.publish_failures.load();
+        stats.encode_failures     = internal.encode_failures.load();
+        stats.sequence_number     = internal.sequence_number.load();
+        stats.birth_death_sequence = internal.birth_death_sequence.load();
+        stats.bytes_sent          = internal.bytes_sent.load();
+        return stats;
     }
 };
 
@@ -305,19 +336,29 @@ public:
     // IIPBSinkBase Implementation
     //=========================================================================
 
-    common::Result<> send(const common::DataPoint& data_point) override;
-    common::Result<> send_batch(const common::DataSet& data_set) override;
-    common::Result<> flush() override;
+    common::Result<void> write(const common::DataPoint& data_point) override;
+    common::Result<void> write_batch(std::span<const common::DataPoint> data_points) override;
+    common::Result<void> write_dataset(const common::DataSet& dataset) override;
+
+    std::future<common::Result<void>> write_async(const common::DataPoint& data_point) override;
+    std::future<common::Result<void>> write_batch_async(std::span<const common::DataPoint> data_points) override;
+
+    common::Result<void> flush() override;
+    size_t pending_count() const noexcept override;
+    bool can_accept_data() const noexcept override;
+
+    std::string_view sink_type() const noexcept override { return PROTOCOL_NAME; }
+    size_t max_batch_size() const noexcept override;
 
     //=========================================================================
     // IIPBComponent Implementation
     //=========================================================================
 
-    common::Result<> start() override;
-    common::Result<> stop() override;
+    common::Result<void> start() override;
+    common::Result<void> stop() override;
     bool is_running() const noexcept override;
 
-    common::Result<> configure(const common::ConfigurationBase& config) override;
+    common::Result<void> configure(const common::ConfigurationBase& config) override;
     std::unique_ptr<common::ConfigurationBase> get_configuration() const override;
 
     common::Statistics get_statistics() const noexcept override;
@@ -336,7 +377,7 @@ public:
     /**
      * @brief Manually trigger a rebirth (NBIRTH + all DBIRTHs)
      */
-    common::Result<> rebirth();
+    common::Result<void> rebirth();
 
     /**
      * @brief Add a new metric definition to the node
@@ -350,14 +391,14 @@ public:
      *
      * Note: Will trigger DBIRTH for the new device
      */
-    common::Result<> add_device(const DeviceConfig& device);
+    common::Result<void> add_device(const DeviceConfig& device);
 
     /**
      * @brief Remove a virtual device
      *
      * Note: Will trigger DDEATH for the device
      */
-    common::Result<> remove_device(const std::string& device_id);
+    common::Result<void> remove_device(const std::string& device_id);
 
     /**
      * @brief Get current sequence number
