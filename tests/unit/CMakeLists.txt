@@ -192,6 +192,70 @@ set_tests_properties(test_scoop_registry PROPERTIES
 )
 
 # ============================================================================
+# Core/Common Real-Time Optimization Tests
+# ============================================================================
+
+# Memory Config test (covers MemoryProfile, MemoryConfig, GlobalMemoryConfig)
+add_executable(test_memory_config test_memory_config.cpp)
+target_link_libraries(test_memory_config PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_memory_config COMMAND test_memory_config)
+set_tests_properties(test_memory_config PROPERTIES
+    LABELS "unit;core;common;realtime"
+    TIMEOUT 120
+)
+
+# Fixed String test (covers FixedString, TopicString, IdentifierString, etc.)
+add_executable(test_fixed_string test_fixed_string.cpp)
+target_link_libraries(test_fixed_string PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_fixed_string COMMAND test_fixed_string)
+set_tests_properties(test_fixed_string PROPERTIES
+    LABELS "unit;core;common;realtime"
+    TIMEOUT 120
+)
+
+# Cached Pattern Matcher test (covers CompiledPattern, PatternCache, PatternType)
+add_executable(test_cached_pattern_matcher test_cached_pattern_matcher.cpp)
+target_link_libraries(test_cached_pattern_matcher PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_cached_pattern_matcher COMMAND test_cached_pattern_matcher)
+set_tests_properties(test_cached_pattern_matcher PROPERTIES
+    LABELS "unit;core;common;realtime"
+    TIMEOUT 180
+)
+
+# Lock-Free Task Queue test (covers LockFreeTask, LockFreeSkipList, LockFreeTaskQueue)
+add_executable(test_lockfree_task_queue test_lockfree_task_queue.cpp)
+target_link_libraries(test_lockfree_task_queue PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_lockfree_task_queue COMMAND test_lockfree_task_queue)
+set_tests_properties(test_lockfree_task_queue PROPERTIES
+    LABELS "unit;core;common;realtime"
+    TIMEOUT 300
+)
+
+# ============================================================================
 # Core/Router Tests - Coverage of router functionality
 # ============================================================================
 
@@ -246,6 +310,16 @@ if(ENABLE_COVERAGE)
     # Core/Router tests
     target_compile_options(test_router PRIVATE --coverage)
     target_link_options(test_router PRIVATE --coverage)
+
+    # Real-Time Optimization tests
+    target_compile_options(test_memory_config PRIVATE --coverage)
+    target_link_options(test_memory_config PRIVATE --coverage)
+    target_compile_options(test_fixed_string PRIVATE --coverage)
+    target_link_options(test_fixed_string PRIVATE --coverage)
+    target_compile_options(test_cached_pattern_matcher PRIVATE --coverage)
+    target_link_options(test_cached_pattern_matcher PRIVATE --coverage)
+    target_compile_options(test_lockfree_task_queue PRIVATE --coverage)
+    target_link_options(test_lockfree_task_queue PRIVATE --coverage)
 endif()
 
 # ============================================================================
@@ -268,3 +342,8 @@ message(STATUS "    - test_sink_registry (SinkRegistry, LoadBalancer, SinkInfo)"
 message(STATUS "    - test_scoop_registry (ScoopRegistry, ReadStrategy, AggregatedSubscription)")
 message(STATUS "  Core/Router:")
 message(STATUS "    - test_router (Router, RuleBuilder, RouterConfig)")
+message(STATUS "  Real-Time Optimizations:")
+message(STATUS "    - test_memory_config (MemoryProfile, MemoryConfig, GlobalMemoryConfig)")
+message(STATUS "    - test_fixed_string (FixedString, TopicString, IdentifierString)")
+message(STATUS "    - test_cached_pattern_matcher (CompiledPattern, PatternCache, PatternType)")
+message(STATUS "    - test_lockfree_task_queue (LockFreeTask, LockFreeSkipList, LockFreeTaskQueue)")
