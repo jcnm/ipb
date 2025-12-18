@@ -200,9 +200,11 @@ int main(int argc, char* argv[]) {
         }
         // Child continues
         setsid();
-        std::freopen("/dev/null", "r", stdin);
-        std::freopen("/dev/null", "w", stdout);
-        std::freopen("/dev/null", "w", stderr);
+        // Redirect standard streams to /dev/null for daemon mode
+        // Use variables to suppress unused result warnings (GCC requires this)
+        [[maybe_unused]] FILE* null_stdin  = std::freopen("/dev/null", "r", stdin);
+        [[maybe_unused]] FILE* null_stdout = std::freopen("/dev/null", "w", stdout);
+        [[maybe_unused]] FILE* null_stderr = std::freopen("/dev/null", "w", stderr);
 #else
         std::fprintf(stderr, "Warning: daemon mode not supported on this platform\n");
 #endif

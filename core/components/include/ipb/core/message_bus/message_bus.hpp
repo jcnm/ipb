@@ -206,8 +206,8 @@ struct MessageBusConfig {
  * MessageBus bus;
  * bus.start();
  *
- * // Subscribe to a topic
- * auto sub = bus.subscribe("sensors/*", [](const Message& msg) {
+ * // Subscribe to a topic (using wildcard pattern)
+ * auto sub = bus.subscribe("sensors/#", [](const Message& msg) {
  *     // Handle message
  * });
  *
