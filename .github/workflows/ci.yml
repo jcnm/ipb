@@ -14,19 +14,33 @@ jobs:
   # Build & Test Matrix
   # ==========================================================================
   build:
-    name: Build (${{ matrix.os }}, ${{ matrix.build_mode }}, ${{ matrix.build_type }})
+    name: Build (${{ matrix.os }}, ${{ matrix.arch }}, ${{ matrix.build_mode }}, ${{ matrix.build_type }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04, macos-13, macos-14]
+        os: [ubuntu-22.04, ubuntu-24.04, macos-13, macos-14, windows-2022]
+        arch: [x64]
         build_mode: [SERVER, EDGE]
         build_type: [Release, Debug]
+        include:
+          # Add x86 builds for Windows only
+          - os: windows-2022
+            arch: x86
+            build_mode: SERVER
+            build_type: Release
+          - os: windows-2022
+            arch: x86
+            build_mode: EDGE
+            build_type: Release
         exclude:
           # Skip Debug builds on macOS to save CI time
           - os: macos-13
             build_type: Debug
           - os: macos-14
+            build_type: Debug
+          # Skip Debug builds on Windows to save CI time
+          - os: windows-2022
             build_type: Debug
 
     steps:
@@ -45,7 +59,14 @@ jobs:
           chmod +x ./scripts/install-deps-macos.sh
           ./scripts/install-deps-macos.sh --skip-brew-update
 
-      - name: Configure CMake
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/install-deps-windows.ps1 -Arch ${{ matrix.arch }} -UseVcpkg
+
+      - name: Configure CMake (Unix)
+        if: runner.os != 'Windows'
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
@@ -54,11 +75,24 @@ jobs:
             -DBUILD_EXAMPLES=OFF \
             -DIPB_BUILD_BENCHMARKS=OFF
 
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vsArch = if ("${{ matrix.arch }}" -eq "x86") { "Win32" } else { "${{ matrix.arch }}" }
+          cmake -B build -G "Visual Studio 17 2022" -A $vsArch `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DIPB_BUILD_MODE=${{ matrix.build_mode }} `
+            -DBUILD_TESTING=ON `
+            -DBUILD_EXAMPLES=OFF `
+            -DIPB_BUILD_BENCHMARKS=OFF `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }}
 
       - name: Run tests
-        run: ctest --test-dir build --output-on-failure --timeout 120
+        run: ctest --test-dir build --output-on-failure --timeout 120 -C ${{ matrix.build_type }}
 
   # ==========================================================================
   # EMBEDDED Mode Build (minimal dependencies)
