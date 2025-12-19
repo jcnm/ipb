@@ -73,12 +73,21 @@ jobs:
       - name: Configure CMake (Unix)
         if: runner.os != 'Windows'
         run: |
+          # Set CMAKE_PREFIX_PATH for macOS to find Homebrew packages
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            if [[ $(uname -m) == "arm64" ]]; then
+              export CMAKE_PREFIX_PATH="/opt/homebrew"
+            else
+              export CMAKE_PREFIX_PATH="/usr/local"
+            fi
+          fi
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DIPB_BUILD_MODE=${{ matrix.build_mode }} \
             -DBUILD_TESTING=ON \
             -DBUILD_EXAMPLES=OFF \
-            -DIPB_BUILD_BENCHMARKS=OFF
+            -DIPB_BUILD_BENCHMARKS=OFF \
+            ${CMAKE_PREFIX_PATH:+-DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH}
 
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
