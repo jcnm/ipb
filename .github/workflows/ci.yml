@@ -36,29 +36,14 @@ jobs:
       - name: Install dependencies (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install \
-            cmake \
-            pkg-config \
-            jsoncpp \
-            yaml-cpp \
-            paho-mqtt-cpp \
-            curl \
-            openssl@3
+          chmod +x ./scripts/install-deps-macos.sh
+          ./scripts/install-deps-macos.sh --skip-brew-update
 
       - name: Configure CMake
         run: |
@@ -122,17 +107,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            lcov
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
+          # Additional coverage tools
+          sudo apt-get install -y lcov
 
       - name: Configure with coverage
         run: |
@@ -174,16 +152,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
 
       - name: Configure with sanitizers
         run: |
@@ -215,17 +185,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            clang-tidy \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
+          # clang-tidy is already installed by the script
 
       - name: Configure
         run: |
