@@ -139,13 +139,25 @@ function Install-Vcpkg {
         return $null
     }
 
-    # Clone vcpkg
-    git clone https://github.com/Microsoft/vcpkg.git $InstallPath
+    # Clone vcpkg (suppress output to prevent it from being captured as return value)
+    git clone https://github.com/Microsoft/vcpkg.git $InstallPath 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Failed to clone vcpkg repository"
+        return $null
+    }
 
-    # Bootstrap vcpkg
+    # Bootstrap vcpkg (suppress output)
     Push-Location $InstallPath
-    .\bootstrap-vcpkg.bat
-    Pop-Location
+    try {
+        & .\bootstrap-vcpkg.bat 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Failed to bootstrap vcpkg"
+            Pop-Location
+            return $null
+        }
+    } finally {
+        Pop-Location
+    }
 
     # Add to PATH
     $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
