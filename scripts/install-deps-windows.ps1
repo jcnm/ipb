@@ -463,9 +463,15 @@ function Main {
         if ($vcpkgPath) {
             Install-VcpkgDependencies -VcpkgPath $vcpkgPath -Minimal:$Minimal -Architecture $Arch
 
-            # Set environment variable
+            # Set environment variable for current session
             [System.Environment]::SetEnvironmentVariable("VCPKG_ROOT", $vcpkgPath, "User")
             $env:VCPKG_ROOT = $vcpkgPath
+
+            # For GitHub Actions: persist env var across steps
+            if ($env:GITHUB_ENV) {
+                "VCPKG_ROOT=$vcpkgPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+                Write-Info "Set VCPKG_ROOT in GitHub Actions environment"
+            }
         }
     }
 
