@@ -60,16 +60,25 @@ target_link_libraries(ipb-scoop-modbus
     ipb-common
     jsoncpp_lib
     ${LIBMODBUS_LIBRARIES}
-    pthread
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-scoop-modbus pthread)
+endif()
 
 # Compiler flags
-target_compile_options(ipb-scoop-modbus PRIVATE
-    -Wall -Wextra -Wpedantic
-    -O3 -march=native
-    -fPIC
-    ${LIBMODBUS_CFLAGS_OTHER}
-)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ipb-scoop-modbus PRIVATE
+        -Wall -Wextra -Wpedantic
+        -O3
+        -fPIC
+        ${LIBMODBUS_CFLAGS_OTHER}
+    )
+    if(NOT APPLE)
+        target_compile_options(ipb-scoop-modbus PRIVATE -march=native)
+    endif()
+elseif(MSVC)
+    target_compile_options(ipb-scoop-modbus PRIVATE /W4 /O2)
+endif()
 
 # Link directories
 target_link_directories(ipb-scoop-modbus PRIVATE

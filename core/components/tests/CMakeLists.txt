@@ -17,8 +17,10 @@ if(GTest_FOUND)
         ipb::common
         GTest::gtest
         GTest::gtest_main
-        pthread
     )
+    if(NOT WIN32)
+        target_link_libraries(test_pattern_matching pthread)
+    endif()
 
     target_compile_features(test_pattern_matching PRIVATE cxx_std_20)
 

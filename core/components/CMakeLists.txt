@@ -192,9 +192,10 @@ endif()
 target_link_libraries(ipb-core-components
     PUBLIC
         ipb::common
-    PRIVATE
-        pthread
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-core-components PRIVATE pthread)
+endif()
 
 # Platform-specific library linking
 if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
