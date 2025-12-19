@@ -244,8 +244,8 @@ function(ipb_find_yaml_cpp OUT_FOUND)
     find_package(yaml-cpp CONFIG QUIET)
     if(yaml-cpp_FOUND)
         message(STATUS "Found yaml-cpp via CMake config")
-        # On macOS with Homebrew, we need to ensure library directories are set
-        # The yaml-cpp CMake config may not set INTERFACE_LINK_DIRECTORIES
+        # On macOS with Homebrew, we need to ensure include and library directories are set
+        # The yaml-cpp CMake config may not set these properly
         if(APPLE AND TARGET yaml-cpp)
             get_target_property(_yaml_cpp_loc yaml-cpp IMPORTED_LOCATION)
             if(NOT _yaml_cpp_loc)
@@ -256,7 +256,13 @@ function(ipb_find_yaml_cpp OUT_FOUND)
             endif()
             if(_yaml_cpp_loc)
                 get_filename_component(_yaml_cpp_dir "${_yaml_cpp_loc}" DIRECTORY)
+                get_filename_component(_yaml_cpp_prefix "${_yaml_cpp_dir}" DIRECTORY)
                 set_property(TARGET yaml-cpp APPEND PROPERTY INTERFACE_LINK_DIRECTORIES "${_yaml_cpp_dir}")
+                # Also ensure include directories are set
+                if(EXISTS "${_yaml_cpp_prefix}/include/yaml-cpp/yaml.h")
+                    set_property(TARGET yaml-cpp APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${_yaml_cpp_prefix}/include")
+                    message(STATUS "  Added yaml-cpp include directory: ${_yaml_cpp_prefix}/include")
+                endif()
                 message(STATUS "  Added yaml-cpp link directory: ${_yaml_cpp_dir}")
             endif()
         endif()
