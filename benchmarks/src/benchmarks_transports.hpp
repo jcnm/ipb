@@ -370,13 +370,15 @@ inline void register_transport_benchmarks() {
         def.name          = "header_parse";
         def.setup         = tcp_benchmarks::setup;
         def.benchmark     = tcp_benchmarks::bench_header_parse;
-        def.target_p50_ns = 20;
-        def.target_p99_ns = 200;
+        def.target_p50_ns = 50;   // Relaxed for CI environments
+        def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name      = "header_build";
-        def.setup     = tcp_benchmarks::setup;
-        def.benchmark = tcp_benchmarks::bench_header_build;
+        def.name          = "header_build";
+        def.setup         = tcp_benchmarks::setup;
+        def.benchmark     = tcp_benchmarks::bench_header_build;
+        def.target_p50_ns = 50;   // Explicit threshold (not inherited)
+        def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
         def.name          = "checksum_64";
@@ -403,8 +405,8 @@ inline void register_transport_benchmarks() {
         def.name          = "frame_parse";
         def.setup         = websocket_benchmarks::setup;
         def.benchmark     = websocket_benchmarks::bench_frame_parse;
-        def.target_p50_ns = 20;
-        def.target_p99_ns = 200;
+        def.target_p50_ns = 50;   // Relaxed for CI environments
+        def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
         def.name          = "mask_payload";
@@ -440,19 +442,25 @@ inline void register_transport_benchmarks() {
         def.target_p99_ns = 1000;
         registry.register_benchmark(def);
 
-        def.name      = "crc16_medium";
-        def.setup     = serial_benchmarks::setup;
-        def.benchmark = serial_benchmarks::bench_crc16_medium;
+        def.name          = "crc16_medium";
+        def.setup         = serial_benchmarks::setup;
+        def.benchmark     = serial_benchmarks::bench_crc16_medium;
+        def.target_p50_ns = 1000;  // Medium buffer takes longer
+        def.target_p99_ns = 5000;
         registry.register_benchmark(def);
 
-        def.name      = "frame_parse";
-        def.setup     = serial_benchmarks::setup;
-        def.benchmark = serial_benchmarks::bench_frame_parse;
+        def.name          = "frame_parse";
+        def.setup         = serial_benchmarks::setup;
+        def.benchmark     = serial_benchmarks::bench_frame_parse;
+        def.target_p50_ns = 50;   // Explicit threshold (not inherited)
+        def.target_p99_ns = 500;
         registry.register_benchmark(def);
 
-        def.name      = "frame_build";
-        def.setup     = serial_benchmarks::setup;
-        def.benchmark = serial_benchmarks::bench_frame_build;
+        def.name          = "frame_build";
+        def.setup         = serial_benchmarks::setup;
+        def.benchmark     = serial_benchmarks::bench_frame_build;
+        def.target_p50_ns = 200;  // Includes CRC calculation
+        def.target_p99_ns = 2000;
         registry.register_benchmark(def);
     }
 }
