@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 INSTALL_MODE="full"
 DRY_RUN=""
 SKIP_BREW_UPDATE=""
-TARGET_ARCH=""  # x64, arm64 (empty = native)
+TARGET_ARCH=""  # x86_64, arm64 (empty = native)
 
 # Logging functions
 log_info() {
@@ -48,13 +48,13 @@ Options:
   -h, --help              Show this help message
   -m, --minimal           Install only essential dependencies
   -f, --full              Install all optional dependencies (default)
-  --arch ARCH             Target architecture: x64 or arm64 (default: native)
+  --arch ARCH             Target architecture: x86_64 or arm64 (default: native)
   --skip-brew-update      Skip Homebrew update (faster)
   --dry-run               Show what would be installed without installing
 
 Examples:
   $(basename "$0")                     # Full installation (native arch)
-  $(basename "$0") --arch x64          # Install for Intel (x86_64)
+  $(basename "$0") --arch x86_64       # Install for Intel Macs
   $(basename "$0") --arch arm64        # Install for Apple Silicon
   $(basename "$0") --minimal           # Essential deps only
   $(basename "$0") --dry-run           # Preview changes
@@ -457,8 +457,8 @@ main() {
                 ;;
             --arch)
                 TARGET_ARCH="$2"
-                if [[ ! "$TARGET_ARCH" =~ ^(x64|arm64)$ ]]; then
-                    log_error "Invalid architecture: $TARGET_ARCH (must be x64 or arm64)"
+                if [[ ! "$TARGET_ARCH" =~ ^(x86_64|arm64)$ ]]; then
+                    log_error "Invalid architecture: $TARGET_ARCH (must be x86_64 or arm64)"
                     exit 1
                 fi
                 shift 2
@@ -473,21 +473,18 @@ main() {
 
     # Set default architecture if not specified
     if [ -z "$TARGET_ARCH" ]; then
-        case $(uname -m) in
-            x86_64) TARGET_ARCH="x64" ;;
-            arm64) TARGET_ARCH="arm64" ;;
-            *) TARGET_ARCH="arm64" ;;
-        esac
+        TARGET_ARCH=$(uname -m)  # x86_64 or arm64
     fi
 
     # Check for cross-compilation
     local native_arch
     native_arch=$(uname -m)
-    if [[ "$native_arch" == "arm64" && "$TARGET_ARCH" == "x64" ]] || \
-       [[ "$native_arch" == "x86_64" && "$TARGET_ARCH" == "arm64" ]]; then
+    if [[ "$native_arch" != "$TARGET_ARCH" ]]; then
         log_warning "Cross-compilation detected: native=$native_arch, target=$TARGET_ARCH"
         log_warning "Homebrew packages are architecture-specific."
-        log_warning "You may need to use Rosetta 2 (x64 on arm64) or build from source."
+        if [[ "$native_arch" == "arm64" && "$TARGET_ARCH" == "x86_64" ]]; then
+            log_info "You can use Rosetta 2 to run x86_64 binaries on Apple Silicon."
+        fi
     fi
 
     echo "=== IPB Dependencies Installation Script for macOS ==="

@@ -37,11 +37,6 @@ jobs:
             arch: x86
             build_mode: EDGE
             build_type: Release
-          # Add arm64 builds for macOS
-          - os: macos-latest
-            arch: arm64
-            build_mode: SERVER
-            build_type: Release
         exclude:
           # Skip Debug builds on macOS to save CI time
           - os: macos-15
@@ -66,7 +61,8 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           chmod +x ./scripts/install-deps-macos.sh
-          ./scripts/install-deps-macos.sh --skip-brew-update --arch ${{ matrix.arch }}
+          # macOS uses native architecture (arm64 on Apple Silicon, x86_64 on Intel)
+          ./scripts/install-deps-macos.sh --skip-brew-update
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
