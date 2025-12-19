@@ -77,10 +77,18 @@ target_link_libraries(ipb-sink-console PUBLIC
 
 # Conditionally add jsoncpp
 if(CONSOLE_HAS_JSONCPP)
-    target_include_directories(ipb-sink-console PRIVATE ${JSONCPP_INCLUDE_DIRS})
-    target_link_directories(ipb-sink-console PRIVATE ${JSONCPP_LIBRARY_DIRS})
-    target_link_libraries(ipb-sink-console PRIVATE ${JSONCPP_LIBRARIES})
-    target_compile_options(ipb-sink-console PRIVATE ${JSONCPP_CFLAGS_OTHER})
+    # Link to the appropriate target or use pkg-config variables
+    if(TARGET JsonCpp::JsonCpp)
+        target_link_libraries(ipb-sink-console PRIVATE JsonCpp::JsonCpp)
+    elseif(TARGET jsoncpp_lib)
+        target_link_libraries(ipb-sink-console PRIVATE jsoncpp_lib)
+    elseif(JSONCPP_FOUND)
+        # Found via pkg-config
+        target_include_directories(ipb-sink-console PRIVATE ${JSONCPP_INCLUDE_DIRS})
+        target_link_directories(ipb-sink-console PRIVATE ${JSONCPP_LIBRARY_DIRS})
+        target_link_libraries(ipb-sink-console PRIVATE ${JSONCPP_LIBRARIES})
+        target_compile_options(ipb-sink-console PRIVATE ${JSONCPP_CFLAGS_OTHER})
+    endif()
     target_compile_definitions(ipb-sink-console PRIVATE IPB_CONSOLE_HAS_JSONCPP)
 endif()
 
