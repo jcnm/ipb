@@ -21,6 +21,7 @@ USE_SUDO=""
 DISTRO=""
 VERSION=""
 PKG_MGR=""
+TARGET_ARCH=""  # x64, x86, arm64 (empty = native)
 
 # Logging functions
 log_info() {
@@ -53,6 +54,7 @@ Options:
   -a, --auto          Auto-detect: try local first, then ask for root
   -m, --minimal       Install only essential dependencies
   -f, --full          Install all optional dependencies
+  --arch ARCH         Target architecture: x64, x86, arm64 (default: native)
   --no-confirm        Skip confirmation prompts
   --dry-run           Show what would be installed without installing
 
@@ -60,7 +62,8 @@ Environment Variables:
   IPB_INSTALL_DIR     Custom installation directory (default: ~/.local)
 
 Examples:
-  $(basename "$0")                  # Auto-detect mode
+  $(basename "$0")                  # Auto-detect mode (native arch)
+  $(basename "$0") --arch x86       # Install 32-bit libraries
   $(basename "$0") --local          # Install without root
   $(basename "$0") --system         # System-wide installation
   $(basename "$0") --minimal        # Essential deps only
@@ -200,9 +203,45 @@ install_system_packages() {
 
 # Install dependencies for Ubuntu/Debian
 install_ubuntu_debian() {
-    log_info "Installing dependencies for Ubuntu/Debian..."
+    log_info "Installing dependencies for Ubuntu/Debian (arch: $TARGET_ARCH)..."
 
-    # Essential build tools
+    # Determine architecture suffix for packages
+    local arch_suffix=""
+    local cross_compile_pkgs=()
+    local native_arch
+    native_arch=$(dpkg --print-architecture)
+
+    case "$TARGET_ARCH" in
+        x86)
+            if [ "$native_arch" = "amd64" ]; then
+                arch_suffix=":i386"
+                cross_compile_pkgs=(gcc-multilib g++-multilib)
+                log_info "Enabling i386 architecture for cross-compilation..."
+                $USE_SUDO dpkg --add-architecture i386
+                $USE_SUDO apt-get update
+            fi
+            ;;
+        arm64)
+            if [ "$native_arch" != "arm64" ]; then
+                arch_suffix=":arm64"
+                cross_compile_pkgs=(gcc-aarch64-linux-gnu g++-aarch64-linux-gnu)
+                log_info "Enabling arm64 architecture for cross-compilation..."
+                $USE_SUDO dpkg --add-architecture arm64
+                $USE_SUDO apt-get update
+            fi
+            ;;
+        x64)
+            # Native on amd64, cross-compile on others
+            if [ "$native_arch" != "amd64" ]; then
+                arch_suffix=":amd64"
+                log_info "Enabling amd64 architecture for cross-compilation..."
+                $USE_SUDO dpkg --add-architecture amd64
+                $USE_SUDO apt-get update
+            fi
+            ;;
+    esac
+
+    # Essential build tools (always native)
     local essential_pkgs=(
         build-essential
         cmake
@@ -212,29 +251,34 @@ install_ubuntu_debian() {
         git
     )
 
-    # Essential libraries
+    # Add cross-compilation toolchain if needed
+    if [ ${#cross_compile_pkgs[@]} -gt 0 ]; then
+        essential_pkgs+=("${cross_compile_pkgs[@]}")
+    fi
+
+    # Essential libraries (with architecture suffix if cross-compiling)
     local lib_pkgs=(
-        libjsoncpp-dev
-        libyaml-cpp-dev
-        libssl-dev
-        libcurl4-openssl-dev
-        zlib1g-dev
-        libgtest-dev
-        libgmock-dev
+        "libjsoncpp-dev${arch_suffix}"
+        "libyaml-cpp-dev${arch_suffix}"
+        "libssl-dev${arch_suffix}"
+        "libcurl4-openssl-dev${arch_suffix}"
+        "zlib1g-dev${arch_suffix}"
+        "libgtest-dev${arch_suffix}"
+        "libgmock-dev${arch_suffix}"
     )
 
     # MQTT dependencies
     local mqtt_pkgs=(
-        libpaho-mqtt-dev
-        libpaho-mqttpp-dev
+        "libpaho-mqtt-dev${arch_suffix}"
+        "libpaho-mqttpp-dev${arch_suffix}"
     )
 
     # Optional dependencies
     local optional_pkgs=(
-        libzmq3-dev
-        libczmq-dev
-        librdkafka-dev
-        libmodbus-dev
+        "libzmq3-dev${arch_suffix}"
+        "libczmq-dev${arch_suffix}"
+        "librdkafka-dev${arch_suffix}"
+        "libmodbus-dev${arch_suffix}"
         valgrind
         clang
         clang-tidy
@@ -488,6 +532,14 @@ main() {
                 DRY_RUN="true"
                 shift
                 ;;
+            --arch)
+                TARGET_ARCH="$2"
+                if [[ ! "$TARGET_ARCH" =~ ^(x64|x86|arm64)$ ]]; then
+                    log_error "Invalid architecture: $TARGET_ARCH (must be x64, x86, or arm64)"
+                    exit 1
+                fi
+                shift 2
+                ;;
             *)
                 log_error "Unknown option: $1"
                 print_usage
@@ -496,7 +548,18 @@ main() {
         esac
     done
 
+    # Set default architecture if not specified
+    if [ -z "$TARGET_ARCH" ]; then
+        case $(uname -m) in
+            x86_64) TARGET_ARCH="x64" ;;
+            i686|i386) TARGET_ARCH="x86" ;;
+            aarch64|arm64) TARGET_ARCH="arm64" ;;
+            *) TARGET_ARCH="x64" ;;
+        esac
+    fi
+
     echo "=== IPB Dependencies Installation Script for Linux ==="
+    log_info "Target architecture: $TARGET_ARCH"
     echo ""
 
     detect_distro

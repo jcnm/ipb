@@ -11,7 +11,9 @@ param(
     [switch]$SkipVcpkg,
     [switch]$DryRun,
     [string]$VcpkgRoot = "",
-    [string]$InstallDir = ""
+    [string]$InstallDir = "",
+    [ValidateSet("x64", "x86", "arm64")]
+    [string]$Arch = "x64"
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,6 +40,7 @@ Options:
   -DryRun            Show what would be installed without installing
   -VcpkgRoot <path>  Path to vcpkg installation
   -InstallDir <path> Custom installation directory
+  -Arch <arch>       Target architecture: x64, x86, or arm64 (default: x64)
 
 Examples:
   .\install-deps-windows.ps1                    # Auto-detect and install
@@ -159,7 +162,8 @@ function Install-Vcpkg {
 function Install-VcpkgDependencies {
     param(
         [string]$VcpkgPath,
-        [bool]$Minimal
+        [bool]$Minimal,
+        [string]$Architecture
     )
 
     $vcpkg = Join-Path $VcpkgPath "vcpkg.exe"
@@ -169,31 +173,32 @@ function Install-VcpkgDependencies {
         return $false
     }
 
-    Write-Info "Installing dependencies via vcpkg..."
+    $triplet = "$Architecture-windows"
+    Write-Info "Installing dependencies via vcpkg for $triplet..."
 
     # Essential packages
     $essential = @(
-        "jsoncpp:x64-windows",
-        "yaml-cpp:x64-windows",
-        "openssl:x64-windows",
-        "curl:x64-windows",
-        "zlib:x64-windows",
-        "gtest:x64-windows"
+        "jsoncpp:$triplet",
+        "yaml-cpp:$triplet",
+        "openssl:$triplet",
+        "curl:$triplet",
+        "zlib:$triplet",
+        "gtest:$triplet"
     )
 
     # MQTT packages
     $mqtt = @(
-        "paho-mqtt:x64-windows",
-        "paho-mqttpp3:x64-windows"
+        "paho-mqtt:$triplet",
+        "paho-mqttpp3:$triplet"
     )
 
     # Optional packages
     $optional = @(
-        "zeromq:x64-windows",
-        "czmq:x64-windows",
-        "librdkafka:x64-windows",
-        "libmodbus:x64-windows",
-        "benchmark:x64-windows"
+        "zeromq:$triplet",
+        "czmq:$triplet",
+        "librdkafka:$triplet",
+        "libmodbus:$triplet",
+        "benchmark:$triplet"
     )
 
     $packages = $essential
@@ -352,21 +357,26 @@ function Test-Installation {
 
 # Print build instructions
 function Show-BuildInstructions {
-    param([string]$VcpkgPath)
+    param(
+        [string]$VcpkgPath,
+        [string]$Architecture
+    )
 
     $toolchainFile = ""
     if ($VcpkgPath) {
         $toolchainFile = "-DCMAKE_TOOLCHAIN_FILE=`"$VcpkgPath\scripts\buildsystems\vcpkg.cmake`""
     }
 
+    $vsArch = if ($Architecture -eq "x86") { "Win32" } else { $Architecture }
+
     @"
 
 === IPB Build Instructions ===
 
-Open "Developer PowerShell for VS" or "x64 Native Tools Command Prompt" and run:
+Open "Developer PowerShell for VS" or "$Architecture Native Tools Command Prompt" and run:
 
 # Configure with CMake
-cmake -B build -G "Visual Studio 17 2022" -A x64 `
+cmake -B build -G "Visual Studio 17 2022" -A $vsArch `
     -DCMAKE_BUILD_TYPE=Release `
     -DBUILD_TESTING=ON `
     -DIPB_SINK_CONSOLE=ON `
@@ -439,7 +449,7 @@ function Main {
         $vcpkgPath = Install-Vcpkg -InstallPath $vcpkgPath
 
         if ($vcpkgPath) {
-            Install-VcpkgDependencies -VcpkgPath $vcpkgPath -Minimal:$Minimal
+            Install-VcpkgDependencies -VcpkgPath $vcpkgPath -Minimal:$Minimal -Architecture $Arch
 
             # Set environment variable
             [System.Environment]::SetEnvironmentVariable("VCPKG_ROOT", $vcpkgPath, "User")
@@ -456,7 +466,7 @@ function Main {
     }
 
     # Show build instructions
-    Show-BuildInstructions -VcpkgPath $vcpkgPath
+    Show-BuildInstructions -VcpkgPath $vcpkgPath -Architecture $Arch
 }
 
 # Run main

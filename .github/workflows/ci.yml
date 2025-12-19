@@ -14,19 +14,37 @@ jobs:
   # Build & Test Matrix
   # ==========================================================================
   build:
-    name: Build (${{ matrix.os }}, ${{ matrix.build_mode }}, ${{ matrix.build_type }})
+    name: Build (${{ matrix.os }}, ${{ matrix.arch }}, ${{ matrix.build_mode }}, ${{ matrix.build_type }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04, macos-13, macos-14]
+        os: [ubuntu-22.04, ubuntu-24.04, macos-15, macos-latest, windows-2022]
+        arch: [x64]
         build_mode: [SERVER, EDGE]
         build_type: [Release, Debug]
+        include:
+          # Add x86 builds for Linux and Windows
+          - os: ubuntu-24.04
+            arch: x86
+            build_mode: SERVER
+            build_type: Release
+          - os: windows-2022
+            arch: x86
+            build_mode: SERVER
+            build_type: Release
+          - os: windows-2022
+            arch: x86
+            build_mode: EDGE
+            build_type: Release
         exclude:
           # Skip Debug builds on macOS to save CI time
-          - os: macos-13
+          - os: macos-15
             build_type: Debug
-          - os: macos-14
+          - os: macos-latest
+            build_type: Debug
+          # Skip Debug builds on Windows to save CI time
+          - os: windows-2022
             build_type: Debug
 
     steps:
@@ -36,31 +54,24 @@ jobs:
       - name: Install dependencies (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm --arch ${{ matrix.arch }}
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install \
-            cmake \
-            pkg-config \
-            jsoncpp \
-            yaml-cpp \
-            paho-mqtt-cpp \
-            curl \
-            openssl@3
+          chmod +x ./scripts/install-deps-macos.sh
+          # macOS uses native architecture (arm64 on Apple Silicon, x86_64 on Intel)
+          ./scripts/install-deps-macos.sh --skip-brew-update
 
-      - name: Configure CMake
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/install-deps-windows.ps1 -Arch ${{ matrix.arch }} -UseVcpkg
+
+      - name: Configure CMake (Unix)
+        if: runner.os != 'Windows'
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
@@ -69,11 +80,24 @@ jobs:
             -DBUILD_EXAMPLES=OFF \
             -DIPB_BUILD_BENCHMARKS=OFF
 
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vsArch = if ("${{ matrix.arch }}" -eq "x86") { "Win32" } else { "${{ matrix.arch }}" }
+          cmake -B build -G "Visual Studio 17 2022" -A $vsArch `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DIPB_BUILD_MODE=${{ matrix.build_mode }} `
+            -DBUILD_TESTING=ON `
+            -DBUILD_EXAMPLES=OFF `
+            -DIPB_BUILD_BENCHMARKS=OFF `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }}
 
       - name: Run tests
-        run: ctest --test-dir build --output-on-failure --timeout 120
+        run: ctest --test-dir build --output-on-failure --timeout 120 -C ${{ matrix.build_type }}
 
   # ==========================================================================
   # EMBEDDED Mode Build (minimal dependencies)
@@ -122,17 +146,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            lcov
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
+          # Additional coverage tools
+          sudo apt-get install -y lcov
 
       - name: Configure with coverage
         run: |
@@ -174,16 +191,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
 
       - name: Configure with sanitizers
         run: |
@@ -215,17 +224,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            clang-tidy \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
+          # clang-tidy is already installed by the script
 
       - name: Configure
         run: |
