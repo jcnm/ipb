@@ -10,9 +10,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find dependencies
 find_package(PkgConfig REQUIRED)
 # Find jsoncpp (avoid conflicts)
-if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
+set(SYSLOG_JSONCPP_TARGET "")
+if(TARGET jsoncpp_lib)
+    set(SYSLOG_JSONCPP_TARGET jsoncpp_lib)
+elseif(TARGET JsonCpp::JsonCpp)
+    set(SYSLOG_JSONCPP_TARGET JsonCpp::JsonCpp)
+else()
     find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
+    if(jsoncpp_FOUND)
+        if(TARGET jsoncpp_lib)
+            set(SYSLOG_JSONCPP_TARGET jsoncpp_lib)
+        elseif(TARGET JsonCpp::JsonCpp)
+            set(SYSLOG_JSONCPP_TARGET JsonCpp::JsonCpp)
+        endif()
+    endif()
+    if(NOT SYSLOG_JSONCPP_TARGET)
         pkg_check_modules(JSONCPP REQUIRED jsoncpp)
     endif()
 endif()
@@ -34,9 +46,17 @@ add_library(ipb-sink-syslog SHARED ${SYSLOG_SINK_SOURCES})
 # Link libraries
 target_link_libraries(ipb-sink-syslog
     ipb-common
-    jsoncpp_lib
     pthread
 )
+
+# Link jsoncpp based on how it was found
+if(SYSLOG_JSONCPP_TARGET)
+    target_link_libraries(ipb-sink-syslog ${SYSLOG_JSONCPP_TARGET})
+elseif(JSONCPP_FOUND)
+    target_include_directories(ipb-sink-syslog PRIVATE ${JSONCPP_INCLUDE_DIRS})
+    target_link_directories(ipb-sink-syslog PRIVATE ${JSONCPP_LIBRARY_DIRS})
+    target_link_libraries(ipb-sink-syslog ${JSONCPP_LIBRARIES})
+endif()
 
 # Compiler flags
 target_compile_options(ipb-sink-syslog PRIVATE

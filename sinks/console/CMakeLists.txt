@@ -53,6 +53,7 @@ target_link_libraries(ipb-sink-console PUBLIC
 # Conditionally add jsoncpp
 if(CONSOLE_HAS_JSONCPP)
     target_include_directories(ipb-sink-console PRIVATE ${JSONCPP_INCLUDE_DIRS})
+    target_link_directories(ipb-sink-console PRIVATE ${JSONCPP_LIBRARY_DIRS})
     target_link_libraries(ipb-sink-console PRIVATE ${JSONCPP_LIBRARIES})
     target_compile_options(ipb-sink-console PRIVATE ${JSONCPP_CFLAGS_OTHER})
     target_compile_definitions(ipb-sink-console PRIVATE IPB_CONSOLE_HAS_JSONCPP)
