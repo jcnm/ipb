@@ -370,6 +370,9 @@ public:
      * @return Pointer to compiled pattern (nullptr if invalid)
      *
      * Thread-safe. Cache hit: ~100ns, Cache miss: ~1-10μs
+     *
+     * @warning The returned pointer is only valid until clear() is called.
+     *          For concurrent access with clear(), use matches() instead.
      */
     const CompiledPattern* get(std::string_view pattern) noexcept {
         size_t shard_idx = shard_index(pattern);
@@ -414,10 +417,49 @@ public:
 
     /**
      * @brief Check if pattern matches input (with caching)
+     *
+     * Thread-safe even when clear() is called concurrently.
      */
     bool matches(std::string_view pattern, std::string_view input) noexcept {
-        const auto* compiled = get(pattern);
-        return compiled && compiled->matches(input);
+        size_t shard_idx = shard_index(pattern);
+        auto& shard      = shards_[shard_idx];
+
+        // Try fast path: read lock for cache hit
+        {
+            std::shared_lock lock(shard.mutex);
+            auto it = shard.entries.find(std::string(pattern));
+            if (it != shard.entries.end()) {
+                hits_.fetch_add(1, std::memory_order_relaxed);
+                // Match while still holding the lock
+                return it->second.matches(input);
+            }
+        }
+
+        // Slow path: compile and insert, then match
+        misses_.fetch_add(1, std::memory_order_relaxed);
+
+        auto compiled = CompiledPattern::compile(pattern);
+        if (!compiled) {
+            return false;
+        }
+
+        std::unique_lock lock(shard.mutex);
+
+        // Double-check after acquiring write lock
+        auto [it, inserted] = shard.entries.try_emplace(std::string(pattern), std::move(*compiled));
+
+        // Evict if over capacity (simple random eviction)
+        if (inserted && shard.entries.size() > capacity_per_shard_) {
+            for (auto eit = shard.entries.begin(); eit != shard.entries.end(); ++eit) {
+                if (eit != it) {
+                    shard.entries.erase(eit);
+                    break;
+                }
+            }
+        }
+
+        // Match while still holding the lock
+        return it->second.matches(input);
     }
 
     /**

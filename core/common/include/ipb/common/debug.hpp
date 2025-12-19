@@ -31,6 +31,12 @@
 #include "error.hpp"
 #include "platform.hpp"
 
+// Windows defines ERROR as a macro (value 0) in wingdi.h
+// We need to undefine it to use ERROR as an enum value
+#ifdef ERROR
+#undef ERROR
+#endif
+
 namespace ipb::common::debug {
 
 // ============================================================================

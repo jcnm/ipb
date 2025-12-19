@@ -209,12 +209,14 @@ install_ubuntu_debian() {
     local arch_suffix=""
     local cross_compile_pkgs=()
     local native_arch
+    local is_cross_compile="false"
     native_arch=$(dpkg --print-architecture)
 
     case "$TARGET_ARCH" in
         x86)
             if [ "$native_arch" = "amd64" ]; then
                 arch_suffix=":i386"
+                is_cross_compile="true"
                 cross_compile_pkgs=(gcc-multilib g++-multilib)
                 log_info "Enabling i386 architecture for cross-compilation..."
                 $USE_SUDO dpkg --add-architecture i386
@@ -224,6 +226,7 @@ install_ubuntu_debian() {
         arm64)
             if [ "$native_arch" != "arm64" ]; then
                 arch_suffix=":arm64"
+                is_cross_compile="true"
                 cross_compile_pkgs=(gcc-aarch64-linux-gnu g++-aarch64-linux-gnu)
                 log_info "Enabling arm64 architecture for cross-compilation..."
                 $USE_SUDO dpkg --add-architecture arm64
@@ -234,6 +237,7 @@ install_ubuntu_debian() {
             # Native on amd64, cross-compile on others
             if [ "$native_arch" != "amd64" ]; then
                 arch_suffix=":amd64"
+                is_cross_compile="true"
                 log_info "Enabling amd64 architecture for cross-compilation..."
                 $USE_SUDO dpkg --add-architecture amd64
                 $USE_SUDO apt-get update
@@ -256,29 +260,24 @@ install_ubuntu_debian() {
         essential_pkgs+=("${cross_compile_pkgs[@]}")
     fi
 
-    # Essential libraries (with architecture suffix if cross-compiling)
+    # Essential libraries - only some have multiarch support
+    # These packages typically have i386 versions
     local lib_pkgs=(
         "libjsoncpp-dev${arch_suffix}"
-        "libyaml-cpp-dev${arch_suffix}"
         "libssl-dev${arch_suffix}"
         "libcurl4-openssl-dev${arch_suffix}"
         "zlib1g-dev${arch_suffix}"
-        "libgtest-dev${arch_suffix}"
-        "libgmock-dev${arch_suffix}"
     )
 
-    # MQTT dependencies
-    local mqtt_pkgs=(
-        "libpaho-mqtt-dev${arch_suffix}"
-        "libpaho-mqttpp-dev${arch_suffix}"
+    # These packages may not have i386/cross versions - install native only
+    local lib_pkgs_native=(
+        "libyaml-cpp-dev"
+        "libgtest-dev"
+        "libgmock-dev"
     )
 
-    # Optional dependencies
-    local optional_pkgs=(
-        "libzmq3-dev${arch_suffix}"
-        "libczmq-dev${arch_suffix}"
-        "librdkafka-dev${arch_suffix}"
-        "libmodbus-dev${arch_suffix}"
+    # Optional dependencies (native only for cross-compile, as most don't have multiarch)
+    local optional_pkgs_native=(
         valgrind
         clang
         clang-tidy
@@ -286,10 +285,43 @@ install_ubuntu_debian() {
         lcov
     )
 
-    if [ "$INSTALL_MODE" = "minimal" ]; then
-        install_system_packages "${essential_pkgs[@]}" "${lib_pkgs[@]}"
+    # MQTT and other optional libs - only install for native builds
+    local optional_libs=()
+    if [ "$is_cross_compile" = "false" ]; then
+        optional_libs=(
+            "libpaho-mqtt-dev"
+            "libpaho-mqttpp-dev"
+            "libzmq3-dev"
+            "libczmq-dev"
+            "librdkafka-dev"
+            "libmodbus-dev"
+        )
     else
-        install_system_packages "${essential_pkgs[@]}" "${lib_pkgs[@]}" "${mqtt_pkgs[@]}" "${optional_pkgs[@]}"
+        log_warning "Skipping optional libraries for cross-compilation (not available for $TARGET_ARCH)"
+    fi
+
+    # Install essential packages
+    install_system_packages "${essential_pkgs[@]}"
+
+    # Install libraries with architecture suffix (may fail for some)
+    log_info "Installing architecture-specific libraries..."
+    for pkg in "${lib_pkgs[@]}"; do
+        $USE_SUDO apt-get install -y "$pkg" 2>/dev/null || \
+            log_warning "Package $pkg not available, skipping..."
+    done
+
+    # Install native-only packages
+    install_system_packages "${lib_pkgs_native[@]}"
+
+    if [ "$INSTALL_MODE" != "minimal" ]; then
+        # Install optional packages (native tools)
+        install_system_packages "${optional_pkgs_native[@]}" || true
+
+        # Install optional libraries if available
+        for pkg in "${optional_libs[@]}"; do
+            $USE_SUDO apt-get install -y "$pkg" 2>/dev/null || \
+                log_warning "Optional package $pkg not available, skipping..."
+        done
     fi
 
     log_success "Ubuntu/Debian dependencies installed successfully"

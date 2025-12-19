@@ -125,7 +125,12 @@ endif()
 # Security Note: Minimum versions specified to avoid known CVEs
 # Review and update these versions periodically
 
-find_package(PkgConfig REQUIRED)
+# PkgConfig is optional on Windows (vcpkg uses CMake's native find_package)
+if(NOT WIN32)
+    find_package(PkgConfig REQUIRED)
+else()
+    find_package(PkgConfig QUIET)
+endif()
 find_package(Threads REQUIRED)
 
 # OpenSSL - Required for cryptographic operations (SHA-256, TLS, CSPRNG)
@@ -152,6 +157,38 @@ function(ipb_find_jsoncpp OUT_FOUND)
         if(TARGET JsonCpp::JsonCpp AND NOT TARGET jsoncpp_lib)
             add_library(jsoncpp_lib ALIAS JsonCpp::JsonCpp)
         endif()
+        # On macOS with Homebrew, ensure include and library directories are set
+        if(APPLE)
+            set(_jsoncpp_target "")
+            if(TARGET JsonCpp::JsonCpp)
+                set(_jsoncpp_target JsonCpp::JsonCpp)
+            elseif(TARGET jsoncpp_lib)
+                set(_jsoncpp_target jsoncpp_lib)
+            endif()
+            if(_jsoncpp_target)
+                get_target_property(_jsoncpp_loc ${_jsoncpp_target} IMPORTED_LOCATION)
+                if(NOT _jsoncpp_loc)
+                    get_target_property(_jsoncpp_loc ${_jsoncpp_target} IMPORTED_LOCATION_RELEASE)
+                endif()
+                if(NOT _jsoncpp_loc)
+                    get_target_property(_jsoncpp_loc ${_jsoncpp_target} IMPORTED_LOCATION_NOCONFIG)
+                endif()
+                if(_jsoncpp_loc)
+                    get_filename_component(_jsoncpp_dir "${_jsoncpp_loc}" DIRECTORY)
+                    get_filename_component(_jsoncpp_prefix "${_jsoncpp_dir}" DIRECTORY)
+                    set_property(TARGET ${_jsoncpp_target} APPEND PROPERTY INTERFACE_LINK_DIRECTORIES "${_jsoncpp_dir}")
+                    # Also ensure include directories are set (Homebrew uses /opt/homebrew/include)
+                    if(EXISTS "${_jsoncpp_prefix}/include/json/json.h")
+                        set_property(TARGET ${_jsoncpp_target} APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${_jsoncpp_prefix}/include")
+                        message(STATUS "  Added jsoncpp include directory: ${_jsoncpp_prefix}/include")
+                    elseif(EXISTS "${_jsoncpp_prefix}/include/jsoncpp/json/json.h")
+                        set_property(TARGET ${_jsoncpp_target} APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${_jsoncpp_prefix}/include/jsoncpp")
+                        message(STATUS "  Added jsoncpp include directory: ${_jsoncpp_prefix}/include/jsoncpp")
+                    endif()
+                    message(STATUS "  Added jsoncpp link directory: ${_jsoncpp_dir}")
+                endif()
+            endif()
+        endif()
         message(STATUS "Found jsoncpp via CMake config")
         set(${OUT_FOUND} TRUE PARENT_SCOPE)
         return()
@@ -159,19 +196,21 @@ function(ipb_find_jsoncpp OUT_FOUND)
 
     # Method 2: Try find_path and find_library
     find_path(JSONCPP_INCLUDE_DIR json/json.h
-        PATHS /usr/include /usr/local/include
+        PATHS /usr/include /usr/local/include /opt/homebrew/include
         PATH_SUFFIXES jsoncpp
     )
     find_library(JSONCPP_LIBRARY
         NAMES jsoncpp libjsoncpp
-        PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+        PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/homebrew/lib
     )
     if(JSONCPP_INCLUDE_DIR AND JSONCPP_LIBRARY)
         if(NOT TARGET jsoncpp_lib)
             add_library(jsoncpp_lib UNKNOWN IMPORTED)
+            get_filename_component(JSONCPP_LIBRARY_DIR "${JSONCPP_LIBRARY}" DIRECTORY)
             set_target_properties(jsoncpp_lib PROPERTIES
                 IMPORTED_LOCATION "${JSONCPP_LIBRARY}"
                 INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIR}"
+                INTERFACE_LINK_DIRECTORIES "${JSONCPP_LIBRARY_DIR}"
             )
         endif()
         message(STATUS "Found jsoncpp: ${JSONCPP_LIBRARY}")
@@ -187,9 +226,10 @@ function(ipb_find_jsoncpp OUT_FOUND)
             set_target_properties(jsoncpp_lib PROPERTIES
                 INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_PKG_INCLUDE_DIRS}"
                 INTERFACE_LINK_LIBRARIES "${JSONCPP_PKG_LIBRARIES}"
+                INTERFACE_LINK_DIRECTORIES "${JSONCPP_PKG_LIBRARY_DIRS}"
             )
         endif()
-        message(STATUS "Found jsoncpp via pkg-config")
+        message(STATUS "Found jsoncpp via pkg-config: ${JSONCPP_PKG_LIBRARY_DIRS}")
         set(${OUT_FOUND} TRUE PARENT_SCOPE)
         return()
     endif()
@@ -204,24 +244,48 @@ function(ipb_find_yaml_cpp OUT_FOUND)
     find_package(yaml-cpp CONFIG QUIET)
     if(yaml-cpp_FOUND)
         message(STATUS "Found yaml-cpp via CMake config")
+        # On macOS with Homebrew, we need to ensure include and library directories are set
+        # The yaml-cpp CMake config may not set these properly
+        if(APPLE AND TARGET yaml-cpp)
+            get_target_property(_yaml_cpp_loc yaml-cpp IMPORTED_LOCATION)
+            if(NOT _yaml_cpp_loc)
+                get_target_property(_yaml_cpp_loc yaml-cpp IMPORTED_LOCATION_RELEASE)
+            endif()
+            if(NOT _yaml_cpp_loc)
+                get_target_property(_yaml_cpp_loc yaml-cpp IMPORTED_LOCATION_NOCONFIG)
+            endif()
+            if(_yaml_cpp_loc)
+                get_filename_component(_yaml_cpp_dir "${_yaml_cpp_loc}" DIRECTORY)
+                get_filename_component(_yaml_cpp_prefix "${_yaml_cpp_dir}" DIRECTORY)
+                set_property(TARGET yaml-cpp APPEND PROPERTY INTERFACE_LINK_DIRECTORIES "${_yaml_cpp_dir}")
+                # Also ensure include directories are set
+                if(EXISTS "${_yaml_cpp_prefix}/include/yaml-cpp/yaml.h")
+                    set_property(TARGET yaml-cpp APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${_yaml_cpp_prefix}/include")
+                    message(STATUS "  Added yaml-cpp include directory: ${_yaml_cpp_prefix}/include")
+                endif()
+                message(STATUS "  Added yaml-cpp link directory: ${_yaml_cpp_dir}")
+            endif()
+        endif()
         set(${OUT_FOUND} TRUE PARENT_SCOPE)
         return()
     endif()
 
     # Method 2: Try find_path and find_library
     find_path(YAML_CPP_INCLUDE_DIR yaml-cpp/yaml.h
-        PATHS /usr/include /usr/local/include
+        PATHS /usr/include /usr/local/include /opt/homebrew/include
     )
     find_library(YAML_CPP_LIBRARY
         NAMES yaml-cpp libyaml-cpp
-        PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+        PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/homebrew/lib
     )
     if(YAML_CPP_INCLUDE_DIR AND YAML_CPP_LIBRARY)
         if(NOT TARGET yaml-cpp)
             add_library(yaml-cpp UNKNOWN IMPORTED)
+            get_filename_component(YAML_CPP_LIBRARY_DIR "${YAML_CPP_LIBRARY}" DIRECTORY)
             set_target_properties(yaml-cpp PROPERTIES
                 IMPORTED_LOCATION "${YAML_CPP_LIBRARY}"
                 INTERFACE_INCLUDE_DIRECTORIES "${YAML_CPP_INCLUDE_DIR}"
+                INTERFACE_LINK_DIRECTORIES "${YAML_CPP_LIBRARY_DIR}"
             )
         endif()
         message(STATUS "Found yaml-cpp: ${YAML_CPP_LIBRARY}")
@@ -237,9 +301,10 @@ function(ipb_find_yaml_cpp OUT_FOUND)
             set_target_properties(yaml-cpp PROPERTIES
                 INTERFACE_INCLUDE_DIRECTORIES "${YAML_CPP_PKG_INCLUDE_DIRS}"
                 INTERFACE_LINK_LIBRARIES "${YAML_CPP_PKG_LIBRARIES}"
+                INTERFACE_LINK_DIRECTORIES "${YAML_CPP_PKG_LIBRARY_DIRS}"
             )
         endif()
-        message(STATUS "Found yaml-cpp via pkg-config")
+        message(STATUS "Found yaml-cpp via pkg-config: ${YAML_CPP_PKG_LIBRARY_DIRS}")
         set(${OUT_FOUND} TRUE PARENT_SCOPE)
         return()
     endif()
@@ -333,12 +398,19 @@ endif()
 # ============================================================================
 
 if(ENABLE_OPTIMIZATIONS)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-    if(NOT APPLE)
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
+    # Warning flags are compiler-specific
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+        if(NOT APPLE)
+            set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
+        endif()
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+    elseif(MSVC)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Od")
     endif()
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
 endif()
 
 # ============================================================================

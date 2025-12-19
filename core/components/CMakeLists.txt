@@ -100,13 +100,39 @@ else()
     message(STATUS "Config Loader: ${IPB_BUILD_MODE} mode - using yaml-cpp + jsoncpp")
 
     # Find dependencies for config loader
-    find_package(yaml-cpp REQUIRED)
-    find_package(PkgConfig REQUIRED)
+    # PkgConfig is optional on Windows
+    if(NOT WIN32)
+        find_package(PkgConfig REQUIRED)
+    else()
+        find_package(PkgConfig QUIET)
+    endif()
+
+    # Find yaml-cpp (check if already found by parent CMakeLists.txt)
+    if(NOT TARGET yaml-cpp)
+        find_package(yaml-cpp REQUIRED)
+    endif()
+
+    # On macOS, yaml-cpp CMake config may not have proper include directories
+    if(APPLE AND TARGET yaml-cpp)
+        get_target_property(_yaml_inc yaml-cpp INTERFACE_INCLUDE_DIRECTORIES)
+        if(NOT _yaml_inc OR "${_yaml_inc}" STREQUAL "_yaml_inc-NOTFOUND")
+            find_path(YAML_CPP_COMPONENTS_INCLUDE_DIR yaml-cpp/yaml.h
+                PATHS
+                    /opt/homebrew/include
+                    /usr/local/include
+                    /usr/include
+                NO_DEFAULT_PATH
+            )
+            if(YAML_CPP_COMPONENTS_INCLUDE_DIR)
+                message(STATUS "ipb-core-components: Found yaml-cpp includes at ${YAML_CPP_COMPONENTS_INCLUDE_DIR}")
+            endif()
+        endif()
+    endif()
 
     # Find jsoncpp
     if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
         find_package(jsoncpp QUIET)
-        if(NOT jsoncpp_FOUND)
+        if(NOT jsoncpp_FOUND AND PkgConfig_FOUND)
             pkg_check_modules(JSONCPP REQUIRED jsoncpp)
         endif()
     endif()
@@ -194,6 +220,10 @@ if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
 else()
     # Server/Edge: yaml-cpp + jsoncpp
     target_link_libraries(ipb-core-components PRIVATE yaml-cpp jsoncpp_lib)
+    # Add explicit include directory on macOS if needed
+    if(YAML_CPP_COMPONENTS_INCLUDE_DIR)
+        target_include_directories(ipb-core-components PRIVATE ${YAML_CPP_COMPONENTS_INCLUDE_DIR})
+    endif()
 endif()
 
 # Compiler flags for real-time performance

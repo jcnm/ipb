@@ -8,14 +8,22 @@ project(ipb-gate
 )
 
 # Find required dependencies
-find_package(yaml-cpp REQUIRED)
 find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
+# yaml-cpp may already be found by parent CMakeLists.txt
+if(NOT TARGET yaml-cpp)
+    find_package(yaml-cpp REQUIRED)
+endif()
+# PkgConfig is optional on Windows
+if(NOT WIN32)
+    find_package(PkgConfig REQUIRED)
+else()
+    find_package(PkgConfig QUIET)
+endif()
 
 # Find jsoncpp
 if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
     find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
+    if(NOT jsoncpp_FOUND AND PkgConfig_FOUND)
         pkg_check_modules(JSONCPP REQUIRED jsoncpp)
     endif()
 endif()
