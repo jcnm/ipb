@@ -8,7 +8,45 @@ project(ipb-tests
 )
 
 # Find testing frameworks (GMock is included with GTest in modern versions)
-find_package(GTest REQUIRED)
+# First try to find GTest on the system
+find_package(GTest QUIET)
+
+if(NOT GTest_FOUND)
+    # GTest not found - use FetchContent to download it
+    message(STATUS "GTest not found on system - downloading via FetchContent")
+    include(FetchContent)
+
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.14.0
+    )
+
+    # Prevent GTest from overriding parent project's compiler/linker settings (Windows)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    # Don't install GTest when installing this project
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+
+    FetchContent_MakeAvailable(googletest)
+
+    # Create aliases to match the installed GTest target names
+    if(NOT TARGET GTest::gtest)
+        add_library(GTest::gtest ALIAS gtest)
+    endif()
+    if(NOT TARGET GTest::gtest_main)
+        add_library(GTest::gtest_main ALIAS gtest_main)
+    endif()
+    if(NOT TARGET GTest::gmock)
+        add_library(GTest::gmock ALIAS gmock)
+    endif()
+    if(NOT TARGET GTest::gmock_main)
+        add_library(GTest::gmock_main ALIAS gmock_main)
+    endif()
+
+    message(STATUS "GTest fetched successfully")
+else()
+    message(STATUS "Using system GTest")
+endif()
 
 if(ENABLE_BENCHMARKS)
     find_package(benchmark REQUIRED)

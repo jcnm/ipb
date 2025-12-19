@@ -1,8 +1,8 @@
 # IPB Unit Tests
 cmake_minimum_required(VERSION 3.20)
 
-# Find required packages
-find_package(GTest REQUIRED)
+# GTest is already configured by the parent tests/CMakeLists.txt (via FetchContent or system install)
+# Just need to find Threads
 find_package(Threads REQUIRED)
 
 # Include directories for test files
