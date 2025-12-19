@@ -8,6 +8,7 @@
 #include <thread>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 namespace ipb::common {
 
