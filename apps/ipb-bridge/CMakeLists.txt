@@ -29,6 +29,27 @@ if(NOT IPB_BRIDGE_MINIMAL)
             set(HAS_YAML_CPP TRUE)
         endif()
     endif()
+
+    # On macOS, yaml-cpp CMake config may not have proper include directories
+    # Try to find and add them explicitly if needed
+    if(HAS_YAML_CPP AND APPLE)
+        # Check if we need to find include directories
+        get_target_property(_yaml_inc yaml-cpp INTERFACE_INCLUDE_DIRECTORIES)
+        if(NOT _yaml_inc OR "${_yaml_inc}" STREQUAL "_yaml_inc-NOTFOUND")
+            # Try Homebrew paths
+            find_path(YAML_CPP_INCLUDE_DIR yaml-cpp/yaml.h
+                PATHS
+                    /opt/homebrew/include
+                    /usr/local/include
+                    /usr/include
+                NO_DEFAULT_PATH
+            )
+            if(YAML_CPP_INCLUDE_DIR)
+                set(YAML_CPP_BRIDGE_INCLUDE_DIR "${YAML_CPP_INCLUDE_DIR}")
+                message(STATUS "ipb-bridge: Found yaml-cpp includes at ${YAML_CPP_BRIDGE_INCLUDE_DIR}")
+            endif()
+        endif()
+    endif()
 endif()
 
 # Source files
@@ -65,6 +86,10 @@ endif()
 if(HAS_YAML_CPP)
     target_link_libraries(ipb-bridge PRIVATE yaml-cpp)
     target_compile_definitions(ipb-bridge PRIVATE IPB_BRIDGE_HAS_YAML=1)
+    # Add explicit include directory on macOS if needed
+    if(YAML_CPP_BRIDGE_INCLUDE_DIR)
+        target_include_directories(ipb-bridge PRIVATE ${YAML_CPP_BRIDGE_INCLUDE_DIR})
+    endif()
 endif()
 
 # Conditionally link sinks (based on build configuration)
