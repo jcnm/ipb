@@ -5,8 +5,14 @@ cmake_minimum_required(VERSION 3.20)
 include(${CMAKE_SOURCE_DIR}/cmake/modules/IPBPluginTest.cmake)
 
 # Find required packages
-find_package(GTest REQUIRED)
+find_package(GTest QUIET)
 find_package(Threads REQUIRED)
+
+# Skip if GTest not available (will be built from main tests directory)
+if(NOT GTest_FOUND AND NOT TARGET GTest::gtest)
+    message(STATUS "Console Scoop: GTest not found, tests will be built from main tests directory")
+    return()
+endif()
 
 # Create test executable
 add_executable(ipb-scoop-console-tests
