@@ -100,8 +100,12 @@ else()
     message(STATUS "Config Loader: ${IPB_BUILD_MODE} mode - using yaml-cpp + jsoncpp")
 
     # Find dependencies for config loader
-    find_package(yaml-cpp REQUIRED)
     find_package(PkgConfig REQUIRED)
+
+    # Find yaml-cpp (check if already found by parent CMakeLists.txt)
+    if(NOT TARGET yaml-cpp)
+        find_package(yaml-cpp REQUIRED)
+    endif()
 
     # Find jsoncpp
     if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)

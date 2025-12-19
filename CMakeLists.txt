@@ -159,19 +159,21 @@ function(ipb_find_jsoncpp OUT_FOUND)
 
     # Method 2: Try find_path and find_library
     find_path(JSONCPP_INCLUDE_DIR json/json.h
-        PATHS /usr/include /usr/local/include
+        PATHS /usr/include /usr/local/include /opt/homebrew/include
         PATH_SUFFIXES jsoncpp
     )
     find_library(JSONCPP_LIBRARY
         NAMES jsoncpp libjsoncpp
-        PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+        PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/homebrew/lib
     )
     if(JSONCPP_INCLUDE_DIR AND JSONCPP_LIBRARY)
         if(NOT TARGET jsoncpp_lib)
             add_library(jsoncpp_lib UNKNOWN IMPORTED)
+            get_filename_component(JSONCPP_LIBRARY_DIR "${JSONCPP_LIBRARY}" DIRECTORY)
             set_target_properties(jsoncpp_lib PROPERTIES
                 IMPORTED_LOCATION "${JSONCPP_LIBRARY}"
                 INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIR}"
+                INTERFACE_LINK_DIRECTORIES "${JSONCPP_LIBRARY_DIR}"
             )
         endif()
         message(STATUS "Found jsoncpp: ${JSONCPP_LIBRARY}")
@@ -187,9 +189,10 @@ function(ipb_find_jsoncpp OUT_FOUND)
             set_target_properties(jsoncpp_lib PROPERTIES
                 INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_PKG_INCLUDE_DIRS}"
                 INTERFACE_LINK_LIBRARIES "${JSONCPP_PKG_LIBRARIES}"
+                INTERFACE_LINK_DIRECTORIES "${JSONCPP_PKG_LIBRARY_DIRS}"
             )
         endif()
-        message(STATUS "Found jsoncpp via pkg-config")
+        message(STATUS "Found jsoncpp via pkg-config: ${JSONCPP_PKG_LIBRARY_DIRS}")
         set(${OUT_FOUND} TRUE PARENT_SCOPE)
         return()
     endif()
@@ -210,18 +213,20 @@ function(ipb_find_yaml_cpp OUT_FOUND)
 
     # Method 2: Try find_path and find_library
     find_path(YAML_CPP_INCLUDE_DIR yaml-cpp/yaml.h
-        PATHS /usr/include /usr/local/include
+        PATHS /usr/include /usr/local/include /opt/homebrew/include
     )
     find_library(YAML_CPP_LIBRARY
         NAMES yaml-cpp libyaml-cpp
-        PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu
+        PATHS /usr/lib /usr/local/lib /usr/lib/x86_64-linux-gnu /opt/homebrew/lib
     )
     if(YAML_CPP_INCLUDE_DIR AND YAML_CPP_LIBRARY)
         if(NOT TARGET yaml-cpp)
             add_library(yaml-cpp UNKNOWN IMPORTED)
+            get_filename_component(YAML_CPP_LIBRARY_DIR "${YAML_CPP_LIBRARY}" DIRECTORY)
             set_target_properties(yaml-cpp PROPERTIES
                 IMPORTED_LOCATION "${YAML_CPP_LIBRARY}"
                 INTERFACE_INCLUDE_DIRECTORIES "${YAML_CPP_INCLUDE_DIR}"
+                INTERFACE_LINK_DIRECTORIES "${YAML_CPP_LIBRARY_DIR}"
             )
         endif()
         message(STATUS "Found yaml-cpp: ${YAML_CPP_LIBRARY}")
@@ -237,9 +242,10 @@ function(ipb_find_yaml_cpp OUT_FOUND)
             set_target_properties(yaml-cpp PROPERTIES
                 INTERFACE_INCLUDE_DIRECTORIES "${YAML_CPP_PKG_INCLUDE_DIRS}"
                 INTERFACE_LINK_LIBRARIES "${YAML_CPP_PKG_LIBRARIES}"
+                INTERFACE_LINK_DIRECTORIES "${YAML_CPP_PKG_LIBRARY_DIRS}"
             )
         endif()
-        message(STATUS "Found yaml-cpp via pkg-config")
+        message(STATUS "Found yaml-cpp via pkg-config: ${YAML_CPP_PKG_LIBRARY_DIRS}")
         set(${OUT_FOUND} TRUE PARENT_SCOPE)
         return()
     endif()
