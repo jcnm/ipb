@@ -647,11 +647,11 @@ struct SourceLocation {
  */
 class Error {
 public:
-    constexpr Error() noexcept = default;
+    Error() noexcept = default;
 
-    constexpr Error(ErrorCode code) noexcept : code_(code) {}
+    Error(ErrorCode code) noexcept : code_(code) {}
 
-    constexpr Error(ErrorCode code, std::string_view message) noexcept
+    Error(ErrorCode code, std::string_view message) noexcept
         : code_(code), message_(message) {}
 
     Error(ErrorCode code, std::string_view message, SourceLocation loc) noexcept
@@ -744,10 +744,10 @@ template <>
 class Result<void> {
 public:
     // Success
-    constexpr Result() noexcept = default;
+    Result() noexcept = default;
 
     // Error from code
-    constexpr Result(ErrorCode code) noexcept : error_(code) {}
+    Result(ErrorCode code) noexcept : error_(code) {}
 
     // Error with message
     Result(ErrorCode code, std::string_view message,
