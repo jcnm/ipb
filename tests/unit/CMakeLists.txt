@@ -244,11 +244,20 @@ set_tests_properties(test_lockfree_queue PROPERTIES
     TIMEOUT 180
 )
 
-# Metrics test - DISABLED due to std::vector<std::atomic> resize issues in Histogram class
-# The metrics.hpp header needs refactoring to use a fixed-size array or unique_ptr array
-# add_executable(test_metrics test_metrics.cpp)
-# target_link_libraries(test_metrics PRIVATE ipb-common GTest::gtest GTest::gtest_main Threads::Threads)
-# add_test(NAME test_metrics COMMAND test_metrics)
+# Metrics test (covers Counter, Gauge, Histogram, Summary, Timer, MetricRegistry)
+add_executable(test_metrics test_metrics.cpp)
+target_link_libraries(test_metrics PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_metrics COMMAND test_metrics)
+set_tests_properties(test_metrics PROPERTIES
+    LABELS "unit;core;common;metrics"
+    TIMEOUT 120
+)
 
 # Rate Limiter test (covers TokenBucket, SlidingWindowLimiter, AdaptiveRateLimiter, HierarchicalRateLimiter)
 add_executable(test_rate_limiter test_rate_limiter.cpp)
@@ -466,7 +475,8 @@ if(ENABLE_COVERAGE)
     # Core/Common Advanced tests
     target_compile_options(test_lockfree_queue PRIVATE --coverage)
     target_link_options(test_lockfree_queue PRIVATE --coverage)
-    # test_metrics disabled due to Histogram vector<atomic> issue
+    target_compile_options(test_metrics PRIVATE --coverage)
+    target_link_options(test_metrics PRIVATE --coverage)
     target_compile_options(test_rate_limiter PRIVATE --coverage)
     target_link_options(test_rate_limiter PRIVATE --coverage)
     target_compile_options(test_backpressure PRIVATE --coverage)
@@ -531,7 +541,7 @@ message(STATUS "    - test_memory_pool (ObjectPool, PooledPtr, TieredMemoryPool,
 # test_structured_logger removed due to API issues
 message(STATUS "  Core/Common Advanced:")
 message(STATUS "    - test_lockfree_queue (SPSCQueue, MPSCQueue, MPMCQueue, BoundedMPMCQueue, LockFreeQueueStats)")
-# test_metrics disabled due to Histogram std::vector<std::atomic> resize issue
+message(STATUS "    - test_metrics (Counter, Gauge, Histogram, Summary, Timer, MetricRegistry)")
 message(STATUS "    - test_rate_limiter (TokenBucket, SlidingWindowLimiter, AdaptiveRateLimiter, HierarchicalRateLimiter)")
 message(STATUS "    - test_backpressure (PressureSensor, BackpressureController, BackpressureStage, PressurePropagator)")
 message(STATUS "    - test_result_ext (and_then, or_else, map_error, flatten, inspect, Pipeline)")

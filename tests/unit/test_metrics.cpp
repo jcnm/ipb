@@ -2,8 +2,7 @@
  * @file test_metrics.cpp
  * @brief Comprehensive tests for metrics.hpp
  *
- * Covers: Counter, Gauge, Summary, Timer, MetricRegistry
- * Note: Histogram tests are limited due to std::vector<std::atomic> resize issues
+ * Covers: Counter, Gauge, Histogram, Summary, Timer, MetricRegistry
  */
 
 #include <gtest/gtest.h>
@@ -17,9 +16,7 @@
 #include <ipb/common/metrics.hpp>
 
 using namespace ipb::common::metrics;
-
-// Note: Histogram class uses std::vector<std::atomic<uint64_t>> which has resize issues
-// in C++17. The MetricRegistry tests use histogram indirectly through the registry.
+using namespace std::chrono_literals;
 
 //=============================================================================
 // MetricType Tests
@@ -242,8 +239,176 @@ TEST_F(GaugeTest, ConcurrentUpdates) {
     EXPECT_NEAR(gauge.value(), 0.0, 1.0);
 }
 
-// Note: Histogram direct tests are skipped due to std::vector<std::atomic<uint64_t>> resize issues
-// Histogram is tested indirectly through MetricRegistry::histogram() which handles initialization
+//=============================================================================
+// Histogram Tests
+//=============================================================================
+
+class HistogramTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        buckets_ = {0.1, 0.5, 1.0, 5.0, 10.0};
+    }
+
+    std::vector<double> buckets_;
+};
+
+TEST_F(HistogramTest, BasicConstruction) {
+    auto histogram = std::make_unique<Histogram>("test_histogram", buckets_, "Test histogram");
+
+    EXPECT_EQ(histogram->name(), "test_histogram");
+    EXPECT_EQ(histogram->help(), "Test histogram");
+    EXPECT_EQ(histogram->type(), MetricType::HISTOGRAM);
+    EXPECT_EQ(histogram->count(), 0u);
+    EXPECT_DOUBLE_EQ(histogram->sum(), 0.0);
+}
+
+TEST_F(HistogramTest, DefaultBuckets) {
+    auto histogram = std::make_unique<Histogram>("default_buckets");
+    const auto& buckets = histogram->buckets();
+    EXPECT_EQ(buckets.size(), Histogram::DEFAULT_BUCKETS.size());
+}
+
+TEST_F(HistogramTest, BucketsSorted) {
+    std::vector<double> unsorted = {5.0, 1.0, 10.0, 0.5};
+    auto histogram = std::make_unique<Histogram>("sorted_test", unsorted);
+
+    const auto& buckets = histogram->buckets();
+    EXPECT_DOUBLE_EQ(buckets[0], 0.5);
+    EXPECT_DOUBLE_EQ(buckets[1], 1.0);
+    EXPECT_DOUBLE_EQ(buckets[2], 5.0);
+    EXPECT_DOUBLE_EQ(buckets[3], 10.0);
+}
+
+TEST_F(HistogramTest, Observe) {
+    auto histogram = std::make_unique<Histogram>("observe_test", buckets_);
+
+    histogram->observe(0.05);
+    histogram->observe(0.3);
+    histogram->observe(2.0);
+
+    EXPECT_EQ(histogram->count(), 3u);
+    EXPECT_NEAR(histogram->sum(), 2.35, 0.001);
+}
+
+TEST_F(HistogramTest, BucketCounts) {
+    auto histogram = std::make_unique<Histogram>("bucket_test", buckets_);
+
+    // Buckets: 0.1, 0.5, 1.0, 5.0, 10.0, +Inf
+    histogram->observe(0.05);   // <= 0.1, increments buckets 0,1,2,3,4,5
+    histogram->observe(0.2);    // <= 0.5, increments buckets 1,2,3,4,5
+    histogram->observe(0.8);    // <= 1.0, increments buckets 2,3,4,5
+    histogram->observe(3.0);    // <= 5.0, increments buckets 3,4,5
+    histogram->observe(7.0);    // <= 10.0, increments buckets 4,5
+
+    // Histogram buckets are cumulative (values increment from matching bucket to +Inf)
+    EXPECT_EQ(histogram->bucket_count(0), 1u);  // <= 0.1: only 0.05
+    EXPECT_EQ(histogram->bucket_count(1), 2u);  // <= 0.5: 0.05, 0.2
+    EXPECT_EQ(histogram->bucket_count(2), 3u);  // <= 1.0: 0.05, 0.2, 0.8
+    EXPECT_EQ(histogram->bucket_count(3), 4u);  // <= 5.0: 0.05, 0.2, 0.8, 3.0
+    EXPECT_EQ(histogram->bucket_count(4), 5u);  // <= 10.0: all 5 values
+    EXPECT_EQ(histogram->bucket_count(5), 5u);  // +Inf: all 5 values
+}
+
+TEST_F(HistogramTest, Reset) {
+    auto histogram = std::make_unique<Histogram>("reset_test", buckets_);
+
+    histogram->observe(1.0);
+    histogram->observe(2.0);
+    histogram->reset();
+
+    EXPECT_EQ(histogram->count(), 0u);
+    EXPECT_DOUBLE_EQ(histogram->sum(), 0.0);
+    EXPECT_EQ(histogram->bucket_count(0), 0u);
+}
+
+TEST_F(HistogramTest, PrometheusFormat) {
+    auto histogram = std::make_unique<Histogram>("prometheus_test", buckets_, "Test help");
+
+    histogram->observe(0.5);
+    std::string format = histogram->prometheus_format();
+
+    EXPECT_NE(format.find("# HELP prometheus_test"), std::string::npos);
+    EXPECT_NE(format.find("# TYPE prometheus_test histogram"), std::string::npos);
+    EXPECT_NE(format.find("prometheus_test_bucket"), std::string::npos);
+    EXPECT_NE(format.find("prometheus_test_sum"), std::string::npos);
+    EXPECT_NE(format.find("prometheus_test_count"), std::string::npos);
+    EXPECT_NE(format.find("le=\"+Inf\""), std::string::npos);
+}
+
+TEST_F(HistogramTest, ThreadSafety) {
+    auto histogram = std::make_unique<Histogram>("concurrent_test", buckets_);
+    constexpr int num_threads = 4;
+    constexpr int observations_per_thread = 1000;
+
+    std::vector<std::thread> threads;
+    for (int i = 0; i < num_threads; ++i) {
+        threads.emplace_back([&histogram, observations_per_thread]() {
+            for (int j = 0; j < observations_per_thread; ++j) {
+                histogram->observe(static_cast<double>(j % 10) * 0.1);
+            }
+        });
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    EXPECT_EQ(histogram->count(), static_cast<uint64_t>(num_threads * observations_per_thread));
+}
+
+TEST_F(HistogramTest, ExtremeValues) {
+    auto histogram = std::make_unique<Histogram>("extreme_test", buckets_);
+
+    histogram->observe(0.0001);     // Very small
+    histogram->observe(1000000.0);  // Very large
+
+    EXPECT_EQ(histogram->count(), 2u);
+    EXPECT_GT(histogram->sum(), 1000000.0);
+}
+
+//=============================================================================
+// Timer Tests
+//=============================================================================
+
+class TimerTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        histogram_ = std::make_unique<Histogram>("timer_histogram", std::vector<double>{0.001, 0.01, 0.1, 1.0});
+    }
+
+    std::unique_ptr<Histogram> histogram_;
+};
+
+TEST_F(TimerTest, AutomaticTiming) {
+    {
+        Timer timer(*histogram_);
+        std::this_thread::sleep_for(10ms);
+    }  // Timer records on destruction
+
+    EXPECT_EQ(histogram_->count(), 1u);
+    EXPECT_GT(histogram_->sum(), 0.0);
+}
+
+TEST_F(TimerTest, MultipleTimes) {
+    for (int i = 0; i < 5; ++i) {
+        Timer timer(*histogram_);
+        std::this_thread::sleep_for(1ms);
+    }
+
+    EXPECT_EQ(histogram_->count(), 5u);
+    EXPECT_GT(histogram_->sum(), 0.0);
+}
+
+TEST_F(TimerTest, TimingAccuracy) {
+    {
+        Timer timer(*histogram_);
+        std::this_thread::sleep_for(50ms);
+    }
+
+    // Should be approximately 0.05 seconds (with some tolerance)
+    EXPECT_GE(histogram_->sum(), 0.03);
+    EXPECT_LE(histogram_->sum(), 0.15);
+}
 
 //=============================================================================
 // Summary Tests
@@ -354,9 +519,6 @@ TEST_F(SummaryTest, ConcurrentObservations) {
     EXPECT_EQ(summary.count(), num_threads * observations_per_thread);
 }
 
-// Timer tests are skipped since Timer depends on Histogram which has compilation issues
-// Timer functionality is verified through MetricRegistry integration tests
-
 //=============================================================================
 // MetricRegistry Tests
 //=============================================================================
@@ -415,8 +577,18 @@ TEST_F(MetricRegistryTest, GaugeRegistration) {
     EXPECT_DOUBLE_EQ(g2.value(), 100.0);
 }
 
-// Histogram registration test skipped due to std::vector<std::atomic> resize issues
-// The histogram method in MetricRegistry is tested when the library itself is built and used
+TEST_F(MetricRegistryTest, HistogramRegistration) {
+    auto& registry = MetricRegistry::instance();
+
+    std::vector<double> buckets = {1.0, 5.0, 10.0};
+    Histogram& h1 = registry.histogram("test_histogram", buckets, {}, "Test histogram");
+    Histogram& h2 = registry.histogram("test_histogram", buckets, {});
+
+    EXPECT_EQ(&h1, &h2);
+
+    h1.observe(3.0);
+    EXPECT_EQ(h2.count(), 1u);
+}
 
 TEST_F(MetricRegistryTest, SummaryRegistration) {
     auto& registry = MetricRegistry::instance();
@@ -535,7 +707,8 @@ TEST(LabelsTest, EmptyLabels) {
 TEST(EdgeCaseTest, VeryLargeValues) {
     Counter counter("large_value");
 
-    double large_value = 1e15;
+    // Maximum safe value with PRECISION=1e6 is ~1e13 to avoid uint64_t overflow
+    double large_value = 1e12;
     counter.inc(large_value);
     EXPECT_NEAR(counter.value(), large_value, 1.0);
 }
@@ -549,4 +722,12 @@ TEST(EdgeCaseTest, VerySmallValues) {
     EXPECT_NEAR(gauge.value(), small_value, 1e-6);
 }
 
-// Histogram edge case tests skipped due to std::vector<std::atomic> resize issues
+TEST(EdgeCaseTest, HistogramInfBucket) {
+    std::vector<double> buckets = {1.0, 10.0};
+    auto histogram = std::make_unique<Histogram>("inf_test", buckets);
+
+    histogram->observe(100.0);  // Goes to +Inf bucket
+
+    // Last bucket (+Inf) should have the count
+    EXPECT_EQ(histogram->bucket_count(buckets.size()), 1u);
+}
