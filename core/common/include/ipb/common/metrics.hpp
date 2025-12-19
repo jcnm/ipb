@@ -123,7 +123,7 @@ public:
     /**
      * @brief Increment counter by 1
      */
-    void inc() noexcept { value_.fetch_add(1, std::memory_order_relaxed); }
+    void inc() noexcept { value_.fetch_add(PRECISION, std::memory_order_relaxed); }
 
     /**
      * @brief Increment counter by delta
@@ -293,13 +293,15 @@ public:
     Histogram(std::string name, std::vector<double> buckets = DEFAULT_BUCKETS,
               std::string help = "", Labels labels = {})
         : name_(std::move(name)), help_(std::move(help)), labels_(std::move(labels)),
-          buckets_(std::move(buckets)) {
+          buckets_(std::move(buckets)),
+          bucket_count_size_(0) {
         std::sort(buckets_.begin(), buckets_.end());
 
-        // Initialize bucket counters
-        bucket_counts_.resize(buckets_.size() + 1);  // +1 for +Inf
-        for (auto& count : bucket_counts_) {
-            count.store(0, std::memory_order_relaxed);
+        // Use unique_ptr array to avoid vector reallocation issues with atomics
+        bucket_count_size_ = buckets_.size() + 1;  // +1 for +Inf
+        bucket_counts_ = std::make_unique<std::atomic<uint64_t>[]>(bucket_count_size_);
+        for (size_t i = 0; i < bucket_count_size_; ++i) {
+            bucket_counts_[i].store(0, std::memory_order_relaxed);
         }
 
         sum_.store(0, std::memory_order_relaxed);
@@ -356,14 +358,14 @@ public:
      * @brief Get count for specific bucket
      */
     uint64_t bucket_count(size_t idx) const noexcept {
-        if (idx >= bucket_counts_.size())
+        if (idx >= bucket_count_size_)
             return 0;
         return bucket_counts_[idx].load(std::memory_order_relaxed);
     }
 
     void reset() override {
-        for (auto& count : bucket_counts_) {
-            count.store(0, std::memory_order_relaxed);
+        for (size_t i = 0; i < bucket_count_size_; ++i) {
+            bucket_counts_[i].store(0, std::memory_order_relaxed);
         }
         sum_.store(0, std::memory_order_relaxed);
         count_.store(0, std::memory_order_relaxed);
@@ -382,10 +384,10 @@ public:
                 << bucket_counts_[i].load(std::memory_order_relaxed) << "\n";
         }
 
-        // +Inf bucket
+        // +Inf bucket (last bucket)
         oss << name_ << "_bucket"
             << format_labels_with_le(labels_, std::numeric_limits<double>::infinity()) << " "
-            << bucket_counts_.back().load(std::memory_order_relaxed) << "\n";
+            << bucket_counts_[bucket_count_size_ - 1].load(std::memory_order_relaxed) << "\n";
 
         // Sum and count
         oss << name_ << "_sum" << label_str << " " << std::fixed << std::setprecision(6) << sum()
@@ -395,6 +397,12 @@ public:
         return oss.str();
     }
 
+    // Histogram is non-copyable/non-movable due to atomic members
+    Histogram(const Histogram&)            = delete;
+    Histogram& operator=(const Histogram&) = delete;
+    Histogram(Histogram&&)                 = delete;
+    Histogram& operator=(Histogram&&)      = delete;
+
 private:
     static constexpr int64_t PRECISION = 1000000;
 
@@ -402,7 +410,8 @@ private:
     std::string help_;
     Labels labels_;
     std::vector<double> buckets_;
-    std::vector<std::atomic<uint64_t>> bucket_counts_;
+    std::unique_ptr<std::atomic<uint64_t>[]> bucket_counts_;
+    size_t bucket_count_size_;
     std::atomic<int64_t> sum_;
     std::atomic<uint64_t> count_;
 

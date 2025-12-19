@@ -33,9 +33,9 @@
 namespace ipb::common::logging {
 
 using debug::LogLevel;
-using debug::SourceLocation;
 using debug::SpanId;
 using debug::TraceId;
+using ipb::common::SourceLocation;  // SourceLocation is in common::, not debug::
 
 // ============================================================================
 // FIELD VALUE TYPES

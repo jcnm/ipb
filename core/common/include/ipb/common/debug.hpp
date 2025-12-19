@@ -164,6 +164,10 @@ public:
     constexpr uint64_t value() const noexcept { return id_; }
     constexpr bool is_valid() const noexcept { return id_ != 0; }
 
+    // Comparison operators
+    constexpr bool operator==(const SpanId& other) const noexcept { return id_ == other.id_; }
+    constexpr bool operator!=(const SpanId& other) const noexcept { return id_ != other.id_; }
+
 private:
     uint64_t id_;
 };
