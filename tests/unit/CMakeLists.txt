@@ -280,6 +280,36 @@ set_tests_properties(test_backpressure PROPERTIES
     TIMEOUT 180
 )
 
+# Result Extensions test (covers and_then, or_else, map_error, flatten, inspect, unwrap_or_throw, retry, Pipeline)
+add_executable(test_result_ext test_result_ext.cpp)
+target_link_libraries(test_result_ext PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_result_ext COMMAND test_result_ext)
+set_tests_properties(test_result_ext PROPERTIES
+    LABELS "unit;core;common;functional"
+    TIMEOUT 120
+)
+
+# Registry test (covers Registry, LoadBalanceStrategy, HealthStatus, RegistryItemInfo)
+add_executable(test_registry test_registry.cpp)
+target_link_libraries(test_registry PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_registry COMMAND test_registry)
+set_tests_properties(test_registry PROPERTIES
+    LABELS "unit;core;common;registry"
+    TIMEOUT 180
+)
+
 # ============================================================================
 # Core/Common Real-Time Optimization Tests
 # ============================================================================
@@ -441,6 +471,10 @@ if(ENABLE_COVERAGE)
     target_link_options(test_rate_limiter PRIVATE --coverage)
     target_compile_options(test_backpressure PRIVATE --coverage)
     target_link_options(test_backpressure PRIVATE --coverage)
+    target_compile_options(test_result_ext PRIVATE --coverage)
+    target_link_options(test_result_ext PRIVATE --coverage)
+    target_compile_options(test_registry PRIVATE --coverage)
+    target_link_options(test_registry PRIVATE --coverage)
 
     # Core/Components tests
     target_compile_options(test_scheduler PRIVATE --coverage)
@@ -500,6 +534,8 @@ message(STATUS "    - test_lockfree_queue (SPSCQueue, MPSCQueue, MPMCQueue, Boun
 # test_metrics disabled due to Histogram std::vector<std::atomic> resize issue
 message(STATUS "    - test_rate_limiter (TokenBucket, SlidingWindowLimiter, AdaptiveRateLimiter, HierarchicalRateLimiter)")
 message(STATUS "    - test_backpressure (PressureSensor, BackpressureController, BackpressureStage, PressurePropagator)")
+message(STATUS "    - test_result_ext (and_then, or_else, map_error, flatten, inspect, Pipeline)")
+message(STATUS "    - test_registry (Registry, LoadBalanceStrategy, HealthStatus, RegistryItemInfo)")
 message(STATUS "  Core/Components:")
 message(STATUS "    - test_scheduler (EDFScheduler, ScheduledTask, TaskQueue)")
 message(STATUS "    - test_message_bus (MessageBus, Message, Subscription, Channel)")

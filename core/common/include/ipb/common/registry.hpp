@@ -19,6 +19,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
@@ -26,6 +27,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "data_point.hpp"
 #include "error.hpp"
 #include "platform.hpp"
 
@@ -275,6 +277,20 @@ struct RegistryStats {
         , degraded_items(other.degraded_items.load())
         , unhealthy_items(other.unhealthy_items.load())
     {}
+
+    RegistryStats& operator=(const RegistryStats& other) noexcept {
+        if (this != &other) {
+            total_selections.store(other.total_selections.load());
+            successful_selections.store(other.successful_selections.load());
+            failed_selections.store(other.failed_selections.load());
+            failover_events.store(other.failover_events.load());
+            active_items.store(other.active_items.load());
+            healthy_items.store(other.healthy_items.load());
+            degraded_items.store(other.degraded_items.load());
+            unhealthy_items.store(other.unhealthy_items.load());
+        }
+        return *this;
+    }
 
     void reset() noexcept {
         total_selections = 0;
