@@ -12,6 +12,7 @@
 
 #if defined(IPB_OS_POSIX)
 #include <pthread.h>
+#include <unistd.h>  // For isatty, fileno
 #elif defined(IPB_OS_WINDOWS)
 #include <windows.h>
 #endif
