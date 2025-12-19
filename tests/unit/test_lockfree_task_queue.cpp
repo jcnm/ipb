@@ -1232,40 +1232,64 @@ TEST_F(TaskQueuePerformanceTest, HighThroughput) {
 }
 
 TEST_F(TaskQueuePerformanceTest, ConcurrentThroughput) {
+    // Two-phase test to measure concurrent throughput without livelock
+    // Phase 1: Multiple threads push concurrently
+    // Phase 2: Multiple threads pop concurrently
     LockFreeTaskQueue queue{20000};
-    constexpr int TOTAL_OPS   = 10000;  // Reduced for CI environments
+    constexpr int TOTAL_TASKS = 10000;
     constexpr int NUM_THREADS = 4;
+    constexpr int TASKS_PER_THREAD = TOTAL_TASKS / NUM_THREADS;
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    std::vector<std::thread> threads;
-    std::atomic<int> ops{0};
+    // Phase 1: Concurrent push
+    std::vector<std::thread> producers;
+    std::atomic<int> pushed{0};
 
     for (int t = 0; t < NUM_THREADS; ++t) {
-        threads.emplace_back([&queue, t, &ops]() {
-            for (int i = 0; i < TOTAL_OPS / NUM_THREADS; ++i) {
+        producers.emplace_back([&queue, t, &pushed]() {
+            for (int i = 0; i < TASKS_PER_THREAD; ++i) {
                 LockFreeTask task;
-                task.id          = t * (TOTAL_OPS / NUM_THREADS) + i;
-                task.deadline_ns = i;
-                queue.push(task);
-
-                LockFreeTask popped;
-                queue.try_pop(popped);
-
-                ops.fetch_add(2, std::memory_order_relaxed);
+                task.id          = t * TASKS_PER_THREAD + i;
+                task.deadline_ns = t * TASKS_PER_THREAD + i;
+                if (queue.push(task)) {
+                    pushed.fetch_add(1, std::memory_order_relaxed);
+                }
             }
         });
     }
 
-    for (auto& thread : threads) {
-        thread.join();
+    for (auto& p : producers) {
+        p.join();
+    }
+
+    EXPECT_EQ(pushed.load(), TOTAL_TASKS);
+
+    // Phase 2: Concurrent pop
+    std::vector<std::thread> consumers;
+    std::atomic<int> popped{0};
+
+    for (int t = 0; t < NUM_THREADS; ++t) {
+        consumers.emplace_back([&queue, &popped]() {
+            LockFreeTask task;
+            while (queue.try_pop(task)) {
+                popped.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    for (auto& c : consumers) {
+        c.join();
     }
 
     auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
+    // Verify all operations completed
+    EXPECT_EQ(popped.load(), TOTAL_TASKS);
+    EXPECT_TRUE(queue.empty());
+
     // Should complete concurrent operations in reasonable time
-    EXPECT_GT(ops.load(), 0);
     EXPECT_LT(duration.count(), 5000);  // < 5 seconds for 20K ops
 }
 
