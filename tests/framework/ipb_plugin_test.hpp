@@ -71,7 +71,6 @@ inline DataPoint create_test_datapoint(
     dp.set_quality(quality);
     dp.set_protocol_id(protocol_id);
     dp.set_timestamp(Timestamp::now());
-    dp.set_valid(true);
     return dp;
 }
 
@@ -87,25 +86,11 @@ inline DataPoint create_test_datapoint_int(
     dp.set_value(value);
     dp.set_quality(quality);
     dp.set_timestamp(Timestamp::now());
-    dp.set_valid(true);
     return dp;
 }
 
-/**
- * @brief Create a test data point with string value
- */
-inline DataPoint create_test_datapoint_string(
-    const std::string& address,
-    const std::string& value,
-    Quality quality = Quality::GOOD
-) {
-    DataPoint dp(address);
-    dp.set_value(value);
-    dp.set_quality(quality);
-    dp.set_timestamp(Timestamp::now());
-    dp.set_valid(true);
-    return dp;
-}
+// Note: String values are not supported by Value type.
+// Use numeric or boolean types for DataPoint values.
 
 /**
  * @brief Create a test data point with boolean value
@@ -119,7 +104,6 @@ inline DataPoint create_test_datapoint_bool(
     dp.set_value(value);
     dp.set_quality(quality);
     dp.set_timestamp(Timestamp::now());
-    dp.set_valid(true);
     return dp;
 }
 
@@ -149,7 +133,6 @@ public:
             dp.set_value(value_dist(rng_));
             dp.set_quality(static_cast<Quality>(quality_dist(rng_)));
             dp.set_timestamp(Timestamp::now());
-            dp.set_valid(true);
             result.push_back(std::move(dp));
         }
 
@@ -163,8 +146,12 @@ public:
         size_t count,
         const std::string& address_prefix = "sensor/test"
     ) {
-        auto points = generate(count, address_prefix);
-        return DataSet(std::move(points));
+        std::vector<DataPoint> points = generate(count, address_prefix);
+        DataSet ds(count);  // Use capacity constructor
+        for (auto&& dp : points) {
+            ds.push_back(std::move(dp));
+        }
+        return ds;
     }
 
     /**
@@ -186,7 +173,6 @@ public:
             dp.set_value(value_dist(rng_));
             dp.set_quality(Quality::GOOD);
             dp.set_timestamp(base_time + interval * i);
-            dp.set_valid(true);
             result.push_back(std::move(dp));
         }
 
@@ -210,23 +196,23 @@ public:
 
     Result<void> initialize(const std::string&) override {
         initialized_ = true;
-        return Result<void>::success();
+        return ok();
     }
 
     Result<void> start() override {
         running_ = true;
-        return Result<void>::success();
+        return ok();
     }
 
     Result<void> stop() override {
         running_ = false;
-        return Result<void>::success();
+        return ok();
     }
 
     Result<void> shutdown() override {
         running_ = false;
         initialized_ = false;
-        return Result<void>::success();
+        return ok();
     }
 
     Result<void> send_data_point(const DataPoint& dp) override {
@@ -236,7 +222,7 @@ public:
         if (on_receive_) {
             on_receive_(dp);
         }
-        return Result<void>::success();
+        return ok();
     }
 
     Result<void> send_data_set(const DataSet& ds) override {
@@ -245,7 +231,7 @@ public:
             received_points_.push_back(dp);
             points_count_++;
         }
-        return Result<void>::success();
+        return ok();
     }
 
     bool is_connected() const override { return connected_; }
@@ -534,7 +520,7 @@ bool wait_for(Pred pred, std::chrono::milliseconds timeout = std::chrono::millis
  * @brief Assert that a Result is successful
  */
 #define ASSERT_RESULT_OK(result) \
-    ASSERT_TRUE((result).is_ok()) << "Expected success, got error: " << (result).error().message()
+    ASSERT_TRUE((result).is_success()) << "Expected success, got error: " << (result).error().message()
 
 /**
  * @brief Assert that a Result has an error
@@ -555,7 +541,7 @@ bool wait_for(Pred pred, std::chrono::milliseconds timeout = std::chrono::millis
  * @brief Expect that a Result is successful
  */
 #define EXPECT_RESULT_OK(result) \
-    EXPECT_TRUE((result).is_ok()) << "Expected success, got error: " << (result).error().message()
+    EXPECT_TRUE((result).is_success()) << "Expected success, got error: " << (result).error().message()
 
 /**
  * @brief Expect that a Result has an error
