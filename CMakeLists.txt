@@ -125,7 +125,12 @@ endif()
 # Security Note: Minimum versions specified to avoid known CVEs
 # Review and update these versions periodically
 
-find_package(PkgConfig REQUIRED)
+# PkgConfig is optional on Windows (vcpkg uses CMake's native find_package)
+if(NOT WIN32)
+    find_package(PkgConfig REQUIRED)
+else()
+    find_package(PkgConfig QUIET)
+endif()
 find_package(Threads REQUIRED)
 
 # OpenSSL - Required for cryptographic operations (SHA-256, TLS, CSPRNG)

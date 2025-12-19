@@ -8,11 +8,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find dependencies
-find_package(PkgConfig REQUIRED)
+# PkgConfig is optional on Windows
+if(NOT WIN32)
+    find_package(PkgConfig REQUIRED)
+else()
+    find_package(PkgConfig QUIET)
+endif()
 # Find jsoncpp (avoid conflicts)
 if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
     find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
+    if(NOT jsoncpp_FOUND AND PkgConfig_FOUND)
         pkg_check_modules(JSONCPP REQUIRED jsoncpp)
     endif()
 endif()
