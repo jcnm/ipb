@@ -121,8 +121,9 @@ set_tests_properties(test_memory_pool PROPERTIES
     TIMEOUT 180
 )
 
-# NOTE: test_structured_logger removed due to API incompatibilities in structured_logger.hpp
-# The header uses debug::SourceLocation but SourceLocation is in common:: namespace
+# NOTE: test_structured_logger disabled due to API incompatibilities
+# The structured_logger.hpp has various namespace and type issues that need fixing
+# in a separate PR
 
 # ============================================================================
 # Core/Components Tests - Coverage of scheduler, message_bus, rule_engine, etc.
