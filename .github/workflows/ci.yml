@@ -19,12 +19,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04, macos-13, macos-14, windows-2022]
+        os: [ubuntu-22.04, ubuntu-24.04, macos-15, macos-latest, windows-2022]
         arch: [x64]
         build_mode: [SERVER, EDGE]
         build_type: [Release, Debug]
         include:
-          # Add x86 builds for Windows only
+          # Add x86 builds for Linux and Windows
+          - os: ubuntu-24.04
+            arch: x86
+            build_mode: SERVER
+            build_type: Release
           - os: windows-2022
             arch: x86
             build_mode: SERVER
@@ -33,11 +37,16 @@ jobs:
             arch: x86
             build_mode: EDGE
             build_type: Release
+          # Add arm64 builds for macOS
+          - os: macos-latest
+            arch: arm64
+            build_mode: SERVER
+            build_type: Release
         exclude:
           # Skip Debug builds on macOS to save CI time
-          - os: macos-13
+          - os: macos-15
             build_type: Debug
-          - os: macos-14
+          - os: macos-latest
             build_type: Debug
           # Skip Debug builds on Windows to save CI time
           - os: windows-2022
@@ -51,13 +60,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           chmod +x ./scripts/install-deps-linux.sh
-          ./scripts/install-deps-linux.sh --system --no-confirm
+          ./scripts/install-deps-linux.sh --system --no-confirm --arch ${{ matrix.arch }}
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
           chmod +x ./scripts/install-deps-macos.sh
-          ./scripts/install-deps-macos.sh --skip-brew-update
+          ./scripts/install-deps-macos.sh --skip-brew-update --arch ${{ matrix.arch }}
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
