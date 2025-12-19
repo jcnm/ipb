@@ -616,8 +616,15 @@ std::string ConsoleSink::format_timestamp(const common::Timestamp& timestamp) co
     auto time_t_val = static_cast<std::time_t>(timestamp.seconds());
     auto ms         = static_cast<int>(timestamp.milliseconds() % 1000);
 
+    std::tm tm_buf{};
+#ifdef _WIN32
+    localtime_s(&tm_buf, &time_t_val);
+#else
+    localtime_r(&time_t_val, &tm_buf);
+#endif
+
     std::ostringstream oss;
-    oss << std::put_time(std::localtime(&time_t_val), "%Y-%m-%d %H:%M:%S");
+    oss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
     oss << "." << std::setfill('0') << std::setw(3) << ms;
 
     return oss.str();
