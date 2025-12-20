@@ -10,8 +10,18 @@ project(ipb-gate
 # Find required dependencies
 find_package(Threads REQUIRED)
 # yaml-cpp may already be found by parent CMakeLists.txt
-if(NOT TARGET yaml-cpp)
+# yaml-cpp can export as yaml-cpp or yaml-cpp::yaml-cpp depending on version
+if(TARGET yaml-cpp)
+    set(YAML_CPP_TARGET yaml-cpp)
+elseif(TARGET yaml-cpp::yaml-cpp)
+    set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+else()
     find_package(yaml-cpp REQUIRED)
+    if(TARGET yaml-cpp::yaml-cpp)
+        set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+    else()
+        set(YAML_CPP_TARGET yaml-cpp)
+    endif()
 endif()
 # PkgConfig is optional on Windows
 if(NOT WIN32)
@@ -55,7 +65,7 @@ target_link_libraries(ipb-gate PRIVATE
     ipb-core-components
     ipb-sink-console
     ipb-sink-syslog
-    yaml-cpp
+    ${YAML_CPP_TARGET}
     jsoncpp_lib
     Threads::Threads
     ${CMAKE_DL_LIBS}

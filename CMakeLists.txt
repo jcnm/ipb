@@ -244,6 +244,16 @@ function(ipb_find_yaml_cpp OUT_FOUND)
     find_package(yaml-cpp CONFIG QUIET)
     if(yaml-cpp_FOUND)
         message(STATUS "Found yaml-cpp via CMake config")
+
+        # Modern yaml-cpp (0.8+) uses yaml-cpp::yaml-cpp target name
+        # Create an alias if only the namespaced target exists
+        if(TARGET yaml-cpp::yaml-cpp AND NOT TARGET yaml-cpp)
+            # Create an interface library that links to the namespaced target
+            add_library(yaml-cpp INTERFACE IMPORTED)
+            target_link_libraries(yaml-cpp INTERFACE yaml-cpp::yaml-cpp)
+            message(STATUS "  Created yaml-cpp alias for yaml-cpp::yaml-cpp")
+        endif()
+
         # On macOS with Homebrew, we need to ensure include and library directories are set
         # The yaml-cpp CMake config may not set these properly
         if(APPLE AND TARGET yaml-cpp)
