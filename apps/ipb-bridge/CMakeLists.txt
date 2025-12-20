@@ -21,20 +21,30 @@ find_package(Threads REQUIRED)
 
 # Optional: yaml-cpp (for config loading, can be disabled for minimal build)
 if(NOT IPB_BRIDGE_MINIMAL)
+    # Check for yaml-cpp target (may be yaml-cpp or yaml-cpp::yaml-cpp)
     if(TARGET yaml-cpp)
         set(HAS_YAML_CPP TRUE)
+        set(YAML_CPP_TARGET yaml-cpp)
+    elseif(TARGET yaml-cpp::yaml-cpp)
+        set(HAS_YAML_CPP TRUE)
+        set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
     else()
         find_package(yaml-cpp QUIET)
         if(yaml-cpp_FOUND)
             set(HAS_YAML_CPP TRUE)
+            if(TARGET yaml-cpp::yaml-cpp)
+                set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+            else()
+                set(YAML_CPP_TARGET yaml-cpp)
+            endif()
         endif()
     endif()
 
     # On macOS, yaml-cpp CMake config may not have proper include directories
     # Try to find and add them explicitly if needed
-    if(HAS_YAML_CPP AND APPLE)
+    if(HAS_YAML_CPP AND APPLE AND TARGET ${YAML_CPP_TARGET})
         # Check if we need to find include directories
-        get_target_property(_yaml_inc yaml-cpp INTERFACE_INCLUDE_DIRECTORIES)
+        get_target_property(_yaml_inc ${YAML_CPP_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
         if(NOT _yaml_inc OR "${_yaml_inc}" STREQUAL "_yaml_inc-NOTFOUND")
             # Try Homebrew paths
             find_path(YAML_CPP_INCLUDE_DIR yaml-cpp/yaml.h
@@ -84,7 +94,7 @@ endif()
 
 # Conditionally link yaml-cpp
 if(HAS_YAML_CPP)
-    target_link_libraries(ipb-bridge PRIVATE yaml-cpp)
+    target_link_libraries(ipb-bridge PRIVATE ${YAML_CPP_TARGET})
     target_compile_definitions(ipb-bridge PRIVATE IPB_BRIDGE_HAS_YAML=1)
     # Add explicit include directory on macOS if needed
     if(YAML_CPP_BRIDGE_INCLUDE_DIR)

@@ -108,13 +108,23 @@ else()
     endif()
 
     # Find yaml-cpp (check if already found by parent CMakeLists.txt)
-    if(NOT TARGET yaml-cpp)
+    # yaml-cpp can export as yaml-cpp or yaml-cpp::yaml-cpp depending on version
+    if(TARGET yaml-cpp)
+        set(YAML_CPP_TARGET yaml-cpp)
+    elseif(TARGET yaml-cpp::yaml-cpp)
+        set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+    else()
         find_package(yaml-cpp REQUIRED)
+        if(TARGET yaml-cpp::yaml-cpp)
+            set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+        else()
+            set(YAML_CPP_TARGET yaml-cpp)
+        endif()
     endif()
 
     # On macOS, yaml-cpp CMake config may not have proper include directories
-    if(APPLE AND TARGET yaml-cpp)
-        get_target_property(_yaml_inc yaml-cpp INTERFACE_INCLUDE_DIRECTORIES)
+    if(APPLE AND TARGET ${YAML_CPP_TARGET})
+        get_target_property(_yaml_inc ${YAML_CPP_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
         if(NOT _yaml_inc OR "${_yaml_inc}" STREQUAL "_yaml_inc-NOTFOUND")
             find_path(YAML_CPP_COMPONENTS_INCLUDE_DIR yaml-cpp/yaml.h
                 PATHS
@@ -220,7 +230,7 @@ if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
     endif()
 else()
     # Server/Edge: yaml-cpp + jsoncpp
-    target_link_libraries(ipb-core-components PRIVATE yaml-cpp jsoncpp_lib)
+    target_link_libraries(ipb-core-components PRIVATE ${YAML_CPP_TARGET} jsoncpp_lib)
     # Add explicit include directory on macOS if needed
     if(YAML_CPP_COMPONENTS_INCLUDE_DIR)
         target_include_directories(ipb-core-components PRIVATE ${YAML_CPP_COMPONENTS_INCLUDE_DIR})
