@@ -632,8 +632,10 @@ public:
      * @brief Cancel a task by ID without removal
      *
      * More efficient than remove() - just marks the task.
+     * Note: Current implementation uses a global counter rather than
+     * tracking individual task IDs for lock-free efficiency.
      */
-    bool cancel(uint64_t task_id) noexcept {
+    bool cancel([[maybe_unused]] uint64_t task_id) noexcept {
         // This is a lazy operation - the task will be skipped during pop
         // We don't actually need to find it in the queue
         cancelled_ids_.fetch_add(1, std::memory_order_relaxed);

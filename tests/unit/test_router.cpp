@@ -400,7 +400,7 @@ TEST_F(RouterTest, UnregisterSink) {
     router::Router router(config_);
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto result = router.unregister_sink("sink1");
     EXPECT_TRUE(result.is_success());
@@ -413,7 +413,7 @@ TEST_F(RouterTest, SetSinkWeight) {
     router::Router router(config_);
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router.register_sink("sink1", sink->get(), 100);
+    ASSERT_TRUE(router.register_sink("sink1", sink->get(), 100).is_success());
 
     auto result = router.set_sink_weight("sink1", 200);
     EXPECT_TRUE(result.is_success());
@@ -423,7 +423,7 @@ TEST_F(RouterTest, EnableDisableSink) {
     router::Router router(config_);
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto result = router.enable_sink("sink1", false);
     EXPECT_TRUE(result.is_success());
@@ -450,7 +450,7 @@ TEST_F(RouterRuleManagementTest, AddRule) {
 
     // Register sink first (validation requires target sinks to exist)
     auto sink = std::make_shared<RouterMockSink>("sink1");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto rule = router::RuleBuilder()
                     .name("test_rule")
@@ -468,7 +468,7 @@ TEST_F(RouterRuleManagementTest, GetRule) {
 
     // Register sink first (validation requires target sinks to exist)
     auto sink = std::make_shared<RouterMockSink>("sink1");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto rule = router::RuleBuilder()
                     .name("test_rule")
@@ -489,7 +489,7 @@ TEST_F(RouterRuleManagementTest, RemoveRule) {
 
     // Register sink first (validation requires target sinks to exist)
     auto sink = std::make_shared<RouterMockSink>("sink1");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto rule = router::RuleBuilder()
                     .name("test_rule")
@@ -512,7 +512,7 @@ TEST_F(RouterRuleManagementTest, EnableDisableRule) {
 
     // Register sink first (validation requires target sinks to exist)
     auto sink = std::make_shared<RouterMockSink>("sink1");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto rule = router::RuleBuilder()
                     .name("test_rule")
@@ -535,7 +535,7 @@ TEST_F(RouterRuleManagementTest, GetAllRules) {
 
     // Register sink first (validation requires target sinks to exist)
     auto sink = std::make_shared<RouterMockSink>("sink1");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     for (int i = 0; i < 5; ++i) {
         auto rule = router::RuleBuilder()
@@ -543,7 +543,7 @@ TEST_F(RouterRuleManagementTest, GetAllRules) {
                         .match_address("sensors/temp" + std::to_string(i))
                         .route_to("sink1")
                         .build();
-        router.add_rule(rule);
+        (void)router.add_rule(rule);
     }
 
     auto rules = router.get_routing_rules();
@@ -578,10 +578,10 @@ TEST_F(MessageRoutingTest, RouteNotRunning) {
 
 TEST_F(MessageRoutingTest, RouteWithNoRules) {
     router::Router router(config_);
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     DataPoint dp("sensors/temp1");
     dp.set_value(25.5);
@@ -589,23 +589,23 @@ TEST_F(MessageRoutingTest, RouteWithNoRules) {
     auto result = router.route(dp);
     // May succeed (dead letter) or fail (no matching rule)
 
-    router.stop();
+    (void)router.stop();
 }
 
 TEST_F(MessageRoutingTest, RouteWithMatchingRule) {
     router::Router router(config_);
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto rule = router::RuleBuilder()
                     .name("temp_rule")
                     .match_address("sensors/temp1")
                     .route_to("sink1")
                     .build();
-    router.add_rule(rule);
+    ASSERT_TRUE(router.add_rule(rule).is_success());
 
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     DataPoint dp("sensors/temp1");
     dp.set_value(25.5);
@@ -615,7 +615,7 @@ TEST_F(MessageRoutingTest, RouteWithMatchingRule) {
     // Wait for async processing
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    router.stop();
+    (void)router.stop();
 
     // Sink should have received the message
     EXPECT_GE(sink->write_count(), 0);  // May or may not have processed yet
@@ -625,16 +625,16 @@ TEST_F(MessageRoutingTest, RouteWithDeadline) {
     router::Router router(config_);
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto rule = router::RuleBuilder()
                     .name("deadline_rule")
                     .match_address("sensors/temp1")
                     .route_to("sink1")
                     .build();
-    router.add_rule(rule);
+    ASSERT_TRUE(router.add_rule(rule).is_success());
 
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     DataPoint dp("sensors/temp1");
     dp.set_value(25.5);
@@ -643,23 +643,23 @@ TEST_F(MessageRoutingTest, RouteWithDeadline) {
     auto result   = router.route_with_deadline(dp, deadline);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
-    router.stop();
+    (void)router.stop();
 }
 
 TEST_F(MessageRoutingTest, RouteBatch) {
     router::Router router(config_);
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router.register_sink("sink1", sink->get()).is_success());
 
     auto rule = router::RuleBuilder()
                     .name("batch_rule")
                     .match_pattern("sensors/.*")
                     .route_to("sink1")
                     .build();
-    router.add_rule(rule);
+    ASSERT_TRUE(router.add_rule(rule).is_success());
 
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     std::vector<DataPoint> batch;
     for (int i = 0; i < 10; ++i) {
@@ -671,7 +671,7 @@ TEST_F(MessageRoutingTest, RouteBatch) {
     auto result = router.route_batch(batch);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    router.stop();
+    (void)router.stop();
 }
 
 // ============================================================================
@@ -699,22 +699,22 @@ TEST_F(SchedulerControlTest, SetDefaultDeadlineOffset) {
 
 TEST_F(SchedulerControlTest, GetPendingTaskCount) {
     router::Router router(config_);
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     auto count = router.get_pending_task_count();
     EXPECT_GE(count, 0u);
 
-    router.stop();
+    (void)router.stop();
 }
 
 TEST_F(SchedulerControlTest, GetMissedDeadlineCount) {
     router::Router router(config_);
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     auto count = router.get_missed_deadline_count();
     EXPECT_GE(count, 0u);
 
-    router.stop();
+    (void)router.stop();
 }
 
 // ============================================================================
@@ -735,26 +735,26 @@ protected:
 
 TEST_F(RouterMetricsTest, GetMetrics) {
     router::Router router(config_);
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     auto metrics = router.get_metrics();
     EXPECT_EQ(metrics.total_messages, 0u);
     EXPECT_EQ(metrics.successful_routes, 0u);
     EXPECT_EQ(metrics.failed_routes, 0u);
 
-    router.stop();
+    (void)router.stop();
 }
 
 TEST_F(RouterMetricsTest, ResetMetrics) {
     router::Router router(config_);
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     router.reset_metrics();
 
     auto metrics = router.get_metrics();
     EXPECT_EQ(metrics.total_messages, 0u);
 
-    router.stop();
+    (void)router.stop();
 }
 
 // ============================================================================
@@ -773,13 +773,13 @@ protected:
 
 TEST_F(RouterHealthTest, HealthyWhenRunning) {
     router::Router router(config_);
-    router.start();
+    ASSERT_TRUE(router.start().is_success());
 
     EXPECT_TRUE(router.is_healthy());
     auto status = router.get_health_status();
     EXPECT_FALSE(status.empty());
 
-    router.stop();
+    (void)router.stop();
 }
 
 TEST_F(RouterHealthTest, NotHealthyWhenStopped) {
@@ -869,7 +869,7 @@ TEST_F(RouterMoveTest, MoveConstruction) {
     router::Router router1(config_);
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router1.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router1.register_sink("sink1", sink->get()).is_success());
 
     router::Router router2(std::move(router1));
 
@@ -882,7 +882,7 @@ TEST_F(RouterMoveTest, MoveAssignment) {
     router::Router router2(config_);
 
     auto sink = std::make_shared<RouterMockSink>("test_sink");
-    router1.register_sink("sink1", sink->get());
+    ASSERT_TRUE(router1.register_sink("sink1", sink->get()).is_success());
 
     router2 = std::move(router1);
 

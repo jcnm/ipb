@@ -162,7 +162,7 @@ protected:
 };
 
 TEST_F(MapErrorTest, SuccessPassthrough) {
-    auto result = map_error(success_result, [](const Error& e) {
+    auto result = map_error(success_result, []([[maybe_unused]] const Error& e) {
         return Error(ErrorCode::UNKNOWN_ERROR, "should not be called");
     });
 
@@ -527,7 +527,7 @@ TEST(PipelineTest, ErrorRecovery) {
 
 TEST(PipelineTest, MapError) {
     auto result = Pipeline(Result<int>(Error(ErrorCode::UNKNOWN_ERROR, "original")))
-        .map_error([](const Error& e) {
+        .map_error([]([[maybe_unused]] const Error& e) {
             return Error(ErrorCode::NOT_FOUND, "transformed");
         })
         .result();

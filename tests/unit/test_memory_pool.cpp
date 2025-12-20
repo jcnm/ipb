@@ -494,7 +494,10 @@ TEST_F(PooledPtrTest, SelfAssignment) {
     TestObject* raw = pool_.allocate(42);
     PooledPtr<TestObject, ObjectPool<TestObject>> ptr(raw, &pool_);
 
-    ptr = std::move(ptr);
+    // Test self-assignment via indirection to avoid -Wself-move warning
+    // This is an intentional test to verify PooledPtr handles self-move correctly
+    auto& ref = ptr;
+    ptr       = std::move(ref);
 
     // Should still be valid after self-assignment
     EXPECT_TRUE(ptr);
