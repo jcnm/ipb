@@ -147,10 +147,16 @@ target_compile_options(ipb-bridge PRIVATE
     -fdata-sections
 )
 
-# Link options for size optimization
-target_link_options(ipb-bridge PRIVATE
-    -Wl,--gc-sections    # Remove unused sections
-)
+# Link options for size optimization (platform-specific)
+if(APPLE)
+    target_link_options(ipb-bridge PRIVATE
+        -Wl,-dead_strip    # Remove unused code on macOS
+    )
+else()
+    target_link_options(ipb-bridge PRIVATE
+        -Wl,--gc-sections    # Remove unused sections on Linux
+    )
+endif()
 
 # Static linking option
 if(IPB_BRIDGE_STATIC)
