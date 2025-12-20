@@ -333,8 +333,8 @@ TEST_F(EDFSchedulerTest, CancelTask) {
     EXPECT_TRUE(result.success);
 
     // Cancel it
-    bool cancelled = scheduler.cancel(result.task_id);
     // Note: Cancel may fail if task already started
+    (void)scheduler.cancel(result.task_id);
 
     scheduler.stop();
 }

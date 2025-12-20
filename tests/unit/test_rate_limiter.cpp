@@ -448,8 +448,6 @@ TEST_F(AdaptiveRateLimiterTest, LoadReporting) {
 
     AdaptiveRateLimiter limiter(config);
 
-    double initial_rate = limiter.current_rate();
-
     // Report high load
     for (int i = 0; i < 10; ++i) {
         limiter.report_load(0.9);  // 90% load

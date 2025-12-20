@@ -209,8 +209,8 @@ TEST_F(MessageBusTest, Subscribe) {
     std::atomic<bool> received{false};
 
     // Use non-wildcard pattern for exact topic matching
-    auto sub =
-        bus.subscribe("sensors/temperature", [&received](const Message& msg) { received = true; });
+    auto sub = bus.subscribe("sensors/temperature",
+                             [&received]([[maybe_unused]] const Message& msg) { received = true; });
 
     EXPECT_TRUE(sub.is_active());
 
