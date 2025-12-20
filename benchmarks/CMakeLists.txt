@@ -38,10 +38,12 @@ target_link_libraries(ipb-benchmark
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(ipb-benchmark PRIVATE
         -O3
-        -march=native
         -DNDEBUG
         -fno-omit-frame-pointer  # Keep for profiling
     )
+    if(NOT APPLE)
+        target_compile_options(ipb-benchmark PRIVATE -march=native)
+    endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(ipb-benchmark PRIVATE
         /O2

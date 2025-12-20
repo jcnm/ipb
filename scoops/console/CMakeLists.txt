@@ -28,15 +28,24 @@ add_library(ipb-scoop-console SHARED ${CONSOLE_SCOOP_SOURCES})
 target_link_libraries(ipb-scoop-console
     ipb-common
     jsoncpp_lib
-    pthread
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-scoop-console pthread)
+endif()
 
 # Compiler flags
-target_compile_options(ipb-scoop-console PRIVATE
-    -Wall -Wextra -Wpedantic
-    -O3 -march=native
-    -fPIC
-)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ipb-scoop-console PRIVATE
+        -Wall -Wextra -Wpedantic
+        -O3
+        -fPIC
+    )
+    if(NOT APPLE)
+        target_compile_options(ipb-scoop-console PRIVATE -march=native)
+    endif()
+elseif(MSVC)
+    target_compile_options(ipb-scoop-console PRIVATE /W4 /O2)
+endif()
 
 # Install targets
 install(TARGETS ipb-scoop-console

@@ -64,11 +64,13 @@ if(IPB_COMPILER_GCC OR IPB_COMPILER_CLANG)
         list(APPEND IPB_COMMON_COMPILE_FLAGS
             -fno-stack-protector
             -fomit-frame-pointer
-            -march=native
         )
+        if(NOT APPLE)
+            list(APPEND IPB_COMMON_COMPILE_FLAGS -march=native)
+        endif()
     endif()
-    
-    if(IPB_COMMON_ENABLE_NATIVE)
+
+    if(IPB_COMMON_ENABLE_NATIVE AND NOT APPLE)
         list(APPEND IPB_COMMON_COMPILE_FLAGS -march=native -mtune=native)
     endif()
     

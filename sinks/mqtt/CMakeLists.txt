@@ -52,8 +52,10 @@ target_link_libraries(ipb-sink-mqtt
     ipb-common
     ipb-transport-mqtt
     ZLIB::ZLIB
-    pthread
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-sink-mqtt pthread)
+endif()
 
 # Link jsoncpp based on how it was found
 if(TARGET JsonCpp::JsonCpp)
@@ -67,11 +69,18 @@ elseif(JSONCPP_FOUND)
 endif()
 
 # Compiler flags
-target_compile_options(ipb-sink-mqtt PRIVATE
-    -Wall -Wextra -Wpedantic
-    -O3 -march=native
-    -fPIC
-)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ipb-sink-mqtt PRIVATE
+        -Wall -Wextra -Wpedantic
+        -O3
+        -fPIC
+    )
+    if(NOT APPLE)
+        target_compile_options(ipb-sink-mqtt PRIVATE -march=native)
+    endif()
+elseif(MSVC)
+    target_compile_options(ipb-sink-mqtt PRIVATE /W4 /O2)
+endif()
 
 # Preprocessor definitions
 target_compile_definitions(ipb-sink-mqtt PRIVATE

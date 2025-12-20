@@ -106,11 +106,12 @@ target_include_directories(ipb-transport-http
 
 # Link dependencies
 target_link_libraries(ipb-transport-http
-    PUBLIC
-        pthread
     PRIVATE
         ${BACKEND_LIBS}
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-transport-http PUBLIC pthread)
+endif()
 
 # Link libipb-security if available (for TLS support)
 option(IPB_HTTP_USE_SECURITY "Use libipb-security for TLS" ON)
@@ -130,15 +131,21 @@ target_compile_definitions(ipb-transport-http
 )
 
 # Compiler options
-target_compile_options(ipb-transport-http PRIVATE
-    -Wall -Wextra -Wpedantic
-    -fPIC
-)
-
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-transport-http PRIVATE -O3)
-    if(NOT APPLE)
-        target_compile_options(ipb-transport-http PRIVATE -march=native)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ipb-transport-http PRIVATE
+        -Wall -Wextra -Wpedantic
+        -fPIC
+    )
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(ipb-transport-http PRIVATE -O3)
+        if(NOT APPLE)
+            target_compile_options(ipb-transport-http PRIVATE -march=native)
+        endif()
+    endif()
+elseif(MSVC)
+    target_compile_options(ipb-transport-http PRIVATE /W4)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(ipb-transport-http PRIVATE /O2)
     endif()
 endif()
 
