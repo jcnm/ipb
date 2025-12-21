@@ -46,11 +46,13 @@ target_link_libraries(ipb-router
         Threads::Threads
 )
 
-# Compiler flags
+# Compiler flags - platform specific
 target_compile_options(ipb-router PRIVATE
-    -Wall -Wextra -Wpedantic
-    $<$<CONFIG:Release>:-O3>
-    $<$<CONFIG:Debug>:-g -O0>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
+    $<$<CXX_COMPILER_ID:MSVC>:$<$<CONFIG:Release>:/O2>>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:$<$<CONFIG:Release>:-O3>>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:$<$<CONFIG:Debug>:-g -O0>>
 )
 
 # Install targets

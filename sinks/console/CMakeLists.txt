@@ -97,15 +97,11 @@ if(ENABLE_REALTIME_OPTIMIZATIONS)
     target_compile_definitions(ipb-sink-console PRIVATE IPB_REALTIME_ENABLED)
 endif()
 
-# Performance optimizations
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-sink-console PRIVATE
-        -O3
-        -ffast-math
-        -funroll-loops
-        -finline-functions
-    )
-endif()
+# Performance optimizations - platform specific
+target_compile_options(ipb-sink-console PRIVATE
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /fp:fast>
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Release>>:-O3 -ffast-math -funroll-loops -finline-functions>
+)
 
 # Install targets
 install(TARGETS ipb-sink-console
