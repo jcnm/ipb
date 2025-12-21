@@ -240,7 +240,9 @@ endif()
 # Compiler flags for real-time performance
 target_compile_options(ipb-core-components PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-fno-rtti>  # Reduce binary size
+    # Only disable RTTI when sanitizers are not enabled
+    # Sanitizers and GTest require RTTI for proper polymorphic type handling
+    $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<NOT:$<BOOL:${ENABLE_SANITIZERS}>>>:-fno-rtti>
 )
 
 # Export configuration
