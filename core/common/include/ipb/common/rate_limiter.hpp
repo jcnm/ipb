@@ -20,6 +20,7 @@
 
 #include <ipb/common/platform.hpp>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstddef>

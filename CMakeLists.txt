@@ -554,7 +554,10 @@ endif()
 
 # --- SINKS ---
 ipb_add_subdirectory(sinks/console IPB_SINK_CONSOLE)
-ipb_add_subdirectory(sinks/syslog IPB_SINK_SYSLOG)
+# Syslog is only available on POSIX systems (not Windows)
+if(NOT WIN32)
+    ipb_add_subdirectory(sinks/syslog IPB_SINK_SYSLOG)
+endif()
 
 if(MQTT_TRANSPORT_AVAILABLE)
     ipb_add_subdirectory(sinks/mqtt IPB_SINK_MQTT)
