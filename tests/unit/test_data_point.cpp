@@ -10,6 +10,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <limits>
 #include <thread>
 #include <vector>
 
@@ -889,7 +890,7 @@ TEST_F(ValueSerializationTest, RoundTripAllTypes) {
 
     // Float types
     Value v5;
-    v5.set(static_cast<float>(-1.0f / 0.0f));  // -inf
+    v5.set(-std::numeric_limits<float>::infinity());  // -inf
     test_cases.push_back({v5, "float-inf"});
 
     Value v6;

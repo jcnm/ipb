@@ -23,6 +23,7 @@
 
 #include <ipb/common/platform.hpp>
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -30,6 +31,18 @@
 #include <new>
 #include <optional>
 #include <type_traits>
+
+// CPU pause intrinsic for spin-wait loops
+#if defined(_MSC_VER)
+#include <intrin.h>
+#define IPB_CPU_PAUSE_QUEUE() _mm_pause()
+#elif defined(__x86_64__) || defined(__i386__)
+#define IPB_CPU_PAUSE_QUEUE() __builtin_ia32_pause()
+#elif defined(__aarch64__) || defined(__arm__)
+#define IPB_CPU_PAUSE_QUEUE() __asm__ __volatile__("yield")
+#else
+#define IPB_CPU_PAUSE_QUEUE() ((void)0)
+#endif
 
 namespace ipb::common {
 
@@ -450,9 +463,7 @@ public:
                 return true;
             }
 // Brief pause to reduce contention
-#if defined(__x86_64__) || defined(_M_X64)
-            __builtin_ia32_pause();
-#endif
+            IPB_CPU_PAUSE_QUEUE();
         }
         return false;
     }
@@ -468,9 +479,7 @@ public:
             if (result) {
                 return result;
             }
-#if defined(__x86_64__) || defined(_M_X64)
-            __builtin_ia32_pause();
-#endif
+            IPB_CPU_PAUSE_QUEUE();
         }
         return std::nullopt;
     }
