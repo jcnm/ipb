@@ -2,9 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev]
   pull_request:
-    branches: [main, develop]
 
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: 4
