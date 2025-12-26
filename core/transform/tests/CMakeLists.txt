@@ -27,6 +27,9 @@ target_link_libraries(transform_tests
         GTest::gtest_main
 )
 
+# Note: Compression/encryption libraries are linked as PUBLIC in ipb-transform,
+# so they automatically propagate to consumers like this test executable.
+
 target_compile_features(transform_tests PRIVATE cxx_std_20)
 
 # Propagate library availability definitions to tests
