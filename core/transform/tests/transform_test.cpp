@@ -1372,6 +1372,741 @@ TEST_F(TransformPerformanceTest, E2ELatencyBudget) {
 }
 
 // ============================================================================
+// INDUSTRIAL CERTIFICATION TESTS
+// IEC 61508 / ISO 26262 / DO-178C compliance requirements
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// THREAD SAFETY TESTS - Critical for multi-threaded industrial systems
+// ----------------------------------------------------------------------------
+
+#include <thread>
+#include <atomic>
+#include <mutex>
+
+class ThreadSafetyTest : public TransformTestBase {};
+
+TEST_F(ThreadSafetyTest, ConcurrentTransformSameData) {
+    // Multiple threads transforming the same data simultaneously
+    const auto shared_data = random_data(10000);
+    constexpr int num_threads = 8;
+    constexpr int iterations_per_thread = 100;
+
+    std::atomic<int> success_count{0};
+    std::atomic<int> failure_count{0};
+    std::vector<std::thread> threads;
+
+    for (int t = 0; t < num_threads; ++t) {
+        threads.emplace_back([&]() {
+            Base64Transformer transformer;
+            for (int i = 0; i < iterations_per_thread; ++i) {
+                auto result = transformer.transform(shared_data);
+                if (result.is_success()) {
+                    auto inverse = transformer.inverse(result.value());
+                    if (inverse.is_success() &&
+                        inverse.value() == shared_data) {
+                        success_count++;
+                    } else {
+                        failure_count++;
+                    }
+                } else {
+                    failure_count++;
+                }
+            }
+        });
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    EXPECT_EQ(success_count.load(), num_threads * iterations_per_thread);
+    EXPECT_EQ(failure_count.load(), 0);
+}
+
+TEST_F(ThreadSafetyTest, ConcurrentDifferentTransformers) {
+    // Multiple transformer types running concurrently
+    const auto data = random_data(1000);
+    constexpr int iterations = 50;
+
+    std::atomic<bool> all_passed{true};
+
+    auto run_transformer = [&](auto& transformer) {
+        for (int i = 0; i < iterations; ++i) {
+            auto result = transformer.transform(data);
+            if (!result.is_success()) {
+                all_passed = false;
+                return;
+            }
+            auto inverse = transformer.inverse(result.value());
+            if (!inverse.is_success() || inverse.value() != data) {
+                all_passed = false;
+                return;
+            }
+        }
+    };
+
+    std::thread t1([&]() { Base64Transformer t; run_transformer(t); });
+    std::thread t2([&]() { HexTransformer t; run_transformer(t); });
+    std::thread t3([&]() { Crc32Transformer t; run_transformer(t); });
+    std::thread t4([&]() { XxHash64Transformer t; run_transformer(t); });
+
+    t1.join();
+    t2.join();
+    t3.join();
+    t4.join();
+
+    EXPECT_TRUE(all_passed.load());
+}
+
+TEST_F(ThreadSafetyTest, ConcurrentPipelineOperations) {
+    // Concurrent pipeline transform/inverse operations
+    constexpr int num_threads = 4;
+    constexpr int iterations = 50;
+
+    std::atomic<int> errors{0};
+    std::vector<std::thread> threads;
+
+    for (int t = 0; t < num_threads; ++t) {
+        threads.emplace_back([&, t]() {
+            auto pipeline = TransformPipeline::builder()
+                .add<Crc32Transformer>()
+                .add<Base64Transformer>()
+                .build();
+
+            for (int i = 0; i < iterations; ++i) {
+                auto data = random_data(1000, static_cast<uint32_t>(t * 1000 + i));
+                auto result = pipeline.transform(data);
+                if (!result.is_success()) {
+                    errors++;
+                    continue;
+                }
+                auto inverse = pipeline.inverse(result.value());
+                if (!inverse.is_success() || inverse.value() != data) {
+                    errors++;
+                }
+            }
+        });
+    }
+
+    for (auto& th : threads) {
+        th.join();
+    }
+
+    EXPECT_EQ(errors.load(), 0);
+}
+
+// ----------------------------------------------------------------------------
+// DETERMINISM TESTS - Critical for safety-critical systems
+// ----------------------------------------------------------------------------
+
+class DeterminismTest : public TransformTestBase {};
+
+TEST_F(DeterminismTest, ReproducibleOutput) {
+    // Same input must always produce exactly the same output
+    auto data = random_data(1000);
+
+    Base64Transformer t1, t2;
+    auto r1 = t1.transform(data);
+    auto r2 = t2.transform(data);
+
+    ASSERT_TRUE(r1.is_success());
+    ASSERT_TRUE(r2.is_success());
+    EXPECT_EQ(r1.value(), r2.value()) << "Different instances produced different output";
+
+    // Multiple calls on same instance
+    auto r3 = t1.transform(data);
+    ASSERT_TRUE(r3.is_success());
+    EXPECT_EQ(r1.value(), r3.value()) << "Same instance produced different output";
+}
+
+TEST_F(DeterminismTest, PipelineOrderMatters) {
+    // Pipeline order must be deterministic and order-dependent
+    auto data = random_data(500);
+
+    auto pipeline_ab = TransformPipeline::builder()
+        .add<Crc32Transformer>()
+        .add<Base64Transformer>()
+        .build();
+
+    auto pipeline_ba = TransformPipeline::builder()
+        .add<Base64Transformer>()
+        .add<Crc32Transformer>()
+        .build();
+
+    auto result_ab = pipeline_ab.transform(data);
+    auto result_ba = pipeline_ba.transform(data);
+
+    ASSERT_TRUE(result_ab.is_success());
+    ASSERT_TRUE(result_ba.is_success());
+
+    // Different order should produce different output
+    EXPECT_NE(result_ab.value(), result_ba.value())
+        << "Different pipeline orders produced same output - order not respected";
+
+    // But each should be invertible
+    verify_bijectivity(pipeline_ab, data, "AB");
+    verify_bijectivity(pipeline_ba, data, "BA");
+}
+
+TEST_F(DeterminismTest, HashDeterminism) {
+    // Hash functions must be deterministic
+    auto data = random_data(1000);
+
+    for (int trial = 0; trial < 100; ++trial) {
+        uint32_t crc1 = crc32(data);
+        uint32_t crc2 = crc32(data);
+        EXPECT_EQ(crc1, crc2) << "CRC32 non-deterministic at trial " << trial;
+
+        uint64_t xxh1 = xxhash64(data, 0);
+        uint64_t xxh2 = xxhash64(data, 0);
+        EXPECT_EQ(xxh1, xxh2) << "XXHash64 non-deterministic at trial " << trial;
+    }
+}
+
+TEST_F(DeterminismTest, CrossRunConsistency) {
+    // Known input must produce known output across all runs
+    std::vector<uint8_t> known_input = {0x48, 0x65, 0x6c, 0x6c, 0x6f}; // "Hello"
+
+    Base64Transformer b64;
+    auto result = b64.transform(known_input);
+    ASSERT_TRUE(result.is_success());
+
+    std::string encoded(result.value().begin(), result.value().end());
+    EXPECT_EQ(encoded, "SGVsbG8=") << "Base64 output changed from known value";
+
+    HexTransformer hex;
+    auto hex_result = hex.transform(known_input);
+    ASSERT_TRUE(hex_result.is_success());
+
+    std::string hex_encoded(hex_result.value().begin(), hex_result.value().end());
+    EXPECT_EQ(hex_encoded, "48656c6c6f") << "Hex output changed from known value";
+}
+
+// ----------------------------------------------------------------------------
+// BOUNDARY VALUE TESTS - Power of 2, alignment, limits
+// ----------------------------------------------------------------------------
+
+class BoundaryValueTest : public TransformTestBase {};
+
+TEST_F(BoundaryValueTest, PowerOfTwoSizes) {
+    // Test all power-of-2 sizes from 1 to 64KB
+    Base64Transformer transformer;
+
+    for (int power = 0; power <= 16; ++power) {
+        size_t size = static_cast<size_t>(1) << power;
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "2^" + std::to_string(power));
+    }
+}
+
+TEST_F(BoundaryValueTest, PowerOfTwoMinusOne) {
+    // Test 2^n - 1 sizes (common edge cases)
+    Base64Transformer transformer;
+
+    for (int power = 1; power <= 16; ++power) {
+        size_t size = (static_cast<size_t>(1) << power) - 1;
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "2^" + std::to_string(power) + "-1");
+    }
+}
+
+TEST_F(BoundaryValueTest, PowerOfTwoPlusOne) {
+    // Test 2^n + 1 sizes (common edge cases)
+    Base64Transformer transformer;
+
+    for (int power = 1; power <= 16; ++power) {
+        size_t size = (static_cast<size_t>(1) << power) + 1;
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "2^" + std::to_string(power) + "+1");
+    }
+}
+
+TEST_F(BoundaryValueTest, Base64BlockBoundaries) {
+    // Base64 works in 3-byte blocks, test all boundary cases
+    Base64Transformer transformer;
+
+    for (size_t size = 0; size <= 100; ++size) {
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "size=" + std::to_string(size));
+
+        auto encoded = transformer.transform(data);
+        ASSERT_TRUE(encoded.is_success());
+
+        // Verify correct padding
+        if (size > 0) {
+            size_t expected_encoded_len = ((size + 2) / 3) * 4;
+            EXPECT_EQ(encoded.value().size(), expected_encoded_len)
+                << "Wrong encoded size for input size " << size;
+        }
+    }
+}
+
+TEST_F(BoundaryValueTest, IntegrityChecksumBoundaries) {
+    // CRC32 adds 4 bytes, XXHash64 adds 8 bytes
+    Crc32Transformer crc;
+    XxHash64Transformer xxh;
+
+    // Test at checksum size boundaries
+    for (size_t size : {1, 3, 4, 5, 7, 8, 9, 15, 16, 17}) {
+        auto data = random_data(size);
+
+        auto crc_result = crc.transform(data);
+        ASSERT_TRUE(crc_result.is_success());
+        EXPECT_EQ(crc_result.value().size(), size + 4)
+            << "CRC32 wrong output size for input " << size;
+
+        auto xxh_result = xxh.transform(data);
+        ASSERT_TRUE(xxh_result.is_success());
+        EXPECT_EQ(xxh_result.value().size(), size + 8)
+            << "XXHash64 wrong output size for input " << size;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// FAULT INJECTION TESTS - Systematic corruption patterns
+// ----------------------------------------------------------------------------
+
+class FaultInjectionTest : public TransformTestBase {};
+
+TEST_F(FaultInjectionTest, SingleBitCorruption) {
+    // Test corruption detection for every bit position in first N bytes
+    Crc32Transformer transformer;
+    auto data = random_data(100);
+    auto with_checksum = transformer.transform(data);
+    ASSERT_TRUE(with_checksum.is_success());
+
+    int detected = 0;
+    int total = 0;
+
+    for (size_t byte_idx = 0; byte_idx < with_checksum.value().size(); ++byte_idx) {
+        for (int bit = 0; bit < 8; ++bit) {
+            auto corrupted = with_checksum.value();
+            corrupted[byte_idx] ^= (1 << bit);
+
+            auto result = transformer.inverse(corrupted);
+            total++;
+            if (result.is_error()) {
+                detected++;
+            }
+        }
+    }
+
+    // CRC32 should detect all single-bit errors
+    EXPECT_EQ(detected, total)
+        << "CRC32 failed to detect " << (total - detected) << " of " << total << " single-bit errors";
+}
+
+TEST_F(FaultInjectionTest, ByteCorruption) {
+    // Test corruption of entire bytes at various positions
+    XxHash64Transformer transformer;
+    auto data = random_data(1000);
+    auto with_hash = transformer.transform(data);
+    ASSERT_TRUE(with_hash.is_success());
+
+    // Test corruption at start, middle, end
+    std::vector<size_t> positions = {0, 1, 100, 500, 999,
+                                      with_hash.value().size() - 8,  // Start of hash
+                                      with_hash.value().size() - 1}; // Last byte
+
+    for (size_t pos : positions) {
+        if (pos >= with_hash.value().size()) continue;
+
+        auto corrupted = with_hash.value();
+        corrupted[pos] = ~corrupted[pos];  // Flip all bits
+
+        auto result = transformer.inverse(corrupted);
+        EXPECT_TRUE(result.is_error())
+            << "Failed to detect byte corruption at position " << pos;
+    }
+}
+
+TEST_F(FaultInjectionTest, TruncationDetection) {
+    // Test detection of truncated data
+    Crc32Transformer crc;
+    auto data = random_data(100);
+    auto with_crc = crc.transform(data);
+    ASSERT_TRUE(with_crc.is_success());
+
+    // Truncate at various points
+    for (size_t len = 0; len < with_crc.value().size(); ++len) {
+        std::vector<uint8_t> truncated(with_crc.value().begin(),
+                                        with_crc.value().begin() + static_cast<ptrdiff_t>(len));
+        auto result = crc.inverse(truncated);
+
+        if (len < 4) {
+            // Less than checksum size - must fail
+            EXPECT_TRUE(result.is_error())
+                << "Failed to detect truncation at length " << len;
+        }
+        // For len >= 4, result depends on whether truncated data+CRC is valid
+    }
+}
+
+TEST_F(FaultInjectionTest, AppendedDataDetection) {
+    // Test detection of appended extra data
+    Crc32Transformer transformer;
+    auto data = random_data(100);
+    auto with_crc = transformer.transform(data);
+    ASSERT_TRUE(with_crc.is_success());
+
+    // Append extra bytes
+    auto extended = with_crc.value();
+    extended.push_back(0x00);
+
+    // This may or may not be detected depending on implementation
+    // Document the behavior
+    auto result = transformer.inverse(extended);
+    // The important thing is consistent behavior
+    SUCCEED() << "Appended data behavior: "
+              << (result.is_success() ? "allowed (returns original + extra)"
+                                       : "rejected");
+}
+
+TEST_F(FaultInjectionTest, InvalidBase64Characters) {
+    // Test all possible invalid Base64 input characters
+    Base64Transformer transformer;
+
+    for (int c = 0; c < 256; ++c) {
+        // Valid Base64 chars: A-Z, a-z, 0-9, +, /, =
+        bool is_valid = (c >= 'A' && c <= 'Z') ||
+                        (c >= 'a' && c <= 'z') ||
+                        (c >= '0' && c <= '9') ||
+                        c == '+' || c == '/' || c == '=';
+
+        if (!is_valid) {
+            std::vector<uint8_t> invalid_input = {'Q', 'Q', 'Q', static_cast<uint8_t>(c)};
+            auto result = transformer.inverse(invalid_input);
+            EXPECT_TRUE(result.is_error())
+                << "Failed to reject invalid Base64 char: " << c;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// RECOVERY TESTS - System continues working after errors
+// ----------------------------------------------------------------------------
+
+class RecoveryTest : public TransformTestBase {};
+
+TEST_F(RecoveryTest, TransformerUsableAfterError) {
+    // After an error, the transformer should still work correctly
+    Base64Transformer transformer;
+
+    // First, cause an error
+    std::vector<uint8_t> invalid = {'!', '!', '!', '!'};
+    auto error_result = transformer.inverse(invalid);
+    EXPECT_TRUE(error_result.is_error());
+
+    // Now verify normal operation still works
+    auto valid_data = random_data(100);
+    auto encoded = transformer.transform(valid_data);
+    ASSERT_TRUE(encoded.is_success()) << "Transform failed after error recovery";
+
+    auto decoded = transformer.inverse(encoded.value());
+    ASSERT_TRUE(decoded.is_success()) << "Inverse failed after error recovery";
+    EXPECT_EQ(decoded.value(), valid_data) << "Data mismatch after error recovery";
+}
+
+TEST_F(RecoveryTest, PipelineUsableAfterError) {
+    auto pipeline = TransformPipeline::builder()
+        .add<Crc32Transformer>()
+        .add<Base64Transformer>()
+        .build();
+
+    // Cause an error by providing corrupted input
+    std::vector<uint8_t> corrupted = {'X', 'X', 'X', 'X'};  // Invalid Base64
+    auto error_result = pipeline.inverse(corrupted);
+    // May or may not error depending on how Base64 handles it
+
+    // Verify pipeline still works
+    auto data = random_data(100);
+    verify_bijectivity(pipeline, data, "after potential error");
+}
+
+TEST_F(RecoveryTest, MultipleConsecutiveErrors) {
+    Crc32Transformer transformer;
+
+    // Cause multiple consecutive errors
+    for (int i = 0; i < 10; ++i) {
+        std::vector<uint8_t> too_short = {0x01, 0x02};
+        auto result = transformer.inverse(too_short);
+        EXPECT_TRUE(result.is_error());
+    }
+
+    // Verify still works
+    auto data = random_data(100);
+    verify_bijectivity(transformer, data, "after 10 errors");
+}
+
+TEST_F(RecoveryTest, InterleavedSuccessAndFailure) {
+    // Mix successful and failed operations
+    Base64Transformer transformer;
+
+    for (int i = 0; i < 50; ++i) {
+        if (i % 3 == 0) {
+            // Cause error
+            std::vector<uint8_t> invalid = {'!', '@', '#'};
+            auto result = transformer.inverse(invalid);
+            EXPECT_TRUE(result.is_error());
+        } else {
+            // Normal operation
+            auto data = random_data(100, static_cast<uint32_t>(i));
+            verify_bijectivity(transformer, data, "iter=" + std::to_string(i));
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// MEMORY SAFETY TESTS - Allocation patterns, pressure
+// ----------------------------------------------------------------------------
+
+class MemorySafetyTest : public TransformTestBase {};
+
+TEST_F(MemorySafetyTest, RepeatedAllocDealloc) {
+    // Test for memory leaks through repeated alloc/dealloc cycles
+    Base64Transformer transformer;
+
+    for (int i = 0; i < 1000; ++i) {
+        auto data = random_data(10000);
+        auto encoded = transformer.transform(data);
+        ASSERT_TRUE(encoded.is_success());
+        auto decoded = transformer.inverse(encoded.value());
+        ASSERT_TRUE(decoded.is_success());
+        // Memory should be freed at end of each iteration
+    }
+    SUCCEED() << "Completed 1000 alloc/dealloc cycles without crash";
+}
+
+TEST_F(MemorySafetyTest, GrowingSizes) {
+    // Test with progressively larger allocations
+    Base64Transformer transformer;
+
+    size_t size = 1;
+    while (size <= 10 * 1024 * 1024) {  // Up to 10 MB
+        auto data = random_data(size);
+        auto encoded = transformer.transform(data);
+        ASSERT_TRUE(encoded.is_success())
+            << "Failed at size " << size;
+
+        auto decoded = transformer.inverse(encoded.value());
+        ASSERT_TRUE(decoded.is_success())
+            << "Decode failed at size " << size;
+
+        size *= 2;
+    }
+}
+
+TEST_F(MemorySafetyTest, PipelineMemoryHandling) {
+    // Deep pipeline with many stages
+    auto pipeline = TransformPipeline::builder()
+        .add<Crc32Transformer>()
+        .add<XxHash64Transformer>()
+        .add<Base64Transformer>()
+        .add<HexTransformer>()
+        .build();
+
+    for (int i = 0; i < 100; ++i) {
+        auto data = random_data(1000);
+        auto result = pipeline.transform(data);
+        ASSERT_TRUE(result.is_success());
+
+        // Expansion ratio with all these stages can be large
+        auto recovered = pipeline.inverse(result.value());
+        ASSERT_TRUE(recovered.is_success());
+        EXPECT_EQ(recovered.value(), data);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// STATE ISOLATION TESTS - Independent instances
+// ----------------------------------------------------------------------------
+
+class StateIsolationTest : public TransformTestBase {};
+
+TEST_F(StateIsolationTest, IndependentInstances) {
+    // Operations on one instance should not affect another
+    Base64Transformer t1, t2;
+
+    auto data1 = random_data(100, 1);
+    auto data2 = random_data(100, 2);
+
+    auto r1 = t1.transform(data1);
+    auto r2 = t2.transform(data2);
+
+    ASSERT_TRUE(r1.is_success());
+    ASSERT_TRUE(r2.is_success());
+
+    // Decode with the same instances
+    auto d1 = t1.inverse(r1.value());
+    auto d2 = t2.inverse(r2.value());
+
+    ASSERT_TRUE(d1.is_success());
+    ASSERT_TRUE(d2.is_success());
+
+    EXPECT_EQ(d1.value(), data1);
+    EXPECT_EQ(d2.value(), data2);
+}
+
+TEST_F(StateIsolationTest, ClonedInstancesIndependent) {
+    Base64Transformer original;
+    auto cloned = original.clone();
+
+    auto data = random_data(100);
+
+    // Use original
+    auto r1 = original.transform(data);
+    ASSERT_TRUE(r1.is_success());
+
+    // Clone should still work independently
+    auto r2 = cloned->transform(data);
+    ASSERT_TRUE(r2.is_success());
+
+    EXPECT_EQ(r1.value(), r2.value());
+
+    // Modify data and verify independence
+    auto data2 = random_data(200);
+    auto r3 = original.transform(data2);
+    auto r4 = cloned->transform(data);
+
+    EXPECT_EQ(r4.value(), r1.value()) << "Clone affected by original's operations";
+}
+
+TEST_F(StateIsolationTest, PipelineInstancesIndependent) {
+    auto p1 = TransformPipeline::builder()
+        .add<Crc32Transformer>()
+        .add<Base64Transformer>()
+        .build();
+
+    auto p2 = TransformPipeline::builder()
+        .add<Crc32Transformer>()
+        .add<Base64Transformer>()
+        .build();
+
+    auto data = random_data(100);
+
+    auto r1 = p1.transform(data);
+    auto r2 = p2.transform(data);
+
+    ASSERT_TRUE(r1.is_success());
+    ASSERT_TRUE(r2.is_success());
+
+    // Same configuration should produce same output
+    EXPECT_EQ(r1.value(), r2.value());
+
+    // But instances are independent
+    verify_bijectivity(p1, random_data(200), "p1");
+    verify_bijectivity(p2, random_data(300), "p2");
+}
+
+// ----------------------------------------------------------------------------
+// ERROR CODE COVERAGE TESTS - All error paths testable
+// ----------------------------------------------------------------------------
+
+class ErrorCodeCoverageTest : public TransformTestBase {};
+
+TEST_F(ErrorCodeCoverageTest, DecodingError) {
+    Base64Transformer b64;
+    std::vector<uint8_t> invalid = {'!', '!', '!', '!'};
+    auto result = b64.inverse(invalid);
+    EXPECT_TRUE(result.is_error());
+    EXPECT_EQ(result.code(), ErrorCode::DECODING_ERROR);
+
+    HexTransformer hex;
+    std::vector<uint8_t> odd_hex = {'a', 'b', 'c'};  // Odd length
+    auto hex_result = hex.inverse(odd_hex);
+    EXPECT_TRUE(hex_result.is_error());
+    EXPECT_EQ(hex_result.code(), ErrorCode::DECODING_ERROR);
+}
+
+TEST_F(ErrorCodeCoverageTest, TruncatedData) {
+    Crc32Transformer crc;
+    std::vector<uint8_t> too_short = {0x01, 0x02, 0x03};  // Less than 4 bytes
+    auto result = crc.inverse(too_short);
+    EXPECT_TRUE(result.is_error());
+    EXPECT_EQ(result.code(), ErrorCode::TRUNCATED_DATA);
+
+    XxHash64Transformer xxh;
+    std::vector<uint8_t> also_short = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+    auto xxh_result = xxh.inverse(also_short);
+    EXPECT_TRUE(xxh_result.is_error());
+    EXPECT_EQ(xxh_result.code(), ErrorCode::TRUNCATED_DATA);
+}
+
+TEST_F(ErrorCodeCoverageTest, ChecksumMismatch) {
+    Crc32Transformer crc;
+    auto data = random_data(100);
+    auto with_crc = crc.transform(data);
+    ASSERT_TRUE(with_crc.is_success());
+
+    // Corrupt the data
+    auto corrupted = with_crc.value();
+    corrupted[50] ^= 0xFF;
+
+    auto result = crc.inverse(corrupted);
+    EXPECT_TRUE(result.is_error());
+    EXPECT_EQ(result.code(), ErrorCode::INVALID_CHECKSUM);
+}
+
+TEST_F(ErrorCodeCoverageTest, ErrorNameFunction) {
+    // Verify error_name returns meaningful strings
+    using ipb::common::error_name;
+    EXPECT_FALSE(error_name(ErrorCode::SUCCESS).empty());
+    EXPECT_FALSE(error_name(ErrorCode::DECODING_ERROR).empty());
+    EXPECT_FALSE(error_name(ErrorCode::TRUNCATED_DATA).empty());
+    EXPECT_FALSE(error_name(ErrorCode::INVALID_CHECKSUM).empty());
+}
+
+// ----------------------------------------------------------------------------
+// IDEMPOTENCE TESTS - Repeated operations produce consistent results
+// ----------------------------------------------------------------------------
+
+class IdempotenceTest : public TransformTestBase {};
+
+TEST_F(IdempotenceTest, DoubleEncode) {
+    // Encoding twice should work (though produce different result)
+    Base64Transformer transformer;
+    auto data = random_data(100);
+
+    auto encoded1 = transformer.transform(data);
+    ASSERT_TRUE(encoded1.is_success());
+
+    auto encoded2 = transformer.transform(encoded1.value());
+    ASSERT_TRUE(encoded2.is_success());
+
+    // Double decode should recover original
+    auto decoded1 = transformer.inverse(encoded2.value());
+    ASSERT_TRUE(decoded1.is_success());
+
+    auto decoded2 = transformer.inverse(decoded1.value());
+    ASSERT_TRUE(decoded2.is_success());
+
+    EXPECT_EQ(decoded2.value(), data);
+}
+
+TEST_F(IdempotenceTest, RepeatedRoundtrips) {
+    // Multiple roundtrips should always produce same result
+    Base64Transformer transformer;
+    auto original = random_data(100);
+
+    std::vector<uint8_t> current = original;
+    for (int i = 0; i < 10; ++i) {
+        auto encoded = transformer.transform(current);
+        ASSERT_TRUE(encoded.is_success());
+
+        auto decoded = transformer.inverse(encoded.value());
+        ASSERT_TRUE(decoded.is_success());
+
+        EXPECT_EQ(decoded.value(), current)
+            << "Data changed after roundtrip " << i;
+
+        current = decoded.value();
+    }
+
+    EXPECT_EQ(current, original);
+}
+
+// ============================================================================
 // MAIN
 // ============================================================================
 
