@@ -646,12 +646,14 @@ TEST_F(TransformPipelineTest, VariousDataSizes) {
         .add<Base64Transformer>()
         .build();
 
-    // Test all data size categories: small, medium, large, very large
+    // Test all data size categories: tiny, small, medium, large, very large, extra large
     std::vector<std::pair<std::string, size_t>> sizes = {
         {"tiny (1 KB)", 1024},
         {"small (64 KB)", 64 * 1024},
         {"medium (1 MB)", 1024 * 1024},
         {"large (10 MB)", 10 * 1024 * 1024},
+        {"very large (100 MB)", 100 * 1024 * 1024},
+        {"extra large (500 MB)", 500 * 1024 * 1024},
     };
 
     for (const auto& [name, size] : sizes) {
@@ -1113,10 +1115,24 @@ protected:
         std::cout << "\n| Transform | Size | Throughput | Latency | Overhead |\n";
         std::cout << "|-----------|------|------------|---------|----------|\n";
         for (const auto& r : results) {
+            std::string size_str;
+            if (r.data_size >= 1024 * 1024) {
+                size_str = std::to_string(r.data_size / (1024 * 1024)) + " MB";
+            } else {
+                size_str = std::to_string(r.data_size / 1024) + " KB";
+            }
+            std::string latency_str;
+            if (r.latency_us >= 1000000) {
+                latency_str = std::to_string(static_cast<int>(r.latency_us / 1000000)) + " s";
+            } else if (r.latency_us >= 1000) {
+                latency_str = std::to_string(static_cast<int>(r.latency_us / 1000)) + " ms";
+            } else {
+                latency_str = std::to_string(static_cast<int>(r.latency_us)) + " µs";
+            }
             std::cout << "| " << r.name
-                      << " | " << (r.data_size / 1024) << " KB"
+                      << " | " << size_str
                       << " | " << std::fixed << std::setprecision(1) << r.throughput_mbs << " MB/s"
-                      << " | " << std::setprecision(0) << r.latency_us << " µs"
+                      << " | " << latency_str
                       << " | " << std::setprecision(1) << r.overhead_percent << "% |\n";
         }
         std::cout << std::endl;
@@ -1126,12 +1142,14 @@ protected:
 TEST_F(TransformPerformanceTest, ThroughputByDataSize) {
     std::cout << "\n=== TRANSFORM THROUGHPUT BY DATA SIZE ===" << std::endl;
 
-    // Test different data sizes: tiny, small, medium, large
+    // Test different data sizes: tiny, small, medium, large, very large, extra large
     std::vector<size_t> sizes = {
-        1024,           // 1 KB - typical small message
-        64 * 1024,      // 64 KB - typical payload
-        1024 * 1024,    // 1 MB - large payload
-        10 * 1024 * 1024 // 10 MB - very large payload
+        1024,                 // 1 KB - typical small message
+        64 * 1024,            // 64 KB - typical payload
+        1024 * 1024,          // 1 MB - large payload
+        10 * 1024 * 1024,     // 10 MB - very large payload
+        100 * 1024 * 1024,    // 100 MB - very large payload
+        500 * 1024 * 1024     // 500 MB - extra large payload
     };
 
     std::vector<BenchmarkResult> results;
@@ -1139,35 +1157,40 @@ TEST_F(TransformPerformanceTest, ThroughputByDataSize) {
     for (size_t size : sizes) {
         auto data = random_data(size);
 
+        // Adjust iterations based on data size to keep test time reasonable
+        // Small data: 10 iters, Large: 3 iters, Very large: 1 iter
+        int iters = (size >= 100 * 1024 * 1024) ? 1 :
+                    (size >= 10 * 1024 * 1024) ? 3 : 10;
+
         // Baseline: no transform (just copy)
         {
             auto start = std::chrono::high_resolution_clock::now();
-            for (int i = 0; i < 10; ++i) {
+            for (int i = 0; i < iters; ++i) {
                 std::vector<uint8_t> copy = data;
                 (void)copy;
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            double mb = (size * 10.0) / (1024 * 1024);
+            double mb = (size * static_cast<double>(iters)) / (1024 * 1024);
             double seconds = duration.count() / 1000000.0;
-            results.push_back({"baseline", size, mb / seconds, duration.count() / 10.0, 0.0});
+            results.push_back({"baseline", size, mb / seconds, duration.count() / static_cast<double>(iters), 0.0});
         }
 
         // Base64 transform
         {
             Base64Transformer transformer;
             auto start = std::chrono::high_resolution_clock::now();
-            for (int i = 0; i < 10; ++i) {
+            for (int i = 0; i < iters; ++i) {
                 auto encoded = transformer.transform(data);
                 auto decoded = transformer.inverse(encoded.value());
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            double mb = (size * 10.0 * 2) / (1024 * 1024);
+            double mb = (size * static_cast<double>(iters) * 2) / (1024 * 1024);
             double seconds = duration.count() / 1000000.0;
             double baseline = results.back().latency_us;
-            double overhead = ((duration.count() / 10.0) - baseline) / baseline * 100;
-            results.push_back({"Base64", size, mb / seconds, duration.count() / 10.0, overhead});
+            double overhead = ((duration.count() / static_cast<double>(iters)) - baseline) / baseline * 100;
+            results.push_back({"Base64", size, mb / seconds, duration.count() / static_cast<double>(iters), overhead});
         }
 
         // CRC32 + Base64 pipeline
@@ -1178,17 +1201,17 @@ TEST_F(TransformPerformanceTest, ThroughputByDataSize) {
                 .build();
 
             auto start = std::chrono::high_resolution_clock::now();
-            for (int i = 0; i < 10; ++i) {
+            for (int i = 0; i < iters; ++i) {
                 auto encoded = pipeline.transform(data);
                 auto decoded = pipeline.inverse(encoded.value());
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            double mb = (size * 10.0 * 2) / (1024 * 1024);
+            double mb = (size * static_cast<double>(iters) * 2) / (1024 * 1024);
             double seconds = duration.count() / 1000000.0;
             double baseline_latency = results[results.size() - 2].latency_us;
-            double overhead = ((duration.count() / 10.0) - baseline_latency) / baseline_latency * 100;
-            results.push_back({"CRC32+B64", size, mb / seconds, duration.count() / 10.0, overhead});
+            double overhead = ((duration.count() / static_cast<double>(iters)) - baseline_latency) / baseline_latency * 100;
+            results.push_back({"CRC32+B64", size, mb / seconds, duration.count() / static_cast<double>(iters), overhead});
         }
 
         // XXHash64 + Base64 pipeline
@@ -1199,17 +1222,17 @@ TEST_F(TransformPerformanceTest, ThroughputByDataSize) {
                 .build();
 
             auto start = std::chrono::high_resolution_clock::now();
-            for (int i = 0; i < 10; ++i) {
+            for (int i = 0; i < iters; ++i) {
                 auto encoded = pipeline.transform(data);
                 auto decoded = pipeline.inverse(encoded.value());
             }
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            double mb = (size * 10.0 * 2) / (1024 * 1024);
+            double mb = (size * static_cast<double>(iters) * 2) / (1024 * 1024);
             double seconds = duration.count() / 1000000.0;
             double baseline_latency = results[results.size() - 3].latency_us;
-            double overhead = ((duration.count() / 10.0) - baseline_latency) / baseline_latency * 100;
-            results.push_back({"XXH64+B64", size, mb / seconds, duration.count() / 10.0, overhead});
+            double overhead = ((duration.count() / static_cast<double>(iters)) - baseline_latency) / baseline_latency * 100;
+            results.push_back({"XXH64+B64", size, mb / seconds, duration.count() / static_cast<double>(iters), overhead});
         }
     }
 
@@ -1285,10 +1308,13 @@ TEST_F(TransformPerformanceTest, E2ELatencyBudget) {
     };
 
     std::vector<UseCase> use_cases = {
-        {"Real-time control", 64, 100},           // 64 bytes, <100µs
-        {"Telemetry packet", 1024, 500},          // 1 KB, <500µs
-        {"Sensor batch", 64 * 1024, 5000},        // 64 KB, <5ms
-        {"Data transfer", 1024 * 1024, 50000},    // 1 MB, <50ms
+        {"Real-time control", 64, 100},                    // 64 bytes, <100µs
+        {"Telemetry packet", 1024, 500},                   // 1 KB, <500µs
+        {"Sensor batch", 64 * 1024, 5000},                 // 64 KB, <5ms
+        {"Data transfer", 1024 * 1024, 50000},             // 1 MB, <50ms
+        {"Large batch", 10 * 1024 * 1024, 500000},         // 10 MB, <500ms
+        {"Very large transfer", 100 * 1024 * 1024, 5000000},  // 100 MB, <5s
+        {"Extra large transfer", 500 * 1024 * 1024, 30000000}, // 500 MB, <30s
     };
 
     auto full_pipeline = TransformPipeline::builder()
@@ -1299,6 +1325,24 @@ TEST_F(TransformPerformanceTest, E2ELatencyBudget) {
 
     std::cout << "| Use Case | Size | Transform Latency | Budget | Status |\n";
     std::cout << "|----------|------|-------------------|--------|--------|\n";
+
+    auto format_size = [](size_t bytes) -> std::string {
+        if (bytes >= 1024 * 1024) {
+            return std::to_string(bytes / (1024 * 1024)) + " MB";
+        } else if (bytes >= 1024) {
+            return std::to_string(bytes / 1024) + " KB";
+        }
+        return std::to_string(bytes) + " B";
+    };
+
+    auto format_time = [](double us) -> std::string {
+        if (us >= 1000000) {
+            return std::to_string(static_cast<int>(us / 1000000)) + " s";
+        } else if (us >= 1000) {
+            return std::to_string(static_cast<int>(us / 1000)) + " ms";
+        }
+        return std::to_string(static_cast<int>(us)) + " µs";
+    };
 
     for (const auto& uc : use_cases) {
         auto data = random_data(uc.message_size);
@@ -1312,10 +1356,10 @@ TEST_F(TransformPerformanceTest, E2ELatencyBudget) {
         bool within_budget = latency_us <= uc.max_latency_us;
 
         std::cout << "| " << uc.name
-                  << " | " << uc.message_size << " B"
-                  << " | " << latency_us << " µs"
-                  << " | " << uc.max_latency_us << " µs"
-                  << " | " << (within_budget ? "✓ OK" : "✗ OVER") << " |\n";
+                  << " | " << format_size(uc.message_size)
+                  << " | " << format_time(static_cast<double>(latency_us))
+                  << " | " << format_time(uc.max_latency_us)
+                  << " | " << (within_budget ? "OK" : "OVER") << " |\n";
 
         // Only fail on real-time if significantly over budget
         if (uc.name == "Real-time control") {
