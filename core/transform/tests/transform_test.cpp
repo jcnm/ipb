@@ -780,81 +780,177 @@ TEST_F(SnappyTransformerTest, DataPatterns) {
 // ENCRYPTION TESTS (conditional on OpenSSL availability)
 // ============================================================================
 
-// NOTE: Encryption tests are disabled pending fix to encryption.cpp
-// The current implementation has a bug where decryption always fails
-// with SIGNATURE_INVALID even for correctly encrypted data.
-// TODO: Fix encryption.cpp and re-enable these tests
-
 #ifdef IPB_HAS_OPENSSL
 class EncryptionTransformerTest : public TransformTestBase {
 protected:
-    std::vector<uint8_t> test_key = {
+    std::vector<uint8_t> test_key_256 = {
         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
         0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
         0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
         0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
     };
+
+    std::vector<uint8_t> test_key_128 = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    };
 };
 
-TEST_F(EncryptionTransformerTest, AesGcmEncryptionWorks) {
-    AesGcmTransformer transformer(test_key);
-    auto data = random_data(100);
+TEST_F(EncryptionTransformerTest, AesGcm256RoundtripWithHeader) {
+    AesGcmTransformer transformer(test_key_256, true);
 
-    auto encrypted = transformer.transform(data);
-    ASSERT_TRUE(encrypted.is_success());
-
-    // Encrypted data should be different from plaintext
-    EXPECT_NE(encrypted.value(), data);
-
-    // Should include nonce + tag overhead (12 + 16 = 28 bytes minimum)
-    EXPECT_GT(encrypted.value().size(), data.size());
-}
-
-TEST_F(EncryptionTransformerTest, ChaCha20EncryptionWorks) {
-    ChaCha20Poly1305Transformer transformer(test_key);
-    auto data = random_data(100);
-
-    auto encrypted = transformer.transform(data);
-    ASSERT_TRUE(encrypted.is_success());
-
-    // Encrypted data should be different from plaintext
-    EXPECT_NE(encrypted.value(), data);
-
-    // Should include nonce + tag overhead
-    EXPECT_GT(encrypted.value().size(), data.size());
-}
-
-TEST_F(EncryptionTransformerTest, TamperDetectionWorks) {
-    AesGcmTransformer transformer(test_key);
-    auto data = random_data(100);
-
-    auto encrypted = transformer.transform(data);
-    ASSERT_TRUE(encrypted.is_success());
-
-    // Tamper with the ciphertext
-    auto tampered = encrypted.value();
-    if (tampered.size() > 20) {
-        tampered[20] ^= 0xFF;
+    for (size_t size : {1, 10, 100, 1000, 10000}) {
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "AES-256-GCM header size=" + std::to_string(size));
     }
+}
 
-    // Decryption should fail due to authentication
-    auto result = transformer.inverse(tampered);
-    EXPECT_FALSE(result.is_success());
+TEST_F(EncryptionTransformerTest, AesGcm256RoundtripNoHeader) {
+    AesGcmTransformer transformer(test_key_256, false);
+
+    for (size_t size : {1, 10, 100, 1000, 10000}) {
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "AES-256-GCM no-header size=" + std::to_string(size));
+    }
+}
+
+TEST_F(EncryptionTransformerTest, AesGcm128Roundtrip) {
+    AesGcmTransformer transformer(test_key_128, true);
+
+    for (size_t size : {1, 100, 1000}) {
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "AES-128-GCM size=" + std::to_string(size));
+    }
+}
+
+TEST_F(EncryptionTransformerTest, ChaCha20RoundtripWithHeader) {
+    ChaCha20Poly1305Transformer transformer(test_key_256, true);
+
+    for (size_t size : {1, 10, 100, 1000, 10000}) {
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "ChaCha20 header size=" + std::to_string(size));
+    }
+}
+
+TEST_F(EncryptionTransformerTest, ChaCha20RoundtripNoHeader) {
+    ChaCha20Poly1305Transformer transformer(test_key_256, false);
+
+    for (size_t size : {1, 10, 100, 1000, 10000}) {
+        auto data = random_data(size);
+        verify_bijectivity(transformer, data, "ChaCha20 no-header size=" + std::to_string(size));
+    }
+}
+
+TEST_F(EncryptionTransformerTest, EncryptedDataDifferent) {
+    AesGcmTransformer transformer(test_key_256);
+    auto data = random_data(100);
+
+    auto encrypted = transformer.transform(data);
+    ASSERT_TRUE(encrypted.is_success());
+
+    // Encrypted data should be different from plaintext
+    EXPECT_NE(encrypted.value(), data);
+
+    // Should include header + nonce + tag overhead
+    EXPECT_GT(encrypted.value().size(), data.size());
+}
+
+TEST_F(EncryptionTransformerTest, DifferentNonceEachTime) {
+    AesGcmTransformer transformer(test_key_256);
+    auto data = random_data(100);
+
+    auto enc1 = transformer.transform(data);
+    auto enc2 = transformer.transform(data);
+
+    ASSERT_TRUE(enc1.is_success());
+    ASSERT_TRUE(enc2.is_success());
+
+    // Each encryption should produce different ciphertext (different nonce)
+    EXPECT_NE(enc1.value(), enc2.value());
+
+    // But both should decrypt to same plaintext
+    auto dec1 = transformer.inverse(enc1.value());
+    auto dec2 = transformer.inverse(enc2.value());
+
+    ASSERT_TRUE(dec1.is_success());
+    ASSERT_TRUE(dec2.is_success());
+    EXPECT_EQ(dec1.value(), data);
+    EXPECT_EQ(dec2.value(), data);
+}
+
+TEST_F(EncryptionTransformerTest, TamperDetection) {
+    AesGcmTransformer transformer(test_key_256);
+    auto data = random_data(100);
+
+    auto encrypted = transformer.transform(data);
+    ASSERT_TRUE(encrypted.is_success());
+
+    // Tamper with various positions
+    std::vector<size_t> positions = {0, 10, 20, encrypted.value().size() / 2, encrypted.value().size() - 1};
+    for (size_t pos : positions) {
+        auto tampered = encrypted.value();
+        tampered[pos] ^= 0xFF;
+
+        auto result = transformer.inverse(tampered);
+        EXPECT_FALSE(result.is_success())
+            << "Tamper at position " << pos << " not detected";
+    }
 }
 
 TEST_F(EncryptionTransformerTest, WrongKeyFails) {
     std::vector<uint8_t> other_key(32, 0x42);
 
-    AesGcmTransformer enc(test_key);
+    AesGcmTransformer enc(test_key_256);
     AesGcmTransformer dec(other_key);
 
     auto data = random_data(100);
     auto encrypted = enc.transform(data);
     ASSERT_TRUE(encrypted.is_success());
 
-    // Wrong key should fail
     auto result = dec.inverse(encrypted.value());
     EXPECT_FALSE(result.is_success());
+}
+
+TEST_F(EncryptionTransformerTest, EmptyData) {
+    AesGcmTransformer transformer(test_key_256);
+    std::vector<uint8_t> empty;
+
+    auto encrypted = transformer.transform(empty);
+    ASSERT_TRUE(encrypted.is_success());
+    EXPECT_TRUE(encrypted.value().empty());
+}
+
+TEST_F(EncryptionTransformerTest, CloneWorks) {
+    AesGcmTransformer original(test_key_256);
+    auto cloned = original.clone();
+
+    auto data = random_data(100);
+
+    // Encrypt with original
+    auto encrypted = original.transform(data);
+    ASSERT_TRUE(encrypted.is_success());
+
+    // Decrypt with clone
+    auto decrypted = cloned->inverse(encrypted.value());
+    ASSERT_TRUE(decrypted.is_success());
+    EXPECT_EQ(decrypted.value(), data);
+}
+
+TEST_F(EncryptionTransformerTest, LargeData) {
+    AesGcmTransformer transformer(test_key_256);
+    auto data = random_data(1024 * 1024);  // 1 MB
+
+    verify_bijectivity(transformer, data, "1MB encryption");
+}
+
+TEST_F(EncryptionTransformerTest, AllDataPatterns) {
+    ChaCha20Poly1305Transformer transformer(test_key_256);
+
+    verify_bijectivity(transformer, zero_data(1000), "zeros");
+    verify_bijectivity(transformer, ones_data(1000), "ones");
+    verify_bijectivity(transformer, sequential_data(256), "sequential");
+    verify_bijectivity(transformer, compressible_data(1000), "compressible");
+    verify_bijectivity(transformer, random_data(1000), "random");
 }
 #endif // IPB_HAS_OPENSSL
 

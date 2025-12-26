@@ -162,6 +162,7 @@ Result<std::vector<uint8_t>> AesGcmTransformer::inverse(std::span<const uint8_t>
         return std::vector<uint8_t>{};
     }
 
+    std::vector<uint8_t> nonce_storage;  // Storage to keep nonce alive
     std::span<const uint8_t> nonce;
     std::span<const uint8_t> ciphertext;
     std::span<const uint8_t> tag;
@@ -171,7 +172,9 @@ Result<std::vector<uint8_t>> AesGcmTransformer::inverse(std::span<const uint8_t>
         if (parsed.is_error()) {
             return parsed.error();
         }
-        nonce = parsed.value().header.nonce;
+        // Copy nonce to local storage to avoid dangling span
+        nonce_storage = std::move(parsed.value().header.nonce);
+        nonce = nonce_storage;
         ciphertext = parsed.value().ciphertext;
         tag = parsed.value().tag;
     } else {
@@ -327,6 +330,7 @@ Result<std::vector<uint8_t>> ChaCha20Poly1305Transformer::inverse(std::span<cons
         return std::vector<uint8_t>{};
     }
 
+    std::vector<uint8_t> nonce_storage;  // Storage to keep nonce alive
     std::span<const uint8_t> nonce;
     std::span<const uint8_t> ciphertext;
     std::span<const uint8_t> tag;
@@ -336,7 +340,9 @@ Result<std::vector<uint8_t>> ChaCha20Poly1305Transformer::inverse(std::span<cons
         if (parsed.is_error()) {
             return parsed.error();
         }
-        nonce = parsed.value().header.nonce;
+        // Copy nonce to local storage to avoid dangling span
+        nonce_storage = std::move(parsed.value().header.nonce);
+        nonce = nonce_storage;
         ciphertext = parsed.value().ciphertext;
         tag = parsed.value().tag;
     } else {
