@@ -140,18 +140,33 @@ endif()
 # Compiler options - optimized for embedded
 target_compile_features(ipb-bridge PRIVATE cxx_std_20)
 
-target_compile_options(ipb-bridge PRIVATE
-    -Wall -Wextra -Wpedantic
-    -fno-rtti            # Reduce binary size
-    -ffunction-sections  # Enable dead code elimination
-    -fdata-sections
-)
+if(MSVC)
+    target_compile_options(ipb-bridge PRIVATE
+        /W4              # High warning level
+        /GR-             # Disable RTTI to reduce binary size
+        /Gy              # Enable function-level linking
+    )
+else()
+    target_compile_options(ipb-bridge PRIVATE
+        -Wall -Wextra -Wpedantic
+        -fno-rtti            # Reduce binary size
+        -ffunction-sections  # Enable dead code elimination
+        -fdata-sections
+    )
+endif()
 
 # Link options for size optimization (platform-specific)
 if(APPLE)
     target_link_options(ipb-bridge PRIVATE
         -Wl,-dead_strip    # Remove unused code on macOS
     )
+elseif(WIN32)
+    if(MSVC)
+        target_link_options(ipb-bridge PRIVATE
+            /OPT:REF         # Remove unreferenced functions
+            /OPT:ICF         # Identical COMDAT folding
+        )
+    endif()
 else()
     target_link_options(ipb-bridge PRIVATE
         -Wl,--gc-sections    # Remove unused sections on Linux
@@ -159,22 +174,34 @@ else()
 endif()
 
 # Static linking option
-if(IPB_BRIDGE_STATIC)
+if(IPB_BRIDGE_STATIC AND NOT WIN32)
     target_link_options(ipb-bridge PRIVATE -static)
 endif()
 
 # Release optimizations
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-bridge PRIVATE
-        -Os              # Optimize for size (embedded-friendly)
-        -flto            # Link-time optimization
-    )
-    target_link_options(ipb-bridge PRIVATE -flto)
+    if(MSVC)
+        target_compile_options(ipb-bridge PRIVATE
+            /Os              # Optimize for size
+            /GL              # Whole program optimization
+        )
+        target_link_options(ipb-bridge PRIVATE /LTCG)
+    else()
+        target_compile_options(ipb-bridge PRIVATE
+            -Os              # Optimize for size (embedded-friendly)
+            -flto            # Link-time optimization
+        )
+        target_link_options(ipb-bridge PRIVATE -flto)
+    endif()
 endif()
 
 # Debug options
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(ipb-bridge PRIVATE -g3)
+    if(MSVC)
+        target_compile_options(ipb-bridge PRIVATE /Zi)
+    else()
+        target_compile_options(ipb-bridge PRIVATE -g3)
+    endif()
     target_compile_definitions(ipb-bridge PRIVATE IPB_DEBUG=1)
 endif()
 

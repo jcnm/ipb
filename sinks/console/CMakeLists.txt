@@ -99,12 +99,20 @@ endif()
 
 # Performance optimizations
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-sink-console PRIVATE
-        -O3
-        -ffast-math
-        -funroll-loops
-        -finline-functions
-    )
+    if(MSVC)
+        target_compile_options(ipb-sink-console PRIVATE
+            /O2
+            /fp:fast
+            /Ob2
+        )
+    else()
+        target_compile_options(ipb-sink-console PRIVATE
+            -O3
+            -ffast-math
+            -funroll-loops
+            -finline-functions
+        )
+    endif()
 endif()
 
 # Install targets
