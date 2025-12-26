@@ -29,6 +29,26 @@ target_link_libraries(transform_tests
 
 target_compile_features(transform_tests PRIVATE cxx_std_20)
 
+# Propagate library availability definitions to tests
+if(ZSTD_FOUND)
+    target_compile_definitions(transform_tests PRIVATE IPB_HAS_ZSTD=1)
+endif()
+if(LZ4_FOUND)
+    target_compile_definitions(transform_tests PRIVATE IPB_HAS_LZ4=1)
+endif()
+if(SNAPPY_FOUND)
+    target_compile_definitions(transform_tests PRIVATE IPB_HAS_SNAPPY=1)
+endif()
+if(ZLIB_FOUND)
+    target_compile_definitions(transform_tests PRIVATE IPB_HAS_ZLIB=1)
+endif()
+if(OpenSSL_FOUND)
+    target_compile_definitions(transform_tests PRIVATE IPB_HAS_OPENSSL=1)
+endif()
+if(XXHASH_FOUND)
+    target_compile_definitions(transform_tests PRIVATE IPB_HAS_XXHASH=1)
+endif()
+
 # Add test
 include(GoogleTest)
 gtest_discover_tests(transform_tests)
