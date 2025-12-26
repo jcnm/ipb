@@ -1044,6 +1044,175 @@ TEST_F(TransformStressTest, PipelineVariations) {
     }
 }
 
+TEST_F(TransformStressTest, RapidFireTransforms) {
+    // Rapid succession of transforms without pause
+    Base64Transformer b64;
+    HexTransformer hex;
+    Crc32Transformer crc;
+    XxHash64Transformer xxh;
+
+    auto data = random_data(500);
+    for (int i = 0; i < 5000; ++i) {
+        verify_bijectivity(b64, data);
+        verify_bijectivity(hex, data);
+        verify_bijectivity(crc, data);
+        verify_bijectivity(xxh, data);
+    }
+}
+
+TEST_F(TransformStressTest, AlternatingSizes) {
+    // Rapidly alternating between small and large data
+    Base64Transformer transformer;
+
+    for (int i = 0; i < 100; ++i) {
+        auto small = random_data(10, static_cast<uint32_t>(i));
+        auto large = random_data(100000, static_cast<uint32_t>(i + 1000));
+
+        verify_bijectivity(transformer, small, "small");
+        verify_bijectivity(transformer, large, "large");
+    }
+}
+
+TEST_F(TransformStressTest, PipelineRebuild) {
+    // Repeatedly building and using pipelines
+    for (int i = 0; i < 500; ++i) {
+        auto pipeline = TransformPipeline::builder()
+            .add<Crc32Transformer>()
+            .add<Base64Transformer>()
+            .build();
+
+        auto data = random_data(100, static_cast<uint32_t>(i));
+        verify_bijectivity(pipeline, data);
+    }
+}
+
+TEST_F(TransformStressTest, CloneIntensive) {
+    // Heavy cloning operations
+    Base64Transformer original;
+
+    for (int i = 0; i < 1000; ++i) {
+        auto cloned = original.clone();
+        auto data = random_data(100, static_cast<uint32_t>(i));
+        verify_bijectivity(*cloned, data);
+    }
+}
+
+TEST_F(TransformStressTest, MixedOperations) {
+    // Mix of successful operations and expected errors
+    Base64Transformer transformer;
+    int successes = 0;
+    int expected_errors = 0;
+
+    for (int i = 0; i < 2000; ++i) {
+        if (i % 5 == 0) {
+            // Invalid input - should error
+            std::vector<uint8_t> invalid = {'!', '!', '!', '!'};
+            auto result = transformer.inverse(invalid);
+            if (result.is_error()) expected_errors++;
+        } else {
+            // Valid operation
+            auto data = random_data(100, static_cast<uint32_t>(i));
+            auto encoded = transformer.transform(data);
+            if (encoded.is_success()) {
+                auto decoded = transformer.inverse(encoded.value());
+                if (decoded.is_success() && decoded.value() == data) {
+                    successes++;
+                }
+            }
+        }
+    }
+
+    EXPECT_EQ(successes, 1600);  // 4/5 of 2000
+    EXPECT_EQ(expected_errors, 400);  // 1/5 of 2000
+}
+
+// ============================================================================
+// LONG-RUNNING STABILITY TESTS
+// ============================================================================
+
+class LongRunningTest : public TransformTestBase {};
+
+TEST_F(LongRunningTest, ContinuousOperation) {
+    // Simulate continuous operation over many iterations
+    Base64Transformer transformer;
+    size_t total_bytes = 0;
+    int iterations = 0;
+
+    auto start = std::chrono::steady_clock::now();
+    auto deadline = start + std::chrono::seconds(5);  // Run for 5 seconds
+
+    while (std::chrono::steady_clock::now() < deadline) {
+        auto data = random_data(1000, static_cast<uint32_t>(iterations));
+        auto encoded = transformer.transform(data);
+        ASSERT_TRUE(encoded.is_success());
+        auto decoded = transformer.inverse(encoded.value());
+        ASSERT_TRUE(decoded.is_success());
+        ASSERT_EQ(decoded.value(), data);
+
+        total_bytes += data.size();
+        iterations++;
+    }
+
+    std::cout << "LongRunning: " << iterations << " iterations, "
+              << (total_bytes / 1024 / 1024) << " MB processed" << std::endl;
+    EXPECT_GT(iterations, 100) << "Should complete many iterations in 5s";
+}
+
+TEST_F(LongRunningTest, PipelineStability) {
+    // Pipeline stability over extended operation
+    auto pipeline = TransformPipeline::builder()
+        .add<Crc32Transformer>()
+        .add<XxHash64Transformer>()
+        .add<Base64Transformer>()
+        .build();
+
+    for (int i = 0; i < 1000; ++i) {
+        auto data = random_data(5000, static_cast<uint32_t>(i));
+        verify_bijectivity(pipeline, data);
+    }
+}
+
+TEST_F(LongRunningTest, MemoryStability) {
+    // Memory should remain stable over many operations
+    Base64Transformer transformer;
+
+    // Do many operations with varying sizes
+    for (int round = 0; round < 10; ++round) {
+        for (size_t size = 1; size <= 100000; size *= 10) {
+            auto data = random_data(size, static_cast<uint32_t>(round * 100 + size));
+            auto encoded = transformer.transform(data);
+            ASSERT_TRUE(encoded.is_success());
+            auto decoded = transformer.inverse(encoded.value());
+            ASSERT_TRUE(decoded.is_success());
+            ASSERT_EQ(decoded.value(), data);
+        }
+    }
+}
+
+TEST_F(LongRunningTest, AllTransformersStability) {
+    // Test stability of all transformer types
+    std::vector<std::unique_ptr<ITransformer>> transformers;
+    transformers.push_back(std::make_unique<NullTransformer>());
+    transformers.push_back(std::make_unique<Base64Transformer>());
+    transformers.push_back(std::make_unique<HexTransformer>());
+    transformers.push_back(std::make_unique<Crc32Transformer>());
+    transformers.push_back(std::make_unique<XxHash64Transformer>());
+
+    for (int round = 0; round < 200; ++round) {
+        auto data = random_data(1000, static_cast<uint32_t>(round));
+        for (auto& t : transformers) {
+            auto result = t->transform(data);
+            ASSERT_TRUE(result.is_success()) << t->name() << " round " << round;
+
+            if (t->id() != TransformerId::NONE) {
+                auto inverse = t->inverse(result.value());
+                ASSERT_TRUE(inverse.is_success()) << t->name() << " inverse round " << round;
+                ASSERT_EQ(inverse.value(), data) << t->name() << " data mismatch round " << round;
+            }
+        }
+    }
+}
+
 // ============================================================================
 // EDGE CASE TESTS
 // ============================================================================
@@ -1095,6 +1264,91 @@ TEST_F(TransformEdgeCaseTest, MaxExpansion) {
         EXPECT_LE(actual_ratio, t->max_expansion_ratio() + 0.01)
             << t->name() << " exceeded max expansion ratio";
     }
+}
+
+TEST_F(TransformEdgeCaseTest, AlternatingBitPatterns) {
+    // Test with alternating bit patterns (0xAA, 0x55)
+    std::vector<uint8_t> pattern_aa(1000, 0xAA);
+    std::vector<uint8_t> pattern_55(1000, 0x55);
+
+    Base64Transformer b64;
+    verify_bijectivity(b64, pattern_aa, "0xAA pattern");
+    verify_bijectivity(b64, pattern_55, "0x55 pattern");
+
+    Crc32Transformer crc;
+    verify_bijectivity(crc, pattern_aa, "0xAA pattern");
+    verify_bijectivity(crc, pattern_55, "0x55 pattern");
+}
+
+TEST_F(TransformEdgeCaseTest, RepeatingPatterns) {
+    // Test with various repeating patterns
+    for (int pattern_len : {1, 2, 3, 4, 7, 8, 16, 31, 32, 64}) {
+        std::vector<uint8_t> pattern(pattern_len);
+        std::iota(pattern.begin(), pattern.end(), 0);
+
+        std::vector<uint8_t> data;
+        for (int i = 0; i < 1000 / pattern_len; ++i) {
+            data.insert(data.end(), pattern.begin(), pattern.end());
+        }
+
+        Base64Transformer b64;
+        verify_bijectivity(b64, data, "pattern_len=" + std::to_string(pattern_len));
+    }
+}
+
+TEST_F(TransformEdgeCaseTest, HighEntropyData) {
+    // Test with high-entropy (random) data
+    for (int seed = 0; seed < 10; ++seed) {
+        auto data = random_data(10000, static_cast<uint32_t>(seed));
+
+        Base64Transformer b64;
+        verify_bijectivity(b64, data, "seed=" + std::to_string(seed));
+
+        XxHash64Transformer xxh;
+        verify_bijectivity(xxh, data, "seed=" + std::to_string(seed));
+    }
+}
+
+TEST_F(TransformEdgeCaseTest, AllSameBytes) {
+    // Test with all bytes being the same value
+    for (int val : {0x00, 0x01, 0x7F, 0x80, 0xFE, 0xFF}) {
+        std::vector<uint8_t> data(1000, static_cast<uint8_t>(val));
+
+        Base64Transformer b64;
+        verify_bijectivity(b64, data, "val=" + std::to_string(val));
+
+        HexTransformer hex;
+        verify_bijectivity(hex, data, "val=" + std::to_string(val));
+
+        Crc32Transformer crc;
+        verify_bijectivity(crc, data, "val=" + std::to_string(val));
+    }
+}
+
+TEST_F(TransformEdgeCaseTest, BinaryData) {
+    // Test with binary data containing null bytes and special chars
+    std::vector<uint8_t> binary_data;
+    for (int i = 0; i < 256; ++i) {
+        binary_data.push_back(static_cast<uint8_t>(i));
+        binary_data.push_back(0x00);  // Null byte after each
+    }
+
+    Base64Transformer b64;
+    verify_bijectivity(b64, binary_data, "binary with nulls");
+
+    HexTransformer hex;
+    verify_bijectivity(hex, binary_data, "binary with nulls");
+}
+
+TEST_F(TransformEdgeCaseTest, LargeContiguousZeros) {
+    // Large block of zeros (tests run-length scenarios)
+    std::vector<uint8_t> zeros(100000, 0x00);
+
+    Base64Transformer b64;
+    verify_bijectivity(b64, zeros, "100KB zeros");
+
+    Crc32Transformer crc;
+    verify_bijectivity(crc, zeros, "100KB zeros");
 }
 
 // ============================================================================
