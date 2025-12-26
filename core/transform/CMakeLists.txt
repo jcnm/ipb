@@ -25,6 +25,9 @@ option(IPB_TRANSFORM_USE_ZLIB "Enable ZLIB/GZIP compression" ON)
 # Encryption library options
 option(IPB_TRANSFORM_USE_OPENSSL "Enable OpenSSL encryption" ON)
 
+# Integrity library options
+option(IPB_TRANSFORM_USE_XXHASH "Enable xxHash for fast hashing" ON)
+
 # Platform detection
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(IPB_PLATFORM_LINUX TRUE)
@@ -126,6 +129,26 @@ if(IPB_TRANSFORM_USE_ZLIB)
     endif()
 endif()
 
+# Find xxHash for fast hashing
+if(IPB_TRANSFORM_USE_XXHASH)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(XXHASH QUIET libxxhash)
+    endif()
+    if(NOT XXHASH_FOUND)
+        find_path(XXHASH_INCLUDE_DIR xxhash.h)
+        find_library(XXHASH_LIBRARY NAMES xxhash)
+        if(XXHASH_INCLUDE_DIR AND XXHASH_LIBRARY)
+            set(XXHASH_FOUND TRUE)
+        endif()
+    endif()
+    if(XXHASH_FOUND)
+        message(STATUS "xxHash hashing: ENABLED")
+    else()
+        message(STATUS "xxHash hashing: DISABLED (library not found)")
+    endif()
+endif()
+
 # Find OpenSSL for encryption
 if(IPB_TRANSFORM_USE_OPENSSL)
     find_package(OpenSSL QUIET)
@@ -224,6 +247,21 @@ if(OpenSSL_FOUND)
     target_compile_definitions(ipb-transform PRIVATE IPB_HAS_OPENSSL=1)
 endif()
 
+# Link xxHash for fast hashing
+if(XXHASH_FOUND)
+    if(XXHASH_INCLUDE_DIRS)
+        target_include_directories(ipb-transform PRIVATE ${XXHASH_INCLUDE_DIRS})
+    elseif(XXHASH_INCLUDE_DIR)
+        target_include_directories(ipb-transform PRIVATE ${XXHASH_INCLUDE_DIR})
+    endif()
+    if(XXHASH_LIBRARIES)
+        target_link_libraries(ipb-transform PRIVATE ${XXHASH_LIBRARIES})
+    elseif(XXHASH_LIBRARY)
+        target_link_libraries(ipb-transform PRIVATE ${XXHASH_LIBRARY})
+    endif()
+    target_compile_definitions(ipb-transform PRIVATE IPB_HAS_XXHASH=1)
+endif()
+
 # Create alias for consistent naming
 add_library(ipb::transform ALIAS ipb-transform)
 
@@ -283,6 +321,10 @@ message(STATUS "  ZLIB: ${ZLIB_FOUND}")
 message(STATUS "")
 message(STATUS "Encryption backends:")
 message(STATUS "  OpenSSL: ${OpenSSL_FOUND}")
+message(STATUS "")
+message(STATUS "Integrity backends:")
+message(STATUS "  ZLIB CRC32: ${ZLIB_FOUND}")
+message(STATUS "  xxHash: ${XXHASH_FOUND}")
 message(STATUS "")
 message(STATUS "Build options:")
 message(STATUS "  Build tests: ${IPB_TRANSFORM_BUILD_TESTS}")
