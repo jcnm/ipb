@@ -1157,10 +1157,11 @@ TEST_F(TransformPerformanceTest, ThroughputByDataSize) {
     for (size_t size : sizes) {
         auto data = random_data(size);
 
-        // Adjust iterations based on data size to keep test time reasonable
-        // Small data: 10 iters, Large: 3 iters, Very large: 1 iter
-        int iters = (size >= 100 * 1024 * 1024) ? 1 :
-                    (size >= 10 * 1024 * 1024) ? 3 : 10;
+        // Adjust iterations based on data size for statistical accuracy
+        // Small data: 100 iters, Medium: 50 iters, Large: 10 iters, Very large: 3 iters
+        int iters = (size >= 100 * 1024 * 1024) ? 3 :
+                    (size >= 10 * 1024 * 1024) ? 10 :
+                    (size >= 1024 * 1024) ? 50 : 100;
 
         // Baseline: no transform (just copy)
         {
