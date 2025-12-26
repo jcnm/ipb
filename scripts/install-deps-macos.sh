@@ -203,6 +203,9 @@ install_cpp_libraries() {
         openssl@3
         curl
         zlib
+        zstd
+        lz4
+        xxhash
         googletest
     )
 

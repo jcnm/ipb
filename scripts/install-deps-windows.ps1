@@ -195,6 +195,9 @@ function Install-VcpkgDependencies {
         "openssl:$triplet",
         "curl:$triplet",
         "zlib:$triplet",
+        "zstd:$triplet",
+        "lz4:$triplet",
+        "xxhash:$triplet",
         "gtest:$triplet"
     )
 
