@@ -128,10 +128,12 @@ public:
      * @brief Create transformer by name
      */
     static std::unique_ptr<ITransformer> create(std::string_view name) {
-        auto id = instance().name_to_id(name);
-        if (id == TransformerId::NONE) {
+        auto& inst = instance();
+        // Check if the name is registered (handles "none" correctly)
+        if (!inst.has_name(name)) {
             return nullptr;
         }
+        auto id = inst.name_to_id(name);
         return create(id);
     }
 
@@ -268,6 +270,11 @@ private:
         return it->second;
     }
 
+    bool has_name(std::string_view name) const {
+        std::shared_lock lock(mutex_);
+        return name_map_.contains(std::string(name));
+    }
+
     mutable std::shared_mutex mutex_;
     std::unordered_map<TransformerId, Factory> factories_;
     std::unordered_map<std::string, TransformerId> name_map_;
@@ -355,8 +362,8 @@ inline TransformPipeline make_full_pipeline(
     TransformerId integrity = TransformerId::XXH64,
     TransformerId encoding = TransformerId::BASE64) {
 
-    auto builder = TransformPipeline::builder()
-        .compress(compression);
+    auto builder = TransformPipeline::builder();
+    builder.compress(compression);
 
     if (!key.empty()) {
         builder.encrypt(encryption, key);

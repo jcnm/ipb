@@ -51,6 +51,12 @@ class PipelineBuilder {
 public:
     PipelineBuilder() = default;
 
+    // Move-only (stages_ contains unique_ptr)
+    PipelineBuilder(PipelineBuilder&&) noexcept = default;
+    PipelineBuilder& operator=(PipelineBuilder&&) noexcept = default;
+    PipelineBuilder(const PipelineBuilder&) = delete;
+    PipelineBuilder& operator=(const PipelineBuilder&) = delete;
+
     /**
      * @brief Add a transformer by unique_ptr
      */

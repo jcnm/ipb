@@ -140,6 +140,8 @@ endif()
 add_library(ipb-transform STATIC
     src/compression.cpp
     src/encryption.cpp
+    src/encoding.cpp
+    src/integrity.cpp
 )
 
 # Set target properties

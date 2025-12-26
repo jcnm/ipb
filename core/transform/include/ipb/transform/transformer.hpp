@@ -28,6 +28,7 @@
 
 #include <ipb/common/error.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <span>
