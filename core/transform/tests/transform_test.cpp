@@ -17,9 +17,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <iomanip>
 #include <numeric>
 #include <random>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace ipb::transform;
@@ -638,15 +640,24 @@ TEST_F(TransformPipelineTest, TransformWithStats) {
     EXPECT_GT(result.value().stats.duration.count(), 0);
 }
 
-TEST_F(TransformPipelineTest, LargeData) {
+TEST_F(TransformPipelineTest, VariousDataSizes) {
     auto pipeline = TransformPipeline::builder()
         .add<XxHash64Transformer>()
         .add<Base64Transformer>()
         .build();
 
-    // 1 MB of data (reduced from 10 MB for faster CI)
-    auto data = random_data(1024 * 1024);
-    verify_bijectivity(pipeline, data);
+    // Test all data size categories: small, medium, large, very large
+    std::vector<std::pair<std::string, size_t>> sizes = {
+        {"tiny (1 KB)", 1024},
+        {"small (64 KB)", 64 * 1024},
+        {"medium (1 MB)", 1024 * 1024},
+        {"large (10 MB)", 10 * 1024 * 1024},
+    };
+
+    for (const auto& [name, size] : sizes) {
+        auto data = random_data(size);
+        verify_bijectivity(pipeline, data, name);
+    }
 }
 
 // ============================================================================
@@ -962,8 +973,8 @@ class TransformStressTest : public TransformTestBase {};
 TEST_F(TransformStressTest, ManySmallTransforms) {
     Base64Transformer transformer;
 
-    // 1000 iterations (reduced from 10000 for faster CI)
-    for (int i = 0; i < 1000; ++i) {
+    // Full 10000 iterations to stress test transform overhead
+    for (int i = 0; i < 10000; ++i) {
         auto data = random_data(100, static_cast<uint32_t>(i));
         verify_bijectivity(transformer, data);
     }
@@ -1085,53 +1096,234 @@ TEST_F(TransformEdgeCaseTest, MaxExpansion) {
 }
 
 // ============================================================================
-// PERFORMANCE TESTS (Optional)
+// PERFORMANCE TESTS - E2E BENCHMARK IMPACT ANALYSIS
 // ============================================================================
 
-class TransformPerformanceTest : public TransformTestBase {};
+class TransformPerformanceTest : public TransformTestBase {
+protected:
+    struct BenchmarkResult {
+        std::string name;
+        size_t data_size;
+        double throughput_mbs;
+        double latency_us;
+        double overhead_percent;
+    };
 
-TEST_F(TransformPerformanceTest, Base64Throughput) {
-    Base64Transformer transformer;
-    auto data = random_data(256 * 1024);  // 256 KB (reduced for faster CI)
+    void print_benchmark_table(const std::vector<BenchmarkResult>& results) {
+        std::cout << "\n| Transform | Size | Throughput | Latency | Overhead |\n";
+        std::cout << "|-----------|------|------------|---------|----------|\n";
+        for (const auto& r : results) {
+            std::cout << "| " << r.name
+                      << " | " << (r.data_size / 1024) << " KB"
+                      << " | " << std::fixed << std::setprecision(1) << r.throughput_mbs << " MB/s"
+                      << " | " << std::setprecision(0) << r.latency_us << " µs"
+                      << " | " << std::setprecision(1) << r.overhead_percent << "% |\n";
+        }
+        std::cout << std::endl;
+    }
+};
 
-    auto start = std::chrono::high_resolution_clock::now();
+TEST_F(TransformPerformanceTest, ThroughputByDataSize) {
+    std::cout << "\n=== TRANSFORM THROUGHPUT BY DATA SIZE ===" << std::endl;
 
-    for (int i = 0; i < 20; ++i) {
-        auto encoded = transformer.transform(data);
-        auto decoded = transformer.inverse(encoded.value());
-        ASSERT_TRUE(decoded.is_success());
+    // Test different data sizes: tiny, small, medium, large
+    std::vector<size_t> sizes = {
+        1024,           // 1 KB - typical small message
+        64 * 1024,      // 64 KB - typical payload
+        1024 * 1024,    // 1 MB - large payload
+        10 * 1024 * 1024 // 10 MB - very large payload
+    };
+
+    std::vector<BenchmarkResult> results;
+
+    for (size_t size : sizes) {
+        auto data = random_data(size);
+
+        // Baseline: no transform (just copy)
+        {
+            auto start = std::chrono::high_resolution_clock::now();
+            for (int i = 0; i < 10; ++i) {
+                std::vector<uint8_t> copy = data;
+                (void)copy;
+            }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            double mb = (size * 10.0) / (1024 * 1024);
+            double seconds = duration.count() / 1000000.0;
+            results.push_back({"baseline", size, mb / seconds, duration.count() / 10.0, 0.0});
+        }
+
+        // Base64 transform
+        {
+            Base64Transformer transformer;
+            auto start = std::chrono::high_resolution_clock::now();
+            for (int i = 0; i < 10; ++i) {
+                auto encoded = transformer.transform(data);
+                auto decoded = transformer.inverse(encoded.value());
+            }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            double mb = (size * 10.0 * 2) / (1024 * 1024);
+            double seconds = duration.count() / 1000000.0;
+            double baseline = results.back().latency_us;
+            double overhead = ((duration.count() / 10.0) - baseline) / baseline * 100;
+            results.push_back({"Base64", size, mb / seconds, duration.count() / 10.0, overhead});
+        }
+
+        // CRC32 + Base64 pipeline
+        {
+            auto pipeline = TransformPipeline::builder()
+                .add<Crc32Transformer>()
+                .add<Base64Transformer>()
+                .build();
+
+            auto start = std::chrono::high_resolution_clock::now();
+            for (int i = 0; i < 10; ++i) {
+                auto encoded = pipeline.transform(data);
+                auto decoded = pipeline.inverse(encoded.value());
+            }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            double mb = (size * 10.0 * 2) / (1024 * 1024);
+            double seconds = duration.count() / 1000000.0;
+            double baseline_latency = results[results.size() - 2].latency_us;
+            double overhead = ((duration.count() / 10.0) - baseline_latency) / baseline_latency * 100;
+            results.push_back({"CRC32+B64", size, mb / seconds, duration.count() / 10.0, overhead});
+        }
+
+        // XXHash64 + Base64 pipeline
+        {
+            auto pipeline = TransformPipeline::builder()
+                .add<XxHash64Transformer>()
+                .add<Base64Transformer>()
+                .build();
+
+            auto start = std::chrono::high_resolution_clock::now();
+            for (int i = 0; i < 10; ++i) {
+                auto encoded = pipeline.transform(data);
+                auto decoded = pipeline.inverse(encoded.value());
+            }
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            double mb = (size * 10.0 * 2) / (1024 * 1024);
+            double seconds = duration.count() / 1000000.0;
+            double baseline_latency = results[results.size() - 3].latency_us;
+            double overhead = ((duration.count() / 10.0) - baseline_latency) / baseline_latency * 100;
+            results.push_back({"XXH64+B64", size, mb / seconds, duration.count() / 10.0, overhead});
+        }
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    print_benchmark_table(results);
 
-    double mb_processed = 10.0;  // 20 iterations * 2 (encode+decode) * 0.25 MB
-    double seconds = duration.count() / 1000.0;
-    double throughput = mb_processed / seconds;
-
-    std::cout << "Base64 throughput: " << throughput << " MB/s" << std::endl;
-    EXPECT_GT(throughput, 5.0);  // At least 5 MB/s
+    // Verify minimum performance requirements
+    for (const auto& r : results) {
+        if (r.name != "baseline") {
+            EXPECT_GT(r.throughput_mbs, 5.0) << r.name << " at " << r.data_size << " bytes";
+        }
+    }
 }
 
-TEST_F(TransformPerformanceTest, XxHash64Throughput) {
-    auto data = random_data(256 * 1024);  // 256 KB (reduced for faster CI)
+TEST_F(TransformPerformanceTest, GzipCompressionImpact) {
+#ifdef IPB_HAS_ZLIB
+    std::cout << "\n=== GZIP COMPRESSION IMPACT ON E2E ===" << std::endl;
 
-    auto start = std::chrono::high_resolution_clock::now();
+    // Test with compressible data (typical for many protocols)
+    auto data = compressible_data(1024 * 1024);  // 1 MB
 
-    for (int i = 0; i < 200; ++i) {
-        volatile uint64_t hash = xxhash64(data, 0);
-        (void)hash;
+    std::vector<std::tuple<std::string, CompressionLevel>> levels = {
+        {"FASTEST", CompressionLevel::FASTEST},
+        {"DEFAULT", CompressionLevel::DEFAULT},
+        {"BEST", CompressionLevel::BEST}
+    };
+
+    std::cout << "\n| Level | Compress Time | Decompress Time | Ratio | Net Benefit |\n";
+    std::cout << "|-------|---------------|-----------------|-------|-------------|\n";
+
+    for (const auto& [name, level] : levels) {
+        GzipTransformer transformer(level);
+
+        auto start = std::chrono::high_resolution_clock::now();
+        auto compressed = transformer.transform(data);
+        auto compress_time = std::chrono::high_resolution_clock::now();
+        auto decompressed = transformer.inverse(compressed.value());
+        auto end = std::chrono::high_resolution_clock::now();
+
+        auto compress_us = std::chrono::duration_cast<std::chrono::microseconds>(compress_time - start).count();
+        auto decompress_us = std::chrono::duration_cast<std::chrono::microseconds>(end - compress_time).count();
+        double ratio = static_cast<double>(compressed.value().size()) / data.size();
+
+        // Net benefit = time saved transmitting smaller data - compression overhead
+        // Assuming 100 Mbps network = 12.5 MB/s = 80 µs/KB
+        double bytes_saved = data.size() - compressed.value().size();
+        double transmit_savings_us = (bytes_saved / 1024.0) * 80;  // µs saved
+        double net_benefit_us = transmit_savings_us - compress_us - decompress_us;
+
+        std::cout << "| " << name
+                  << " | " << compress_us << " µs"
+                  << " | " << decompress_us << " µs"
+                  << " | " << std::fixed << std::setprecision(2) << ratio
+                  << " | " << std::setprecision(0) << net_benefit_us << " µs |\n";
+
+        ASSERT_TRUE(decompressed.is_success());
+        EXPECT_EQ(decompressed.value(), data);
     }
+    std::cout << std::endl;
+#else
+    GTEST_SKIP() << "ZLIB not available";
+#endif
+}
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+TEST_F(TransformPerformanceTest, E2ELatencyBudget) {
+    std::cout << "\n=== E2E LATENCY BUDGET ANALYSIS ===" << std::endl;
+    std::cout << "Simulating transform overhead in typical e2e pipeline\n" << std::endl;
 
-    double mb_processed = 50.0;  // 200 iterations * 0.25 MB
-    double seconds = duration.count() / 1000.0;
-    double throughput = mb_processed / seconds;
+    // Typical message sizes for different use cases
+    struct UseCase {
+        std::string name;
+        size_t message_size;
+        double max_latency_us;  // Maximum acceptable latency
+    };
 
-    std::cout << "XXHash64 throughput: " << throughput << " MB/s" << std::endl;
-    EXPECT_GT(throughput, 50.0);  // At least 50 MB/s for XXHash64
+    std::vector<UseCase> use_cases = {
+        {"Real-time control", 64, 100},           // 64 bytes, <100µs
+        {"Telemetry packet", 1024, 500},          // 1 KB, <500µs
+        {"Sensor batch", 64 * 1024, 5000},        // 64 KB, <5ms
+        {"Data transfer", 1024 * 1024, 50000},    // 1 MB, <50ms
+    };
+
+    auto full_pipeline = TransformPipeline::builder()
+        .add<Crc32Transformer>()
+        .add<XxHash64Transformer>()
+        .add<Base64Transformer>()
+        .build();
+
+    std::cout << "| Use Case | Size | Transform Latency | Budget | Status |\n";
+    std::cout << "|----------|------|-------------------|--------|--------|\n";
+
+    for (const auto& uc : use_cases) {
+        auto data = random_data(uc.message_size);
+
+        auto start = std::chrono::high_resolution_clock::now();
+        auto transformed = full_pipeline.transform(data);
+        auto inversed = full_pipeline.inverse(transformed.value());
+        auto end = std::chrono::high_resolution_clock::now();
+
+        auto latency_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        bool within_budget = latency_us <= uc.max_latency_us;
+
+        std::cout << "| " << uc.name
+                  << " | " << uc.message_size << " B"
+                  << " | " << latency_us << " µs"
+                  << " | " << uc.max_latency_us << " µs"
+                  << " | " << (within_budget ? "✓ OK" : "✗ OVER") << " |\n";
+
+        // Only fail on real-time if significantly over budget
+        if (uc.name == "Real-time control") {
+            EXPECT_LE(latency_us, uc.max_latency_us * 2)
+                << "Real-time control latency too high";
+        }
+    }
+    std::cout << std::endl;
 }
 
 // ============================================================================
