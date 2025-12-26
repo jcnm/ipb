@@ -46,12 +46,20 @@ target_link_libraries(ipb-router
         Threads::Threads
 )
 
-# Compiler flags
-target_compile_options(ipb-router PRIVATE
-    -Wall -Wextra -Wpedantic
-    $<$<CONFIG:Release>:-O3>
-    $<$<CONFIG:Debug>:-g -O0>
-)
+# Compiler flags (platform-specific)
+if(MSVC)
+    target_compile_options(ipb-router PRIVATE
+        /W4
+        $<$<CONFIG:Release>:/O2>
+        $<$<CONFIG:Debug>:/Od /Zi>
+    )
+else()
+    target_compile_options(ipb-router PRIVATE
+        -Wall -Wextra -Wpedantic
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:Debug>:-g -O0>
+    )
+endif()
 
 # Install targets
 install(TARGETS ipb-router
