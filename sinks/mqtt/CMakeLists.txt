@@ -24,12 +24,18 @@ endif()
 find_package(ZLIB REQUIRED)
 
 # Find Paho MQTT C++ library
-find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
-find_library(PAHO_MQTT_C_LIB paho-mqtt3as)
+# First try CMake config (preferred for Windows/vcpkg)
+find_package(PahoMqttCpp QUIET CONFIG)
 
-if(NOT PAHO_MQTT_CPP_LIB OR NOT PAHO_MQTT_C_LIB)
-    message(WARNING "Paho MQTT libraries not found. MQTT sink will be disabled.")
-    return()
+if(NOT PahoMqttCpp_FOUND)
+    # Fallback to manual library search
+    find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
+    find_library(PAHO_MQTT_C_LIB paho-mqtt3as)
+
+    if(NOT PAHO_MQTT_CPP_LIB OR NOT PAHO_MQTT_C_LIB)
+        message(WARNING "Paho MQTT libraries not found. MQTT sink will be disabled.")
+        return()
+    endif()
 endif()
 
 # Include directories
