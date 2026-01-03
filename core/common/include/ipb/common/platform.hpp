@@ -17,6 +17,16 @@
 #include <string_view>
 
 // ============================================================================
+// PLATFORM-SPECIFIC TYPE DEFINITIONS
+// ============================================================================
+
+// ssize_t is POSIX-specific, define for Windows
+#if defined(_WIN32) || defined(_WIN64)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
+
+// ============================================================================
 // COMPILER DETECTION
 // ============================================================================
 

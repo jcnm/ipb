@@ -501,16 +501,18 @@ public:
      * @param buffer Buffer to read into
      * @param length Maximum bytes to read
      * @return Number of bytes read, or negative on error
+     * @note Named tls_read to avoid conflicts with Windows macros
      */
-    virtual ssize_t read(void* buffer, size_t length) = 0;
+    virtual ssize_t tls_read(void* buffer, size_t length) = 0;
 
     /**
      * @brief Write data (will be encrypted)
      * @param buffer Data to write
      * @param length Number of bytes to write
      * @return Number of bytes written, or negative on error
+     * @note Named tls_write to avoid conflicts with Windows macros
      */
-    virtual ssize_t write(const void* buffer, size_t length) = 0;
+    virtual ssize_t tls_write(const void* buffer, size_t length) = 0;
 
     /**
      * @brief Perform TLS shutdown

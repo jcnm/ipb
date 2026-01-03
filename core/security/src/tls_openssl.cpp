@@ -365,8 +365,8 @@ public:
     ~OpenSSLSocket() override;
 
     HandshakeStatus do_handshake(std::chrono::milliseconds timeout) override;
-    ssize_t read(void* buffer, size_t length) override;
-    ssize_t write(const void* buffer, size_t length) override;
+    ssize_t tls_read(void* buffer, size_t length) override;
+    ssize_t tls_write(const void* buffer, size_t length) override;
     Result<void> shutdown() override;
 
     std::string get_alpn_protocol() const override;
@@ -667,7 +667,7 @@ HandshakeStatus OpenSSLSocket::do_handshake(std::chrono::milliseconds /*timeout*
     }
 }
 
-ssize_t OpenSSLSocket::read(void* buffer, size_t length) {
+ssize_t OpenSSLSocket::tls_read(void* buffer, size_t length) {
     int ret = SSL_read(ssl_, buffer, static_cast<int>(length));
     if (ret <= 0) {
         int err = SSL_get_error(ssl_, ret);
@@ -679,7 +679,7 @@ ssize_t OpenSSLSocket::read(void* buffer, size_t length) {
     return ret;
 }
 
-ssize_t OpenSSLSocket::write(const void* buffer, size_t length) {
+ssize_t OpenSSLSocket::tls_write(const void* buffer, size_t length) {
     int ret = SSL_write(ssl_, buffer, static_cast<int>(length));
     if (ret <= 0) {
         int err = SSL_get_error(ssl_, ret);
