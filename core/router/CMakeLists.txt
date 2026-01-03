@@ -46,12 +46,16 @@ target_link_libraries(ipb-router
         Threads::Threads
 )
 
+
 # Compiler flags (platform-specific)
 if(MSVC)
+    # Compiler flags - platform specific
     target_compile_options(ipb-router PRIVATE
-        /W4
-        $<$<CONFIG:Release>:/O2>
-        $<$<CONFIG:Debug>:/Od /Zi>
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
+        $<$<CXX_COMPILER_ID:MSVC>:$<$<CONFIG:Release>:/O2>>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:$<$<CONFIG:Release>:-O3>>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:$<$<CONFIG:Debug>:-g -O0>>
     )
 else()
     target_compile_options(ipb-router PRIVATE

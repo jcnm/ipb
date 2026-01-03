@@ -128,10 +128,13 @@ target_compile_definitions(ipb-security PRIVATE ${SECURITY_COMPILE_DEFINITIONS})
 
 # Compiler flags (platform-specific)
 if(MSVC)
+    # Compiler flags - platform specific
     target_compile_options(ipb-security PRIVATE
-        /W4
-        $<$<CONFIG:Release>:/O2>
-        $<$<CONFIG:Debug>:/Od /Zi>
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
+        $<$<CXX_COMPILER_ID:MSVC>:$<$<CONFIG:Release>:/O2>>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:$<$<CONFIG:Release>:-O3>>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:$<$<CONFIG:Debug>:-g -O0>>
     )
 else()
     target_compile_options(ipb-security PRIVATE

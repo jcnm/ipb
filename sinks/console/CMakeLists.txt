@@ -97,13 +97,18 @@ if(ENABLE_REALTIME_OPTIMIZATIONS)
     target_compile_definitions(ipb-sink-console PRIVATE IPB_REALTIME_ENABLED)
 endif()
 
+# Performance optimizations - platform specific
+target_compile_options(ipb-sink-console PRIVATE
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /fp:fast>
+    $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Release>>:-O3 -ffast-math -funroll-loops -finline-functions>
+)
 # Performance optimizations
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     if(MSVC)
+        # Performance optimizations - platform specific
         target_compile_options(ipb-sink-console PRIVATE
-            /O2
-            /fp:fast
-            /Ob2
+            $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /fp:fast>
+            $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Release>>:-O3 -ffast-math -funroll-loops -finline-functions>
         )
     else()
         target_compile_options(ipb-sink-console PRIVATE
