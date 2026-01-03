@@ -31,6 +31,12 @@
 #include "error.hpp"
 #include "platform.hpp"
 
+// Windows defines ERROR as a macro (value 0) in wingdi.h
+// We need to undefine it to use ERROR as an enum value
+#ifdef ERROR
+#undef ERROR
+#endif
+
 namespace ipb::common::debug {
 
 // ============================================================================
@@ -163,6 +169,10 @@ public:
     std::string to_string() const;
     constexpr uint64_t value() const noexcept { return id_; }
     constexpr bool is_valid() const noexcept { return id_ != 0; }
+
+    // Comparison operators
+    constexpr bool operator==(const SpanId& other) const noexcept { return id_ == other.id_; }
+    constexpr bool operator!=(const SpanId& other) const noexcept { return id_ != other.id_; }
 
 private:
     uint64_t id_;

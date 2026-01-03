@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <iostream>
 #include <mutex>
 
 #include <openssl/bio.h>
@@ -40,18 +41,27 @@ std::string get_openssl_error() {
 }
 
 // Version conversion
+// SECURITY: TLS 1.0 and 1.1 are deprecated (RFC 8996) and vulnerable to POODLE, BEAST attacks
+// Minimum enforced version is TLS 1.2
 int tls_version_to_openssl(TLSVersion version) {
     switch (version) {
         case TLSVersion::TLS_1_0:
-            return TLS1_VERSION;
+            // SECURITY: TLS 1.0 is deprecated - upgrade to TLS 1.2
+            std::cerr << "[SECURITY WARNING] TLS 1.0 requested but deprecated (RFC 8996). "
+                      << "Using TLS 1.2 minimum instead." << std::endl;
+            return TLS1_2_VERSION;
         case TLSVersion::TLS_1_1:
-            return TLS1_1_VERSION;
+            // SECURITY: TLS 1.1 is deprecated - upgrade to TLS 1.2
+            std::cerr << "[SECURITY WARNING] TLS 1.1 requested but deprecated (RFC 8996). "
+                      << "Using TLS 1.2 minimum instead." << std::endl;
+            return TLS1_2_VERSION;
         case TLSVersion::TLS_1_2:
             return TLS1_2_VERSION;
         case TLSVersion::TLS_1_3:
             return TLS1_3_VERSION;
         case TLSVersion::AUTO:
-            return 0;
+            // AUTO now defaults to TLS 1.2 minimum for security
+            return TLS1_2_VERSION;
         default:
             return TLS1_2_VERSION;
     }
@@ -355,8 +365,8 @@ public:
     ~OpenSSLSocket() override;
 
     HandshakeStatus do_handshake(std::chrono::milliseconds timeout) override;
-    ssize_t read(void* buffer, size_t length) override;
-    ssize_t write(const void* buffer, size_t length) override;
+    ssize_t tls_read(void* buffer, size_t length) override;
+    ssize_t tls_write(const void* buffer, size_t length) override;
     Result<void> shutdown() override;
 
     std::string get_alpn_protocol() const override;
@@ -550,6 +560,11 @@ void OpenSSLContext::set_verify_mode(VerifyMode mode) {
     int ssl_mode;
     switch (mode) {
         case VerifyMode::NONE:
+            // SECURITY WARNING: Certificate verification is DISABLED
+            // This makes the connection vulnerable to man-in-the-middle attacks
+            // Only use this mode for development/testing purposes
+            std::cerr << "[SECURITY WARNING] TLS certificate verification DISABLED - "
+                      << "connection is vulnerable to MITM attacks!" << std::endl;
             ssl_mode = SSL_VERIFY_NONE;
             break;
         case VerifyMode::OPTIONAL:
@@ -652,7 +667,7 @@ HandshakeStatus OpenSSLSocket::do_handshake(std::chrono::milliseconds /*timeout*
     }
 }
 
-ssize_t OpenSSLSocket::read(void* buffer, size_t length) {
+ssize_t OpenSSLSocket::tls_read(void* buffer, size_t length) {
     int ret = SSL_read(ssl_, buffer, static_cast<int>(length));
     if (ret <= 0) {
         int err = SSL_get_error(ssl_, ret);
@@ -664,7 +679,7 @@ ssize_t OpenSSLSocket::read(void* buffer, size_t length) {
     return ret;
 }
 
-ssize_t OpenSSLSocket::write(const void* buffer, size_t length) {
+ssize_t OpenSSLSocket::tls_write(const void* buffer, size_t length) {
     int ret = SSL_write(ssl_, buffer, static_cast<int>(length));
     if (ret <= 0) {
         int err = SSL_get_error(ssl_, ret);

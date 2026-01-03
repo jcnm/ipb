@@ -339,6 +339,9 @@ private:
     common::Result<std::string> read_file(const std::filesystem::path& path);
     common::Result<void> write_file(const std::filesystem::path& path, std::string_view content);
     ConfigFormat resolve_format(const std::filesystem::path& path, ConfigFormat format);
+
+    // Security validation helpers
+    common::Result<void> validate_endpoint(const EndpointConfig& config);
 };
 
 }  // namespace ipb::core::config

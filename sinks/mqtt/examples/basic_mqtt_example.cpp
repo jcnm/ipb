@@ -14,12 +14,12 @@ int main() {
     MQTTSinkConfig config;
 
     // Configure for local MQTT broker
-    config.connection.broker_url      = "tcp://localhost:1883";
-    config.connection.client_id       = "ipb-example-client";
-    config.connection.username        = "";
-    config.connection.password        = "";
+    config.connection.broker_url         = "tcp://localhost:1883";
+    config.connection.client_id          = "ipb-example-client";
+    config.connection.username           = "";
+    config.connection.password           = "";
     config.connection.keep_alive_seconds = 60;
-    config.connection.clean_session   = true;
+    config.connection.clean_session      = true;
 
     // Topic configuration (in messages struct)
     config.messages.base_topic     = "ipb/industrial/data";
@@ -32,11 +32,11 @@ int main() {
     config.messages.enable_compression = false;
 
     // Performance configuration
-    config.performance.enable_batching = false;
-    config.performance.batch_size      = 1;
-    config.performance.batch_timeout   = std::chrono::milliseconds{1000};
+    config.performance.enable_batching  = false;
+    config.performance.batch_size       = 1;
+    config.performance.batch_timeout    = std::chrono::milliseconds{1000};
     config.performance.thread_pool_size = 2;
-    config.performance.queue_size      = 1000;
+    config.performance.queue_size       = 1000;
 
     if (!mqtt_sink.configure(config)) {
         std::cerr << "Failed to configure MQTT sink" << std::endl;
@@ -92,8 +92,8 @@ int main() {
     std::cout << "  Messages sent: " << stats.messages_sent.load() << std::endl;
     std::cout << "  Messages failed: " << stats.messages_failed.load() << std::endl;
     std::cout << "  Total bytes: " << stats.bytes_sent.load() << std::endl;
-    std::cout << "  Connection status: " << (stats.is_connected.load() ? "Connected" : "Disconnected")
-              << std::endl;
+    std::cout << "  Connection status: "
+              << (stats.is_connected.load() ? "Connected" : "Disconnected") << std::endl;
 
     mqtt_sink.stop();
     std::cout << "\n=== Example completed successfully ===" << std::endl;

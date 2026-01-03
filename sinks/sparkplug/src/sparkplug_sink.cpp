@@ -11,9 +11,11 @@
 
 #include <algorithm>
 #include <condition_variable>
+#include <future>
 #include <mutex>
 #include <queue>
 #include <shared_mutex>
+#include <span>
 #include <thread>
 #include <unordered_map>
 
@@ -154,12 +156,12 @@ public:
         stop();
     }
 
-    common::Result<> start() {
+    common::Result<void> start() {
         IPB_SPAN_CAT("SparkplugSink::start", LOG_CAT);
 
         if (IPB_UNLIKELY(running_.load())) {
             IPB_LOG_WARN(LOG_CAT, "SparkplugSink already running");
-            return common::Result<>::success();
+            return common::Result<void>{};
         }
 
         IPB_LOG_INFO(LOG_CAT, "Starting SparkplugSink...");
@@ -167,9 +169,12 @@ public:
         // Validate configuration
         if (!config_.is_valid()) {
             IPB_LOG_ERROR(LOG_CAT, "Invalid configuration: " << config_.validation_error());
-            return common::Result<>::failure("Invalid configuration: " +
-                                             config_.validation_error());
+            return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT,
+                                        "Invalid configuration: " + config_.validation_error());
         }
+
+        // Setup Last Will Testament (NDEATH) via config before connection
+        setup_death_certificate();
 
         // Get or create shared MQTT connection
         auto& manager = transport::mqtt::MQTTConnectionManager::instance();
@@ -177,7 +182,8 @@ public:
 
         if (IPB_UNLIKELY(!connection_)) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to create MQTT connection");
-            return common::Result<>::failure("Failed to create MQTT connection");
+            return common::Result<void>(common::ErrorCode::CONNECTION_ERROR,
+                                        "Failed to create MQTT connection");
         }
 
         // Setup callbacks
@@ -187,16 +193,15 @@ public:
             });
 
         connection_->set_message_callback(
-            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS qos,
-                   bool retained) { handle_message(topic, payload); });
-
-        // Setup Last Will Testament (NDEATH)
-        setup_death_certificate();
+            [this](const std::string& topic, const std::string& payload,
+                   transport::mqtt::QoS /*qos*/,
+                   bool /*retained*/) { handle_message(topic, payload); });
 
         // Connect
         if (IPB_UNLIKELY(!connection_->connect())) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to connect to MQTT broker");
-            return common::Result<>::failure("Failed to connect to MQTT broker");
+            return common::Result<void>(common::ErrorCode::CONNECTION_ERROR,
+                                        "Failed to connect to MQTT broker");
         }
 
         running_.store(true);
@@ -220,15 +225,15 @@ public:
         publish_birth();
 
         IPB_LOG_INFO(LOG_CAT, "SparkplugSink started successfully");
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
-    common::Result<> stop() {
+    common::Result<void> stop() {
         IPB_SPAN_CAT("SparkplugSink::stop", LOG_CAT);
 
         if (!running_.load()) {
             IPB_LOG_DEBUG(LOG_CAT, "SparkplugSink already stopped");
-            return common::Result<>::success();
+            return common::Result<void>{};
         }
 
         IPB_LOG_INFO(LOG_CAT, "Stopping SparkplugSink...");
@@ -261,7 +266,7 @@ public:
         connected_.store(false);
 
         IPB_LOG_INFO(LOG_CAT, "SparkplugSink stopped successfully");
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
     bool is_running() const noexcept { return running_.load(); }
@@ -270,9 +275,10 @@ public:
         return connected_.load() && connection_ && connection_->is_connected();
     }
 
-    common::Result<> send(const common::DataPoint& data_point) {
+    common::Result<void> write(const common::DataPoint& data_point) {
         if (IPB_UNLIKELY(!running_.load())) {
-            return common::Result<>::failure("SparkplugSink is not running");
+            return common::Result<void>(common::ErrorCode::INVALID_STATE,
+                                        "SparkplugSink is not running");
         }
 
         // Add to queue
@@ -280,31 +286,66 @@ public:
             std::lock_guard<std::mutex> lock(queue_mutex_);
             if (message_queue_.size() >= config_.message_queue_size) {
                 stats_.publish_failures++;
-                return common::Result<>::failure("Message queue is full");
+                return common::Result<void>(common::ErrorCode::BUFFER_FULL,
+                                            "Message queue is full");
             }
             message_queue_.push(data_point);
         }
         queue_cv_.notify_one();
 
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
-    common::Result<> send_batch(const common::DataSet& data_set) {
-        for (const auto& dp : data_set.data_points()) {
-            auto result = send(dp);
+    common::Result<void> write_batch(std::span<const common::DataPoint> data_points) {
+        for (const auto& dp : data_points) {
+            auto result = write(dp);
             if (!result.is_success()) {
                 return result;
             }
         }
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
-    common::Result<> flush() {
+    common::Result<void> write_dataset(const common::DataSet& data_set) {
+        for (const auto& dp : data_set) {
+            auto result = write(dp);
+            if (!result.is_success()) {
+                return result;
+            }
+        }
+        return common::Result<void>{};
+    }
+
+    std::future<common::Result<void>> write_async(const common::DataPoint& data_point) {
+        return std::async(std::launch::async, [this, data_point]() { return write(data_point); });
+    }
+
+    std::future<common::Result<void>> write_batch_async(
+        std::span<const common::DataPoint> data_points) {
+        std::vector<common::DataPoint> data_copy(data_points.begin(), data_points.end());
+        return std::async(std::launch::async, [this, data_copy = std::move(data_copy)]() {
+            return write_batch(data_copy);
+        });
+    }
+
+    common::Result<void> flush() {
         flush_batch();
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
-    common::Result<> rebirth() {
+    size_t pending_count() const noexcept {
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        return message_queue_.size();
+    }
+
+    bool can_accept_data() const noexcept {
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        return running_.load() && message_queue_.size() < config_.message_queue_size;
+    }
+
+    size_t max_batch_size() const noexcept { return config_.publishing.batch_size; }
+
+    common::Result<void> rebirth() {
         IPB_LOG_INFO(LOG_CAT, "Rebirth requested");
         bdseq_++;
         sequence_number_.store(0);
@@ -321,7 +362,7 @@ public:
         }
     }
 
-    common::Result<> add_device(const DeviceConfig& device) {
+    common::Result<void> add_device(const DeviceConfig& device) {
         {
             std::lock_guard<std::mutex> lock(devices_mutex_);
             devices_[device.device_id] = device;
@@ -331,7 +372,7 @@ public:
         return publish_device_birth(device.device_id);
     }
 
-    common::Result<> remove_device(const std::string& device_id) {
+    common::Result<void> remove_device(const std::string& device_id) {
         // Publish DDEATH first
         publish_device_death(device_id);
 
@@ -340,14 +381,16 @@ public:
             devices_.erase(device_id);
         }
 
-        return common::Result<>::success();
+        return common::Result<void>{};
     }
 
     uint64_t get_sequence_number() const noexcept { return sequence_number_.load(); }
 
     uint64_t get_bdseq() const noexcept { return bdseq_.load(); }
 
-    SparkplugSinkStatistics get_sparkplug_statistics() const { return stats_; }
+    SparkplugSinkStatistics get_sparkplug_statistics() const {
+        return SparkplugSinkStatistics::from_internal(stats_);
+    }
 
     bool is_healthy() const noexcept {
         if (!running_.load() || !is_connected())
@@ -396,10 +439,15 @@ private:
         // Build death payload (in real impl, use protobuf)
         std::string death_payload = build_death_payload();
 
-        // Set as Last Will Testament
-        connection_->set_will(death_topic, death_payload, config_.publishing.death_qos, false);
+        // Configure LWT via MQTT config (must be done before connect)
+        config_.mqtt_config.lwt.enabled  = true;
+        config_.mqtt_config.lwt.topic    = death_topic;
+        config_.mqtt_config.lwt.payload  = death_payload;
+        config_.mqtt_config.lwt.qos      = config_.publishing.death_qos;
+        config_.mqtt_config.lwt.retained = false;
+        config_.mqtt_config.sync_lwt();
 
-        IPB_LOG_DEBUG(LOG_CAT, "Set NDEATH as LWT on topic: " << death_topic);
+        IPB_LOG_DEBUG(LOG_CAT, "Configured NDEATH as LWT on topic: " << death_topic);
     }
 
     void subscribe_to_commands() {
@@ -410,7 +458,7 @@ private:
         IPB_LOG_DEBUG(LOG_CAT, "Subscribed to NCMD: " << ncmd_topic);
     }
 
-    common::Result<> publish_birth() {
+    common::Result<void> publish_birth() {
         IPB_SPAN_CAT("SparkplugSink::publish_birth", LOG_CAT);
 
         // Build NBIRTH topic: spBv1.0/{group_id}/NBIRTH/{edge_node_id}
@@ -435,15 +483,16 @@ private:
                 publish_device_birth(device_id);
             }
 
-            return common::Result<>::success();
+            return common::Result<void>{};
         } else {
             stats_.publish_failures++;
             IPB_LOG_ERROR(LOG_CAT, "Failed to publish NBIRTH");
-            return common::Result<>::failure("Failed to publish NBIRTH");
+            return common::Result<void>(common::ErrorCode::INTERNAL_ERROR,
+                                        "Failed to publish NBIRTH");
         }
     }
 
-    common::Result<> publish_device_birth(const std::string& device_id) {
+    common::Result<void> publish_device_birth(const std::string& device_id) {
         // Build DBIRTH topic: spBv1.0/{group_id}/DBIRTH/{edge_node_id}/{device_id}
         std::string dbirth_topic = "spBv1.0/" + config_.edge_node.group_id + "/DBIRTH/" +
                                    config_.edge_node.edge_node_id + "/" + device_id;
@@ -458,10 +507,11 @@ private:
             stats_.births_sent++;
             stats_.bytes_sent += dbirth_payload.size();
             IPB_LOG_INFO(LOG_CAT, "Published DBIRTH for device: " << device_id);
-            return common::Result<>::success();
+            return common::Result<void>{};
         } else {
             stats_.publish_failures++;
-            return common::Result<>::failure("Failed to publish DBIRTH");
+            return common::Result<void>(common::ErrorCode::INTERNAL_ERROR,
+                                        "Failed to publish DBIRTH");
         }
     }
 
@@ -662,7 +712,7 @@ private:
 
     // Message queue
     std::queue<common::DataPoint> message_queue_;
-    std::mutex queue_mutex_;
+    mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
 
     // Batching
@@ -683,7 +733,7 @@ private:
     std::thread batch_thread_;
 
     // Statistics
-    SparkplugSinkStatistics stats_;
+    SparkplugSinkStatisticsInternal stats_;
 };
 
 //=============================================================================
@@ -695,23 +745,48 @@ SparkplugSink::SparkplugSink(const SparkplugSinkConfig& config)
 
 SparkplugSink::~SparkplugSink() = default;
 
-common::Result<> SparkplugSink::send(const common::DataPoint& data_point) {
-    return impl_->send(data_point);
+common::Result<void> SparkplugSink::write(const common::DataPoint& data_point) {
+    return impl_->write(data_point);
 }
 
-common::Result<> SparkplugSink::send_batch(const common::DataSet& data_set) {
-    return impl_->send_batch(data_set);
+common::Result<void> SparkplugSink::write_batch(std::span<const common::DataPoint> data_points) {
+    return impl_->write_batch(data_points);
 }
 
-common::Result<> SparkplugSink::flush() {
+common::Result<void> SparkplugSink::write_dataset(const common::DataSet& dataset) {
+    return impl_->write_dataset(dataset);
+}
+
+std::future<common::Result<void>> SparkplugSink::write_async(const common::DataPoint& data_point) {
+    return impl_->write_async(data_point);
+}
+
+std::future<common::Result<void>> SparkplugSink::write_batch_async(
+    std::span<const common::DataPoint> data_points) {
+    return impl_->write_batch_async(data_points);
+}
+
+common::Result<void> SparkplugSink::flush() {
     return impl_->flush();
 }
 
-common::Result<> SparkplugSink::start() {
+size_t SparkplugSink::pending_count() const noexcept {
+    return impl_->pending_count();
+}
+
+bool SparkplugSink::can_accept_data() const noexcept {
+    return impl_->can_accept_data();
+}
+
+size_t SparkplugSink::max_batch_size() const noexcept {
+    return impl_->max_batch_size();
+}
+
+common::Result<void> SparkplugSink::start() {
     return impl_->start();
 }
 
-common::Result<> SparkplugSink::stop() {
+common::Result<void> SparkplugSink::stop() {
     return impl_->stop();
 }
 
@@ -719,8 +794,8 @@ bool SparkplugSink::is_running() const noexcept {
     return impl_->is_running();
 }
 
-common::Result<> SparkplugSink::configure(const common::ConfigurationBase& config) {
-    return common::Result<>::success();
+common::Result<void> SparkplugSink::configure(const common::ConfigurationBase& /*config*/) {
+    return common::Result<void>{};
 }
 
 std::unique_ptr<common::ConfigurationBase> SparkplugSink::get_configuration() const {
@@ -730,9 +805,10 @@ std::unique_ptr<common::ConfigurationBase> SparkplugSink::get_configuration() co
 common::Statistics SparkplugSink::get_statistics() const noexcept {
     auto stats = impl_->get_sparkplug_statistics();
     common::Statistics result;
-    result.messages_sent   = stats.metrics_published.load();
-    result.messages_failed = stats.publish_failures.load();
-    result.bytes_sent      = stats.bytes_sent.load();
+    result.total_messages      = stats.metrics_published;
+    result.successful_messages = stats.metrics_published - stats.publish_failures;
+    result.failed_messages     = stats.publish_failures;
+    result.total_bytes         = stats.bytes_sent;
     return result;
 }
 
@@ -756,7 +832,7 @@ std::string SparkplugSink::get_health_status() const {
     }
 }
 
-common::Result<> SparkplugSink::rebirth() {
+common::Result<void> SparkplugSink::rebirth() {
     return impl_->rebirth();
 }
 
@@ -764,11 +840,11 @@ void SparkplugSink::add_node_metric(const MetricDefinition& metric) {
     impl_->add_node_metric(metric);
 }
 
-common::Result<> SparkplugSink::add_device(const DeviceConfig& device) {
+common::Result<void> SparkplugSink::add_device(const DeviceConfig& device) {
     return impl_->add_device(device);
 }
 
-common::Result<> SparkplugSink::remove_device(const std::string& device_id) {
+common::Result<void> SparkplugSink::remove_device(const std::string& device_id) {
     return impl_->remove_device(device_id);
 }
 

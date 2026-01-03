@@ -9,21 +9,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find dependencies
 find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
-
-# Find jsoncpp (avoid conflicts)
-if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
-    find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
-        pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-    endif()
-endif()
-
-# Find yaml-cpp
-find_package(yaml-cpp QUIET)
-if(NOT yaml-cpp_FOUND)
-    pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
-endif()
 
 # Library sources
 set(ROUTER_SOURCES
@@ -59,17 +44,22 @@ target_link_libraries(ipb-router
     PUBLIC
         ipb-common
         Threads::Threads
-    PRIVATE
-        ${JSONCPP_LIBRARIES}
-        ${YAML_CPP_LIBRARIES}
 )
 
-# Compiler flags
-target_compile_options(ipb-router PRIVATE
-    -Wall -Wextra -Wpedantic
-    $<$<CONFIG:Release>:-O3>
-    $<$<CONFIG:Debug>:-g -O0>
-)
+# Compiler flags (platform-specific)
+if(MSVC)
+    target_compile_options(ipb-router PRIVATE
+        /W4
+        $<$<CONFIG:Release>:/O2>
+        $<$<CONFIG:Debug>:/Od /Zi>
+    )
+else()
+    target_compile_options(ipb-router PRIVATE
+        -Wall -Wextra -Wpedantic
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:Debug>:-g -O0>
+    )
+endif()
 
 # Install targets
 install(TARGETS ipb-router

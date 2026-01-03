@@ -8,11 +8,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find dependencies
-find_package(PkgConfig REQUIRED)
+# PkgConfig is optional on Windows
+if(NOT WIN32)
+    find_package(PkgConfig REQUIRED)
+else()
+    find_package(PkgConfig QUIET)
+endif()
 # Find jsoncpp (avoid conflicts)
 if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
     find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
+    if(NOT jsoncpp_FOUND AND PkgConfig_FOUND)
         pkg_check_modules(JSONCPP REQUIRED jsoncpp)
     endif()
 endif()
@@ -46,17 +51,36 @@ add_library(ipb-sink-mqtt SHARED ${MQTT_SINK_SOURCES})
 target_link_libraries(ipb-sink-mqtt
     ipb-common
     ipb-transport-mqtt
-    jsoncpp_lib
     ZLIB::ZLIB
-    pthread
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-sink-mqtt pthread)
+endif()
+
+# Link jsoncpp based on how it was found
+if(TARGET JsonCpp::JsonCpp)
+    target_link_libraries(ipb-sink-mqtt JsonCpp::JsonCpp)
+elseif(TARGET jsoncpp_lib)
+    target_link_libraries(ipb-sink-mqtt jsoncpp_lib)
+elseif(JSONCPP_FOUND)
+    target_include_directories(ipb-sink-mqtt PRIVATE ${JSONCPP_INCLUDE_DIRS})
+    target_link_directories(ipb-sink-mqtt PRIVATE ${JSONCPP_LIBRARY_DIRS})
+    target_link_libraries(ipb-sink-mqtt ${JSONCPP_LIBRARIES})
+endif()
 
 # Compiler flags
-target_compile_options(ipb-sink-mqtt PRIVATE
-    -Wall -Wextra -Wpedantic
-    -O3 -march=native
-    -fPIC
-)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ipb-sink-mqtt PRIVATE
+        -Wall -Wextra -Wpedantic
+        -O3
+        -fPIC
+    )
+    if(NOT APPLE)
+        target_compile_options(ipb-sink-mqtt PRIVATE -march=native)
+    endif()
+elseif(MSVC)
+    target_compile_options(ipb-sink-mqtt PRIVATE /W4 /O2)
+endif()
 
 # Preprocessor definitions
 target_compile_definitions(ipb-sink-mqtt PRIVATE

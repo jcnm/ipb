@@ -93,7 +93,7 @@ jobs:
     - name: Download baseline (if exists)
       if: github.event_name == 'pull_request'
       continue-on-error: true
-      uses: dawidd6/action-download-artifact@v3
+      uses: dawidd6/action-download-artifact@v12
       with:
         workflow: benchmarks.yml
         branch: ${{ github.base_ref }}

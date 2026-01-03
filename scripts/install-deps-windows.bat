@@ -39,9 +39,11 @@ echo   -Full              Install all optional dependencies (default)
 echo   -UseVcpkg          Use vcpkg package manager (recommended)
 echo   -UseChoco          Use Chocolatey package manager
 echo   -DryRun            Show what would be installed without installing
+echo   -Arch x64          Target architecture: x64, x86, or arm64 (default: x64)
 echo.
 echo Examples:
-echo   install-deps-windows.bat                    Auto-detect and install
+echo   install-deps-windows.bat                    Auto-detect and install (x64)
+echo   install-deps-windows.bat -Arch x86          Install for 32-bit
 echo   install-deps-windows.bat -UseVcpkg          Use vcpkg
 echo   install-deps-windows.bat -Minimal           Essential deps only
 echo.

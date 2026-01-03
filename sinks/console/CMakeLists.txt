@@ -8,8 +8,46 @@ project(libipb-sink-console
 )
 
 # Find required dependencies
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONCPP jsoncpp REQUIRED)
+# PkgConfig is optional on Windows
+if(NOT WIN32)
+    find_package(PkgConfig REQUIRED)
+else()
+    find_package(PkgConfig QUIET)
+endif()
+
+# jsoncpp is optional for EMBEDDED mode
+# First check if jsoncpp target already exists (from parent CMakeLists.txt)
+if(TARGET jsoncpp_lib OR TARGET JsonCpp::JsonCpp)
+    set(CONSOLE_HAS_JSONCPP TRUE)
+elseif(NOT IPB_BUILD_MODE STREQUAL "EMBEDDED")
+    # Try CMake find_package first
+    find_package(jsoncpp QUIET)
+    if(jsoncpp_FOUND OR TARGET jsoncpp_lib OR TARGET JsonCpp::JsonCpp)
+        set(CONSOLE_HAS_JSONCPP TRUE)
+    elseif(PkgConfig_FOUND)
+        pkg_check_modules(JSONCPP jsoncpp REQUIRED)
+        set(CONSOLE_HAS_JSONCPP TRUE)
+    else()
+        message(FATAL_ERROR "jsoncpp not found and pkg-config not available")
+    endif()
+else()
+    # EMBEDDED mode - jsoncpp is optional
+    find_package(jsoncpp QUIET)
+    if(jsoncpp_FOUND OR TARGET jsoncpp_lib OR TARGET JsonCpp::JsonCpp)
+        set(CONSOLE_HAS_JSONCPP TRUE)
+    elseif(PkgConfig_FOUND)
+        pkg_check_modules(JSONCPP jsoncpp QUIET)
+        if(JSONCPP_FOUND)
+            set(CONSOLE_HAS_JSONCPP TRUE)
+        else()
+            set(CONSOLE_HAS_JSONCPP FALSE)
+            message(STATUS "Console sink: jsoncpp not available in EMBEDDED mode, using fallback JSON")
+        endif()
+    else()
+        set(CONSOLE_HAS_JSONCPP FALSE)
+        message(STATUS "Console sink: jsoncpp not available in EMBEDDED mode, using fallback JSON")
+    endif()
+endif()
 
 # Create the console sink library
 add_library(ipb-sink-console SHARED
@@ -29,20 +67,30 @@ set_target_properties(ipb-sink-console PROPERTIES
 target_include_directories(ipb-sink-console PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
-    ${JSONCPP_INCLUDE_DIRS}
 )
 
 # Link libraries
 target_link_libraries(ipb-sink-console PUBLIC
     ipb-common
-    ${JSONCPP_LIBRARIES}
     Threads::Threads
 )
 
-# Compiler flags
-target_compile_options(ipb-sink-console PRIVATE
-    ${JSONCPP_CFLAGS_OTHER}
-)
+# Conditionally add jsoncpp
+if(CONSOLE_HAS_JSONCPP)
+    # Link to the appropriate target or use pkg-config variables
+    if(TARGET JsonCpp::JsonCpp)
+        target_link_libraries(ipb-sink-console PRIVATE JsonCpp::JsonCpp)
+    elseif(TARGET jsoncpp_lib)
+        target_link_libraries(ipb-sink-console PRIVATE jsoncpp_lib)
+    elseif(JSONCPP_FOUND)
+        # Found via pkg-config
+        target_include_directories(ipb-sink-console PRIVATE ${JSONCPP_INCLUDE_DIRS})
+        target_link_directories(ipb-sink-console PRIVATE ${JSONCPP_LIBRARY_DIRS})
+        target_link_libraries(ipb-sink-console PRIVATE ${JSONCPP_LIBRARIES})
+        target_compile_options(ipb-sink-console PRIVATE ${JSONCPP_CFLAGS_OTHER})
+    endif()
+    target_compile_definitions(ipb-sink-console PRIVATE IPB_CONSOLE_HAS_JSONCPP)
+endif()
 
 # Real-time optimizations
 if(ENABLE_REALTIME_OPTIMIZATIONS)
@@ -51,12 +99,20 @@ endif()
 
 # Performance optimizations
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-sink-console PRIVATE
-        -O3
-        -ffast-math
-        -funroll-loops
-        -finline-functions
-    )
+    if(MSVC)
+        target_compile_options(ipb-sink-console PRIVATE
+            /O2
+            /fp:fast
+            /Ob2
+        )
+    else()
+        target_compile_options(ipb-sink-console PRIVATE
+            -O3
+            -ffast-math
+            -funroll-loops
+            -finline-functions
+        )
+    endif()
 endif()
 
 # Install targets

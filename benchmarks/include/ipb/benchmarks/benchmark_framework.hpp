@@ -827,7 +827,7 @@ private:
         return oss.str();
     }
 
-    std::vector<BenchmarkResult> load_results(const std::filesystem::path& path) {
+    std::vector<BenchmarkResult> load_results([[maybe_unused]] const std::filesystem::path& path) {
         // Simplified JSON parsing - in production use a proper JSON library
         std::vector<BenchmarkResult> results;
         // TODO: Implement JSON parsing

@@ -10,6 +10,11 @@ add_subdirectory(router)
 # Security/TLS layer (depends on common)
 add_subdirectory(security)
 
+# Transform layer (bijective compression/encryption pipeline)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/transform/CMakeLists.txt")
+    add_subdirectory(transform)
+endif()
+
 # Core components (optional)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/components/CMakeLists.txt")
     add_subdirectory(components)

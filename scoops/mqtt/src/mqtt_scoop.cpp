@@ -181,7 +181,8 @@ public:
 
         if (IPB_UNLIKELY(!connection_)) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to create MQTT connection");
-            return common::err(common::ErrorCode::CONNECTION_FAILED,"Failed to create MQTT connection");
+            return common::err(common::ErrorCode::CONNECTION_FAILED,
+                               "Failed to create MQTT connection");
         }
 
         // Setup message callback
@@ -198,7 +199,8 @@ public:
         // Connect
         if (IPB_UNLIKELY(!connection_->connect())) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to connect to MQTT broker");
-            return common::err(common::ErrorCode::CONNECTION_FAILED,"Failed to connect to MQTT broker");
+            return common::err(common::ErrorCode::CONNECTION_FAILED,
+                               "Failed to connect to MQTT broker");
         }
 
         IPB_LOG_DEBUG(LOG_CAT, "Connected to MQTT broker");
@@ -553,9 +555,7 @@ private:
     }
 
     template <typename T>
-    common::DataPoint create_datapoint(const std::string& address,
-                                       T value,
-                                       uint16_t protocol_id) {
+    common::DataPoint create_datapoint(const std::string& address, T value, uint16_t protocol_id) {
         common::DataPoint dp;
         dp.set_address(address);
         if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
@@ -715,7 +715,7 @@ bool MQTTScoop::is_running() const noexcept {
     return impl_->is_running();
 }
 
-common::Result<> MQTTScoop::configure(const common::ConfigurationBase& config) {
+common::Result<> MQTTScoop::configure([[maybe_unused]] const common::ConfigurationBase& config) {
     // Configuration should be done via constructor
     return common::ok();
 }

@@ -21,11 +21,13 @@
 #endif
 
 // Fallback to standard libraries if embedded libs not available
-#ifndef IPB_CONFIG_USE_RYML
+// NOTE: In EMBEDDED build mode (IPB_BUILD_EMBEDDED), we don't include these
+// fallbacks since yaml-cpp/jsoncpp aren't available
+#if !defined(IPB_CONFIG_USE_RYML) && !defined(IPB_BUILD_EMBEDDED)
 #include <yaml-cpp/yaml.h>
 #endif
 
-#ifndef IPB_CONFIG_USE_CJSON
+#if !defined(IPB_CONFIG_USE_CJSON) && !defined(IPB_BUILD_EMBEDDED)
 #include <json/json.h>
 #endif
 
@@ -49,14 +51,14 @@ void reset_memory_tracking() {
     g_peak_memory    = 0;
 }
 
-void track_allocation(size_t size) {
+[[maybe_unused]] void track_allocation(size_t size) {
     g_current_memory += size;
     if (g_current_memory > g_peak_memory) {
         g_peak_memory = g_current_memory;
     }
 }
 
-void track_deallocation(size_t size) {
+[[maybe_unused]] void track_deallocation(size_t size) {
     if (size <= g_current_memory) {
         g_current_memory -= size;
     }
@@ -187,13 +189,13 @@ LoggingConfig parse_logging_config_ryml(const ryml::ConstNodeRef& node) {
     if (!node.valid())
         return config;
 
-    config.level          = ryml_get<std::string>(node, "level", "info");
-    config.format         = ryml_get<std::string>(node, "format", "text");
-    config.file_path      = ryml_get<std::string>(node, "file_path", "");
-    config.max_file_size  = ryml_get<size_t>(node, "max_file_size", 10 * 1024 * 1024);
-    config.max_files      = ryml_get<size_t>(node, "max_files", 5);
-    config.enable_console = ryml_get<bool>(node, "enable_console", true);
-    config.enable_file    = ryml_get<bool>(node, "enable_file", false);
+    config.level             = ryml_get<std::string>(node, "level", "info");
+    config.output            = ryml_get<std::string>(node, "output", "console");
+    config.file_path         = ryml_get<std::string>(node, "file_path", "");
+    config.max_file_size_mb  = ryml_get<size_t>(node, "max_file_size_mb", 100);
+    config.max_files         = ryml_get<size_t>(node, "max_files", 5);
+    config.include_timestamp = ryml_get<bool>(node, "include_timestamp", true);
+    config.include_thread_id = ryml_get<bool>(node, "include_thread_id", false);
 
     return config;
 }
@@ -203,10 +205,12 @@ MetricsConfig parse_metrics_config_ryml(const ryml::ConstNodeRef& node) {
     if (!node.valid())
         return config;
 
-    config.enabled                = ryml_get<bool>(node, "enabled", true);
-    config.collection_interval_ms = ryml_get<uint32_t>(node, "collection_interval_ms", 1000);
-    config.history_size           = ryml_get<size_t>(node, "history_size", 1000);
-    config.enable_histograms      = ryml_get<bool>(node, "enable_histograms", true);
+    config.enabled             = ryml_get<bool>(node, "enabled", true);
+    auto collection_seconds    = ryml_get<size_t>(node, "collection_interval_seconds", 10);
+    config.collection_interval = std::chrono::seconds(collection_seconds);
+    config.export_format       = ryml_get<std::string>(node, "export_format", "prometheus");
+    config.export_endpoint     = ryml_get<std::string>(node, "export_endpoint", "");
+    config.export_port         = static_cast<uint16_t>(ryml_get<size_t>(node, "export_port", 9090));
 
     return config;
 }
@@ -216,11 +220,11 @@ SecurityConfig parse_security_config_ryml(const ryml::ConstNodeRef& node) {
     if (!node.valid())
         return config;
 
-    config.enable_tls  = ryml_get<bool>(node, "enable_tls", false);
-    config.cert_file   = ryml_get<std::string>(node, "cert_file", "");
-    config.key_file    = ryml_get<std::string>(node, "key_file", "");
-    config.ca_file     = ryml_get<std::string>(node, "ca_file", "");
-    config.verify_peer = ryml_get<bool>(node, "verify_peer", true);
+    config.tls.enabled     = ryml_get<bool>(node, "enable_tls", false);
+    config.tls.cert_file   = ryml_get<std::string>(node, "cert_file", "");
+    config.tls.key_file    = ryml_get<std::string>(node, "key_file", "");
+    config.tls.ca_file     = ryml_get<std::string>(node, "ca_file", "");
+    config.tls.verify_peer = ryml_get<bool>(node, "verify_peer", true);
 
     return config;
 }
@@ -312,16 +316,19 @@ RouterConfig parse_router_config_ryml(const ryml::ConstNodeRef& node) {
     if (!node.valid())
         return config;
 
-    config.id                    = ryml_get<std::string>(node, "id", "default-router");
-    config.worker_threads        = ryml_get<size_t>(node, "worker_threads", 4);
-    config.queue_size            = ryml_get<size_t>(node, "queue_size", 10000);
-    config.batch_size            = ryml_get<size_t>(node, "batch_size", 100);
-    config.routing_table_size    = ryml_get<size_t>(node, "routing_table_size", 1000);
-    config.enable_metrics        = ryml_get<bool>(node, "enable_metrics", true);
-    config.enable_load_balancing = ryml_get<bool>(node, "enable_load_balancing", false);
+    config.id                 = ryml_get<std::string>(node, "id", "default");
+    config.name               = ryml_get<std::string>(node, "name", "IPB Router");
+    config.worker_threads     = ryml_get<uint32_t>(node, "worker_threads", 0);
+    config.queue_size         = ryml_get<uint32_t>(node, "queue_size", 10000);
+    config.batch_size         = ryml_get<uint32_t>(node, "batch_size", 100);
+    config.routing_table_size = ryml_get<size_t>(node, "routing_table_size", 1000);
+    config.enable_zero_copy   = ryml_get<bool>(node, "enable_zero_copy", true);
+    config.enable_lock_free   = ryml_get<bool>(node, "enable_lock_free", true);
+    config.default_sink_id    = ryml_get<std::string>(node, "default_sink_id", "");
+    config.drop_unrouted      = ryml_get<bool>(node, "drop_unrouted", false);
 
-    auto timeout_ms        = ryml_get<uint64_t>(node, "default_timeout_ms", 5000);
-    config.default_timeout = std::chrono::milliseconds(timeout_ms);
+    auto timeout_us         = ryml_get<size_t>(node, "routing_timeout_us", 500);
+    config.routing_timeout  = std::chrono::microseconds(timeout_us);
 
     // Routes
     if (node.has_child("routes")) {
@@ -343,26 +350,38 @@ ScoopConfig parse_scoop_config_ryml(const ryml::ConstNodeRef& node) {
 
     config.id      = ryml_get<std::string>(node, "id", "");
     config.name    = ryml_get<std::string>(node, "name", "");
-    config.type    = ryml_get<std::string>(node, "type", "");
     config.enabled = ryml_get<bool>(node, "enabled", true);
 
-    auto poll_ms         = ryml_get<uint64_t>(node, "poll_interval_ms", 1000);
-    config.poll_interval = std::chrono::milliseconds(poll_ms);
-
-    auto timeout_ms = ryml_get<uint64_t>(node, "timeout_ms", 5000);
-    config.timeout  = std::chrono::milliseconds(timeout_ms);
-
-    config.retry_count = ryml_get<uint32_t>(node, "retry_count", 3);
-    config.buffer_size = ryml_get<size_t>(node, "buffer_size", 1000);
-
-    // Connection parameters
-    if (node.has_child("connection")) {
-        config.connection_params = ryml_get_string_map(node, "connection");
+    // Store type in protocol_settings
+    auto type = ryml_get<std::string>(node, "type", "");
+    if (!type.empty()) {
+        config.protocol_settings["type"] = type;
     }
 
-    // Custom parameters
+    // Polling configuration
+    auto poll_ms             = ryml_get<size_t>(node, "poll_interval_ms", 1000);
+    config.polling.interval  = std::chrono::milliseconds(poll_ms);
+    config.polling.enabled   = ryml_get<bool>(node, "polling_enabled", true);
+
+    auto timeout_ms         = ryml_get<size_t>(node, "timeout_ms", 5000);
+    config.polling.timeout  = std::chrono::milliseconds(timeout_ms);
+
+    config.polling.retry_count = ryml_get<uint32_t>(node, "retry_count", 3);
+
+    // Connection parameters - store in protocol_settings
+    if (node.has_child("connection")) {
+        auto connection_params = ryml_get_string_map(node, "connection");
+        for (const auto& [key, value] : connection_params) {
+            config.protocol_settings["connection." + key] = value;
+        }
+    }
+
+    // Custom parameters - store in protocol_settings
     if (node.has_child("parameters")) {
-        config.custom_params = ryml_get_string_map(node, "parameters");
+        auto custom_params = ryml_get_string_map(node, "parameters");
+        for (const auto& [key, value] : custom_params) {
+            config.protocol_settings[key] = value;
+        }
     }
 
     return config;
@@ -375,27 +394,36 @@ SinkConfig parse_sink_config_ryml(const ryml::ConstNodeRef& node) {
 
     config.id      = ryml_get<std::string>(node, "id", "");
     config.name    = ryml_get<std::string>(node, "name", "");
-    config.type    = ryml_get<std::string>(node, "type", "");
     config.enabled = ryml_get<bool>(node, "enabled", true);
 
-    auto timeout_ms = ryml_get<uint64_t>(node, "timeout_ms", 5000);
-    config.timeout  = std::chrono::milliseconds(timeout_ms);
-
-    config.retry_count = ryml_get<uint32_t>(node, "retry_count", 3);
-    config.buffer_size = ryml_get<size_t>(node, "buffer_size", 1000);
-    config.batch_size  = ryml_get<size_t>(node, "batch_size", 100);
-
-    auto flush_ms         = ryml_get<uint64_t>(node, "flush_interval_ms", 1000);
-    config.flush_interval = std::chrono::milliseconds(flush_ms);
-
-    // Connection parameters
-    if (node.has_child("connection")) {
-        config.connection_params = ryml_get_string_map(node, "connection");
+    // Store type in protocol_settings
+    auto type = ryml_get<std::string>(node, "type", "");
+    if (!type.empty()) {
+        config.protocol_settings["type"] = type;
     }
 
-    // Custom parameters
+    // Retry configuration
+    config.retry.max_retries = ryml_get<uint32_t>(node, "retry_count", 3);
+
+    // Batch configuration
+    config.batch.max_size  = ryml_get<uint32_t>(node, "batch_size", 100);
+    auto flush_ms          = ryml_get<size_t>(node, "flush_interval_ms", 1000);
+    config.batch.max_delay = std::chrono::milliseconds(flush_ms);
+
+    // Connection parameters - store in protocol_settings
+    if (node.has_child("connection")) {
+        auto connection_params = ryml_get_string_map(node, "connection");
+        for (const auto& [key, value] : connection_params) {
+            config.protocol_settings["connection." + key] = value;
+        }
+    }
+
+    // Custom parameters - store in protocol_settings
     if (node.has_child("parameters")) {
-        config.custom_params = ryml_get_string_map(node, "parameters");
+        auto custom_params = ryml_get_string_map(node, "parameters");
+        for (const auto& [key, value] : custom_params) {
+            config.protocol_settings[key] = value;
+        }
     }
 
     return config;
@@ -404,7 +432,7 @@ SinkConfig parse_sink_config_ryml(const ryml::ConstNodeRef& node) {
 ApplicationConfig parse_application_config_ryml(const ryml::ConstNodeRef& root) {
     ApplicationConfig config;
 
-    config.name        = ryml_get<std::string>(root, "name", "ipb-gateway");
+    config.name        = ryml_get<std::string>(root, "name", "ipb");
     config.version     = ryml_get<std::string>(root, "version", "1.0.0");
     config.instance_id = ryml_get<std::string>(root, "instance_id", "");
 
@@ -413,14 +441,15 @@ ApplicationConfig parse_application_config_ryml(const ryml::ConstNodeRef& root) 
         config.logging = parse_logging_config_ryml(root["logging"]);
     }
 
-    // Metrics
-    if (root.has_child("metrics")) {
-        config.metrics = parse_metrics_config_ryml(root["metrics"]);
-    }
-
-    // Security
-    if (root.has_child("security")) {
-        config.security = parse_security_config_ryml(root["security"]);
+    // Monitoring (contains metrics)
+    if (root.has_child("monitoring")) {
+        auto monitoring = root["monitoring"];
+        if (monitoring.has_child("metrics")) {
+            config.monitoring.metrics = parse_metrics_config_ryml(monitoring["metrics"]);
+        }
+    } else if (root.has_child("metrics")) {
+        // Legacy support: metrics at top level
+        config.monitoring.metrics = parse_metrics_config_ryml(root["metrics"]);
     }
 
     // Scheduler
@@ -518,6 +547,9 @@ size_t cjson_get<size_t>(const cJSON* node, const char* key, size_t default_valu
     return static_cast<size_t>(item->valuedouble);
 }
 
+// Only define uint64_t specialization if it's a different type from size_t
+// On 64-bit Linux, both are 'unsigned long', causing redefinition errors
+#if !defined(__LP64__) && !defined(_LP64)
 template <>
 uint64_t cjson_get<uint64_t>(const cJSON* node, const char* key, uint64_t default_value) {
     if (!node)
@@ -527,6 +559,7 @@ uint64_t cjson_get<uint64_t>(const cJSON* node, const char* key, uint64_t defaul
         return default_value;
     return static_cast<uint64_t>(item->valuedouble);
 }
+#endif
 
 std::vector<std::string> cjson_get_string_array(const cJSON* node, const char* key) {
     std::vector<std::string> result;
@@ -587,13 +620,13 @@ LoggingConfig parse_logging_config_cjson(const cJSON* node) {
     if (!node)
         return config;
 
-    config.level          = cjson_get<std::string>(node, "level", "info");
-    config.format         = cjson_get<std::string>(node, "format", "text");
-    config.file_path      = cjson_get<std::string>(node, "file_path", "");
-    config.max_file_size  = cjson_get<size_t>(node, "max_file_size", 10 * 1024 * 1024);
-    config.max_files      = cjson_get<size_t>(node, "max_files", 5);
-    config.enable_console = cjson_get<bool>(node, "enable_console", true);
-    config.enable_file    = cjson_get<bool>(node, "enable_file", false);
+    config.level             = cjson_get<std::string>(node, "level", "info");
+    config.output            = cjson_get<std::string>(node, "output", "console");
+    config.file_path         = cjson_get<std::string>(node, "file_path", "");
+    config.max_file_size_mb  = cjson_get<uint32_t>(node, "max_file_size_mb", 100);
+    config.max_files         = cjson_get<uint32_t>(node, "max_files", 5);
+    config.include_timestamp = cjson_get<bool>(node, "include_timestamp", true);
+    config.include_thread_id = cjson_get<bool>(node, "include_thread_id", false);
 
     return config;
 }
@@ -605,14 +638,29 @@ ScoopConfig parse_scoop_config_cjson(const cJSON* node) {
 
     config.id      = cjson_get<std::string>(node, "id", "");
     config.name    = cjson_get<std::string>(node, "name", "");
-    config.type    = cjson_get<std::string>(node, "type", "");
     config.enabled = cjson_get<bool>(node, "enabled", true);
 
-    auto poll_ms         = cjson_get<uint64_t>(node, "poll_interval_ms", 1000);
-    config.poll_interval = std::chrono::milliseconds(poll_ms);
+    // Store type in protocol_settings
+    auto type = cjson_get<std::string>(node, "type", "");
+    if (!type.empty()) {
+        config.protocol_settings["type"] = type;
+    }
 
-    config.connection_params = cjson_get_string_map(node, "connection");
-    config.custom_params     = cjson_get_string_map(node, "parameters");
+    // Polling configuration
+    auto poll_ms             = cjson_get<size_t>(node, "poll_interval_ms", 1000);
+    config.polling.interval  = std::chrono::milliseconds(poll_ms);
+    config.polling.enabled   = cjson_get<bool>(node, "polling_enabled", true);
+
+    // Store connection and custom params in protocol_settings
+    auto connection_params = cjson_get_string_map(node, "connection");
+    for (const auto& [key, value] : connection_params) {
+        config.protocol_settings["connection." + key] = value;
+    }
+
+    auto custom_params = cjson_get_string_map(node, "parameters");
+    for (const auto& [key, value] : custom_params) {
+        config.protocol_settings[key] = value;
+    }
 
     return config;
 }
@@ -624,11 +672,24 @@ SinkConfig parse_sink_config_cjson(const cJSON* node) {
 
     config.id      = cjson_get<std::string>(node, "id", "");
     config.name    = cjson_get<std::string>(node, "name", "");
-    config.type    = cjson_get<std::string>(node, "type", "");
     config.enabled = cjson_get<bool>(node, "enabled", true);
 
-    config.connection_params = cjson_get_string_map(node, "connection");
-    config.custom_params     = cjson_get_string_map(node, "parameters");
+    // Store type in protocol_settings
+    auto type = cjson_get<std::string>(node, "type", "");
+    if (!type.empty()) {
+        config.protocol_settings["type"] = type;
+    }
+
+    // Store connection and custom params in protocol_settings
+    auto connection_params = cjson_get_string_map(node, "connection");
+    for (const auto& [key, value] : connection_params) {
+        config.protocol_settings["connection." + key] = value;
+    }
+
+    auto custom_params = cjson_get_string_map(node, "parameters");
+    for (const auto& [key, value] : custom_params) {
+        config.protocol_settings[key] = value;
+    }
 
     return config;
 }
@@ -653,9 +714,19 @@ RouterConfig parse_router_config_cjson(const cJSON* node) {
     if (!node)
         return config;
 
-    config.id             = cjson_get<std::string>(node, "id", "default-router");
-    config.worker_threads = cjson_get<size_t>(node, "worker_threads", 4);
-    config.queue_size     = cjson_get<size_t>(node, "queue_size", 10000);
+    config.id                 = cjson_get<std::string>(node, "id", "default");
+    config.name               = cjson_get<std::string>(node, "name", "IPB Router");
+    config.worker_threads     = cjson_get<uint32_t>(node, "worker_threads", 0);
+    config.queue_size         = cjson_get<uint32_t>(node, "queue_size", 10000);
+    config.batch_size         = cjson_get<uint32_t>(node, "batch_size", 100);
+    config.routing_table_size = cjson_get<size_t>(node, "routing_table_size", 1000);
+    config.enable_zero_copy   = cjson_get<bool>(node, "enable_zero_copy", true);
+    config.enable_lock_free   = cjson_get<bool>(node, "enable_lock_free", true);
+    config.default_sink_id    = cjson_get<std::string>(node, "default_sink_id", "");
+    config.drop_unrouted      = cjson_get<bool>(node, "drop_unrouted", false);
+
+    auto timeout_us        = cjson_get<size_t>(node, "routing_timeout_us", 500);
+    config.routing_timeout = std::chrono::microseconds(timeout_us);
 
     const cJSON* routes = cJSON_GetObjectItemCaseSensitive(node, "routes");
     if (routes && cJSON_IsArray(routes)) {
@@ -673,8 +744,9 @@ ApplicationConfig parse_application_config_cjson(const cJSON* root) {
     if (!root)
         return config;
 
-    config.name    = cjson_get<std::string>(root, "name", "ipb-gateway");
-    config.version = cjson_get<std::string>(root, "version", "1.0.0");
+    config.name        = cjson_get<std::string>(root, "name", "ipb");
+    config.version     = cjson_get<std::string>(root, "version", "1.0.0");
+    config.instance_id = cjson_get<std::string>(root, "instance_id", "");
 
     const cJSON* logging = cJSON_GetObjectItemCaseSensitive(root, "logging");
     if (logging) {
@@ -950,37 +1022,26 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(std::s
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<ApplicationConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                          "Failed to parse JSON");
             }
             CJsonGuard guard(json);
             config = parse_application_config_cjson(json);
 #else
-            // Fallback to jsoncpp
-            Json::Value root;
-            Json::CharReaderBuilder builder;
-            std::string errors;
-            std::istringstream stream(std::string(content));
-            if (!Json::parseFromStream(builder, stream, &root, &errors)) {
-                return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
-                                                         "JSON parse error: " + errors);
-            }
-            // Use standard parser (not shown for brevity)
+            // No JSON parser available in embedded mode
             return common::Result<ApplicationConfig>(
                 common::ErrorCode::NOT_IMPLEMENTED,
-                "Fallback JSON parsing not implemented in embedded mode");
+                "JSON parsing requires cJSON library in embedded mode");
 #endif
         } else {
 #ifdef IPB_CONFIG_USE_RYML
             ryml::Tree tree = ryml::parse_in_arena(ryml::to_csubstr(content));
             config          = parse_application_config_ryml(tree.rootref());
 #else
-            // Fallback to yaml-cpp
-            YAML::Node root = YAML::Load(std::string(content));
-            // Use standard parser (not shown for brevity)
+            // No YAML parser available in embedded mode
             return common::Result<ApplicationConfig>(
                 common::ErrorCode::NOT_IMPLEMENTED,
-                "Fallback YAML parsing not implemented in embedded mode");
+                "YAML parsing requires rapidyaml library in embedded mode");
 #endif
         }
 
@@ -995,7 +1056,7 @@ common::Result<ApplicationConfig> EmbeddedConfigLoader::parse_application(std::s
         return common::Result<ApplicationConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<ApplicationConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<ApplicationConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                  std::string("Parse error: ") + e.what());
     }
 }
@@ -1018,7 +1079,7 @@ common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(std::string_view c
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<ScoopConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<ScoopConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                    "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1040,7 +1101,7 @@ common::Result<ScoopConfig> EmbeddedConfigLoader::parse_scoop(std::string_view c
         return common::Result<ScoopConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<ScoopConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<ScoopConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                            std::string("Parse error: ") + e.what());
     }
 }
@@ -1063,7 +1124,7 @@ common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(std::string_view con
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<SinkConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<SinkConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                   "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1085,7 +1146,7 @@ common::Result<SinkConfig> EmbeddedConfigLoader::parse_sink(std::string_view con
         return common::Result<SinkConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<SinkConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<SinkConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                           std::string("Parse error: ") + e.what());
     }
 }
@@ -1108,7 +1169,7 @@ common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(std::string_view
 #ifdef IPB_CONFIG_USE_CJSON
             cJSON* json = cJSON_Parse(content.data());
             if (!json) {
-                return common::Result<RouterConfig>(common::ErrorCode::PARSE_ERROR,
+                return common::Result<RouterConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                                     "Failed to parse JSON");
             }
             CJsonGuard guard(json);
@@ -1130,7 +1191,7 @@ common::Result<RouterConfig> EmbeddedConfigLoader::parse_router(std::string_view
         return common::Result<RouterConfig>(std::move(config));
 
     } catch (const std::exception& e) {
-        return common::Result<RouterConfig>(common::ErrorCode::PARSE_ERROR,
+        return common::Result<RouterConfig>(common::ErrorCode::CONFIG_PARSE_ERROR,
                                             std::string("Parse error: ") + e.what());
     }
 }
@@ -1204,8 +1265,8 @@ common::Result<void> EmbeddedConfigLoader::validate(const ScoopConfig& config) {
     if (config.id.empty()) {
         return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop ID is required");
     }
-    if (config.type.empty()) {
-        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop type is required");
+    if (config.name.empty()) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Scoop name is required");
     }
     return common::Result<void>();
 }
@@ -1214,8 +1275,8 @@ common::Result<void> EmbeddedConfigLoader::validate(const SinkConfig& config) {
     if (config.id.empty()) {
         return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink ID is required");
     }
-    if (config.type.empty()) {
-        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink type is required");
+    if (config.name.empty()) {
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Sink name is required");
     }
     return common::Result<void>();
 }
@@ -1255,7 +1316,13 @@ std::unique_ptr<ConfigLoader> create_config_loader_for_platform(
         case common::DeploymentPlatform::SERVER_CLOUD:
         case common::DeploymentPlatform::SERVER_CONTAINERIZED:
         default:
+            // In EMBEDDED build mode, always use embedded config loader
+            // (full config loader requires yaml-cpp + jsoncpp which aren't available)
+#if defined(IPB_BUILD_EMBEDDED)
+            return std::make_unique<EmbeddedConfigLoader>(constraints);
+#else
             return create_config_loader();
+#endif
     }
 }
 

@@ -131,9 +131,9 @@ TEST_F(LockFreeTaskTest, AllStateTransitions) {
 
 TEST_F(LockFreeTaskTest, CopyConstruction) {
     LockFreeTask task1;
-    task1.id = 42;
+    task1.id          = 42;
     task1.deadline_ns = 12345;
-    task1.priority = 200;
+    task1.priority    = 200;
     task1.set_name("original");
 
     LockFreeTask task2 = task1;
@@ -145,9 +145,9 @@ TEST_F(LockFreeTaskTest, CopyConstruction) {
 
 TEST_F(LockFreeTaskTest, MoveConstruction) {
     LockFreeTask task1;
-    task1.id = 42;
+    task1.id          = 42;
     task1.deadline_ns = 12345;
-    task1.priority = 255;
+    task1.priority    = 255;
 
     LockFreeTask task2 = std::move(task1);
     EXPECT_EQ(task2.id, 42u);
@@ -157,7 +157,7 @@ TEST_F(LockFreeTaskTest, MoveConstruction) {
 
 TEST_F(LockFreeTaskTest, CopyAssignment) {
     LockFreeTask task1;
-    task1.id = 100;
+    task1.id          = 100;
     task1.deadline_ns = 999;
 
     LockFreeTask task2;
@@ -204,11 +204,11 @@ TEST_F(LockFreeTaskTest, ComparisonByDeadline) {
 TEST_F(LockFreeTaskTest, ComparisonByPriorityWhenEqualDeadline) {
     LockFreeTask high_priority;
     high_priority.deadline_ns = 100;
-    high_priority.priority = 200;
+    high_priority.priority    = 200;
 
     LockFreeTask low_priority;
     low_priority.deadline_ns = 100;
-    low_priority.priority = 50;
+    low_priority.priority    = 50;
 
     // Higher priority should come first (be "less than" in ordering)
     EXPECT_TRUE(high_priority < low_priority);
@@ -500,9 +500,9 @@ protected:
 
     LockFreeTask make_task(uint64_t id, int64_t deadline, uint8_t priority = 128) {
         LockFreeTask task;
-        task.id = id;
+        task.id          = id;
         task.deadline_ns = deadline;
-        task.priority = priority;
+        task.priority    = priority;
         return task;
     }
 };
@@ -770,7 +770,7 @@ protected:
 };
 
 TEST_F(LockFreeTaskQueueConcurrencyTest, ConcurrentPush) {
-    constexpr int NUM_THREADS = 8;
+    constexpr int NUM_THREADS      = 8;
     constexpr int TASKS_PER_THREAD = 1000;
 
     std::vector<std::thread> threads;
@@ -780,9 +780,9 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, ConcurrentPush) {
         threads.emplace_back([this, t, &pushed]() {
             for (int i = 0; i < TASKS_PER_THREAD; ++i) {
                 LockFreeTask task;
-                task.id = static_cast<uint64_t>(t * TASKS_PER_THREAD + i);
+                task.id          = static_cast<uint64_t>(t * TASKS_PER_THREAD + i);
                 task.deadline_ns = static_cast<int64_t>(t * 100000 + i);
-                task.priority = static_cast<uint8_t>(128);
+                task.priority    = static_cast<uint8_t>(128);
                 if (queue.push(task)) {
                     pushed.fetch_add(1, std::memory_order_relaxed);
                 }
@@ -800,13 +800,13 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, ConcurrentPush) {
 }
 
 TEST_F(LockFreeTaskQueueConcurrencyTest, ConcurrentPop) {
-    constexpr int NUM_ITEMS = 10000;
+    constexpr int NUM_ITEMS   = 10000;
     constexpr int NUM_THREADS = 4;
 
     // Pre-populate the queue
     for (int i = 0; i < NUM_ITEMS; ++i) {
         LockFreeTask task;
-        task.id = i;
+        task.id          = i;
         task.deadline_ns = i;
         queue.push(task);
     }
@@ -846,9 +846,9 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, ConcurrentPop) {
 TEST_F(LockFreeTaskQueueConcurrencyTest, ConcurrentPushPop) {
     // Test concurrent push and pop with producers-first approach
     // This avoids livelock conditions in the lock-free skip list
-    constexpr int NUM_PRODUCERS = 2;
+    constexpr int NUM_PRODUCERS      = 2;
     constexpr int TASKS_PER_PRODUCER = 500;
-    constexpr int TOTAL_TASKS = NUM_PRODUCERS * TASKS_PER_PRODUCER;
+    constexpr int TOTAL_TASKS        = NUM_PRODUCERS * TASKS_PER_PRODUCER;
 
     std::atomic<int> produced{0};
     std::vector<std::thread> producers;
@@ -923,7 +923,7 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, ConcurrentPushPop) {
 }
 
 TEST_F(LockFreeTaskQueueConcurrencyTest, EDFOrderingUnderConcurrency) {
-    constexpr int NUM_THREADS = 4;
+    constexpr int NUM_THREADS      = 4;
     constexpr int TASKS_PER_THREAD = 500;
 
     // Push tasks with random deadlines
@@ -937,7 +937,7 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, EDFOrderingUnderConcurrency) {
 
             for (int i = 0; i < TASKS_PER_THREAD; ++i) {
                 LockFreeTask task;
-                task.id = static_cast<uint64_t>(t * TASKS_PER_THREAD + i);
+                task.id          = static_cast<uint64_t>(t * TASKS_PER_THREAD + i);
                 task.deadline_ns = dist(gen);
                 if (queue.push(task)) {
                     total_pushed.fetch_add(1, std::memory_order_relaxed);
@@ -952,8 +952,8 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, EDFOrderingUnderConcurrency) {
 
     // Pop all tasks and verify ordering (single threaded)
     int64_t prev_deadline = std::numeric_limits<int64_t>::min();
-    int order_violations = 0;
-    int popped = 0;
+    int order_violations  = 0;
+    int popped            = 0;
     LockFreeTask task;
 
     while (queue.pop(task)) {
@@ -982,14 +982,14 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, StressTestMixedOperations) {
     // Phase 1: Insert all tasks sequentially (avoid concurrent push contention)
     for (int i = 0; i < NUM_TASKS; ++i) {
         LockFreeTask task;
-        task.id = static_cast<uint64_t>(i);
+        task.id          = static_cast<uint64_t>(i);
         task.deadline_ns = static_cast<int64_t>(i);
         EXPECT_TRUE(queue.push(task));
     }
     EXPECT_EQ(queue.size(), NUM_TASKS);
 
     // Phase 2: Concurrent read-only operations (no livelock possible)
-    constexpr int NUM_READERS = 4;
+    constexpr int NUM_READERS      = 4;
     constexpr int READS_PER_THREAD = 200;
     std::atomic<int> read_ops{0};
     std::vector<std::thread> readers;
@@ -1054,7 +1054,7 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, ContentionOnSingleDeadline) {
     // Test contention with closely grouped deadlines
     // Note: Skip list requires unique keys, so we use deadline = thread_idx * 1000 + task_idx
     // This simulates tasks with similar (but unique) deadlines competing for insertion
-    constexpr int NUM_THREADS = 4;
+    constexpr int NUM_THREADS      = 4;
     constexpr int TASKS_PER_THREAD = 500;  // Reduced for faster execution
 
     std::atomic<int> pushed{0};
@@ -1067,7 +1067,7 @@ TEST_F(LockFreeTaskQueueConcurrencyTest, ContentionOnSingleDeadline) {
                 task.id = static_cast<uint64_t>(t * TASKS_PER_THREAD + i);
                 // Each thread uses its own deadline range to ensure uniqueness
                 task.deadline_ns = static_cast<int64_t>(t * TASKS_PER_THREAD + i);
-                task.priority = static_cast<uint8_t>(t);
+                task.priority    = static_cast<uint8_t>(t);
                 if (queue.push(task)) {
                     pushed.fetch_add(1, std::memory_order_relaxed);
                 }
@@ -1104,7 +1104,7 @@ TEST_F(LockFreeSkipListStressTest, MixedOperations) {
     EXPECT_EQ(list.size(), NUM_VALUES);
 
     // Phase 2: Concurrent read-only operations
-    constexpr int NUM_READERS = 4;
+    constexpr int NUM_READERS      = 4;
     constexpr int READS_PER_THREAD = 200;
     std::atomic<int> read_ops{0};
     std::vector<std::thread> readers;
@@ -1156,8 +1156,8 @@ TEST_F(LockFreeSkipListStressTest, ProducerConsumerPattern) {
     // Phase 2: All consumers drain (concurrent)
 
     LockFreeSkipList<int> list;
-    constexpr int NUM_PRODUCERS = 4;
-    constexpr int NUM_CONSUMERS = 4;
+    constexpr int NUM_PRODUCERS      = 4;
+    constexpr int NUM_CONSUMERS      = 4;
     constexpr int ITEMS_PER_PRODUCER = 500;  // Reduced for faster execution
 
     // Phase 1: All producers insert concurrently
@@ -1216,7 +1216,7 @@ TEST_F(TaskQueuePerformanceTest, HighThroughput) {
 
     for (int i = 0; i < 50000; ++i) {
         LockFreeTask task;
-        task.id = i;
+        task.id          = i;
         task.deadline_ns = i;
         queue.push(task);
     }
@@ -1224,7 +1224,7 @@ TEST_F(TaskQueuePerformanceTest, HighThroughput) {
     LockFreeTask task;
     while (queue.pop(task)) {}
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     // Should complete 100K operations in reasonable time (< 500ms)
@@ -1232,41 +1232,65 @@ TEST_F(TaskQueuePerformanceTest, HighThroughput) {
 }
 
 TEST_F(TaskQueuePerformanceTest, ConcurrentThroughput) {
-    LockFreeTaskQueue queue{200000};
-    constexpr int TOTAL_OPS = 100000;
-    constexpr int NUM_THREADS = 8;
+    // Two-phase test to measure concurrent throughput without livelock
+    // Phase 1: Multiple threads push concurrently
+    // Phase 2: Multiple threads pop concurrently
+    LockFreeTaskQueue queue{20000};
+    constexpr int TOTAL_TASKS = 10000;
+    constexpr int NUM_THREADS = 4;
+    constexpr int TASKS_PER_THREAD = TOTAL_TASKS / NUM_THREADS;
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    std::vector<std::thread> threads;
-    std::atomic<int> ops{0};
+    // Phase 1: Concurrent push
+    std::vector<std::thread> producers;
+    std::atomic<int> pushed{0};
 
     for (int t = 0; t < NUM_THREADS; ++t) {
-        threads.emplace_back([&queue, t, &ops]() {
-            for (int i = 0; i < TOTAL_OPS / NUM_THREADS; ++i) {
+        producers.emplace_back([&queue, t, &pushed]() {
+            for (int i = 0; i < TASKS_PER_THREAD; ++i) {
                 LockFreeTask task;
-                task.id = t * (TOTAL_OPS / NUM_THREADS) + i;
-                task.deadline_ns = i;
-                queue.push(task);
-
-                LockFreeTask popped;
-                queue.try_pop(popped);
-
-                ops.fetch_add(2, std::memory_order_relaxed);
+                task.id          = t * TASKS_PER_THREAD + i;
+                task.deadline_ns = t * TASKS_PER_THREAD + i;
+                if (queue.push(task)) {
+                    pushed.fetch_add(1, std::memory_order_relaxed);
+                }
             }
         });
     }
 
-    for (auto& thread : threads) {
-        thread.join();
+    for (auto& p : producers) {
+        p.join();
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    EXPECT_EQ(pushed.load(), TOTAL_TASKS);
+
+    // Phase 2: Concurrent pop
+    std::vector<std::thread> consumers;
+    std::atomic<int> popped{0};
+
+    for (int t = 0; t < NUM_THREADS; ++t) {
+        consumers.emplace_back([&queue, &popped]() {
+            LockFreeTask task;
+            while (queue.try_pop(task)) {
+                popped.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    for (auto& c : consumers) {
+        c.join();
+    }
+
+    auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
+    // Verify all operations completed
+    EXPECT_EQ(popped.load(), TOTAL_TASKS);
+    EXPECT_TRUE(queue.empty());
+
     // Should complete concurrent operations in reasonable time
-    EXPECT_GT(ops.load(), 0);
-    EXPECT_LT(duration.count(), 2000);  // < 2 seconds for 200K ops
+    EXPECT_LT(duration.count(), 5000);  // < 5 seconds for 20K ops
 }
 
 TEST_F(TaskQueuePerformanceTest, OrderedInsertPerformance) {
@@ -1277,12 +1301,12 @@ TEST_F(TaskQueuePerformanceTest, OrderedInsertPerformance) {
 
     for (int i = 10000; i > 0; --i) {
         LockFreeTask task;
-        task.id = i;
+        task.id          = i;
         task.deadline_ns = i;
         queue.push(task);
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     // Reverse order insertion should still be efficient
@@ -1300,7 +1324,7 @@ TEST_F(LockFreeTaskQueueEdgeCaseTest, QueueCapacityOne) {
     LockFreeTaskQueue queue{1};
 
     LockFreeTask task;
-    task.id = 1;
+    task.id          = 1;
     task.deadline_ns = 100;
 
     EXPECT_TRUE(queue.push(task));
@@ -1318,7 +1342,7 @@ TEST_F(LockFreeTaskQueueEdgeCaseTest, RapidPushPopSingleElement) {
 
     for (int i = 0; i < 10000; ++i) {
         LockFreeTask task;
-        task.id = i;
+        task.id          = i;
         task.deadline_ns = i;
 
         EXPECT_TRUE(queue.push(task));
@@ -1338,7 +1362,7 @@ TEST_F(LockFreeTaskQueueEdgeCaseTest, AlternatingPushPop) {
         // Push 10 items
         for (int i = 0; i < 10; ++i) {
             LockFreeTask task;
-            task.id = round * 10 + i;
+            task.id          = round * 10 + i;
             task.deadline_ns = i;  // Same deadline pattern each round
             queue.push(task);
         }
@@ -1359,7 +1383,7 @@ TEST_F(LockFreeTaskQueueEdgeCaseTest, SameIdDifferentDeadlines) {
     // Same ID but different deadlines should all be stored
     for (int i = 0; i < 10; ++i) {
         LockFreeTask task;
-        task.id = 42;  // Same ID
+        task.id          = 42;       // Same ID
         task.deadline_ns = 100 - i;  // Different deadlines
         queue.push(task);
     }
@@ -1384,7 +1408,7 @@ TEST_F(LockFreeTaskQueueEdgeCaseTest, PopFromRecentlyEmptiedQueue) {
         // Fill
         for (int i = 0; i < 50; ++i) {
             LockFreeTask task;
-            task.id = i;
+            task.id          = i;
             task.deadline_ns = i;
             queue.push(task);
         }

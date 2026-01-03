@@ -18,6 +18,7 @@ NC='\033[0m' # No Color
 INSTALL_MODE="full"
 DRY_RUN=""
 SKIP_BREW_UPDATE=""
+TARGET_ARCH=""  # x86_64, arm64 (empty = native)
 
 # Logging functions
 log_info() {
@@ -47,11 +48,14 @@ Options:
   -h, --help              Show this help message
   -m, --minimal           Install only essential dependencies
   -f, --full              Install all optional dependencies (default)
+  --arch ARCH             Target architecture: x86_64 or arm64 (default: native)
   --skip-brew-update      Skip Homebrew update (faster)
   --dry-run               Show what would be installed without installing
 
 Examples:
-  $(basename "$0")                     # Full installation
+  $(basename "$0")                     # Full installation (native arch)
+  $(basename "$0") --arch x86_64       # Install for Intel Macs
+  $(basename "$0") --arch arm64        # Install for Apple Silicon
   $(basename "$0") --minimal           # Essential deps only
   $(basename "$0") --dry-run           # Preview changes
 
@@ -149,9 +153,9 @@ check_existing_deps() {
     pkg-config --exists openssl 2>/dev/null || MISSING_ESSENTIAL+=("openssl")
     pkg-config --exists gtest 2>/dev/null || MISSING_ESSENTIAL+=("googletest")
 
-    # Check optional libraries
-    pkg-config --exists paho-mqtt3as 2>/dev/null || MISSING_OPTIONAL+=("paho-mqtt-c")
-    pkg-config --exists paho-mqttpp3 2>/dev/null || MISSING_OPTIONAL+=("paho-mqtt-cpp")
+    # Check optional libraries (MQTT)
+    pkg-config --exists paho-mqtt3as 2>/dev/null || MISSING_OPTIONAL+=("libpaho-mqtt")
+    pkg-config --exists paho-mqttpp3 2>/dev/null || MISSING_OPTIONAL+=("paho-mqtt-cpp (build from source)")
     pkg-config --exists libzmq 2>/dev/null || MISSING_OPTIONAL+=("zeromq")
 
     if [ ${#MISSING_ESSENTIAL[@]} -eq 0 ]; then
@@ -199,6 +203,9 @@ install_cpp_libraries() {
         openssl@3
         curl
         zlib
+        zstd
+        lz4
+        xxhash
         googletest
     )
 
@@ -218,17 +225,64 @@ install_cpp_libraries() {
 install_mqtt_dependencies() {
     log_info "Installing MQTT dependencies..."
 
-    # Paho MQTT C library
-    if ! brew list paho-mqtt-c &> /dev/null; then
-        brew install paho-mqtt-c
+    # Paho MQTT C library (correct Homebrew formula name)
+    if ! brew list libpaho-mqtt &> /dev/null; then
+        log_info "Installing libpaho-mqtt (C library)..."
+        brew install libpaho-mqtt
+    else
+        log_info "libpaho-mqtt already installed"
     fi
 
-    # Paho MQTT C++ library
-    if ! brew list paho-mqtt-cpp &> /dev/null; then
-        brew install paho-mqtt-cpp
+    # Paho MQTT C++ library - must be built from source (no Homebrew formula)
+    # Check if already installed
+    if pkg-config --exists paho-mqttpp3 2>/dev/null; then
+        log_info "paho-mqtt-cpp already installed"
+    else
+        log_info "Building paho-mqtt-cpp from source (no Homebrew formula available)..."
+        build_paho_mqtt_cpp
     fi
 
     log_success "MQTT dependencies installed"
+}
+
+# Build Paho MQTT C++ from source
+build_paho_mqtt_cpp() {
+    local build_dir
+    build_dir=$(mktemp -d)
+    local paho_cpp_version="1.4.1"
+
+    log_info "Cloning paho.mqtt.cpp v${paho_cpp_version}..."
+    git clone --depth 1 --branch "v${paho_cpp_version}" \
+        https://github.com/eclipse/paho.mqtt.cpp.git "$build_dir/paho.mqtt.cpp"
+
+    cd "$build_dir/paho.mqtt.cpp"
+
+    local brew_prefix
+    if [[ $(uname -m) == "arm64" ]]; then
+        brew_prefix="/opt/homebrew"
+    else
+        brew_prefix="/usr/local"
+    fi
+
+    log_info "Configuring paho.mqtt.cpp..."
+    cmake -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$brew_prefix" \
+        -DPAHO_BUILD_SHARED=ON \
+        -DPAHO_BUILD_STATIC=OFF \
+        -DPAHO_WITH_SSL=ON \
+        -DCMAKE_PREFIX_PATH="$brew_prefix"
+
+    log_info "Building paho.mqtt.cpp..."
+    cmake --build build --parallel "$(sysctl -n hw.ncpu)"
+
+    log_info "Installing paho.mqtt.cpp (requires sudo)..."
+    sudo cmake --install build
+
+    cd /
+    rm -rf "$build_dir"
+
+    log_success "paho.mqtt.cpp built and installed successfully"
 }
 
 # Install optional dependencies
@@ -404,6 +458,14 @@ main() {
                 DRY_RUN="true"
                 shift
                 ;;
+            --arch)
+                TARGET_ARCH="$2"
+                if [[ ! "$TARGET_ARCH" =~ ^(x86_64|arm64)$ ]]; then
+                    log_error "Invalid architecture: $TARGET_ARCH (must be x86_64 or arm64)"
+                    exit 1
+                fi
+                shift 2
+                ;;
             *)
                 log_error "Unknown option: $1"
                 print_usage
@@ -412,7 +474,24 @@ main() {
         esac
     done
 
+    # Set default architecture if not specified
+    if [ -z "$TARGET_ARCH" ]; then
+        TARGET_ARCH=$(uname -m)  # x86_64 or arm64
+    fi
+
+    # Check for cross-compilation
+    local native_arch
+    native_arch=$(uname -m)
+    if [[ "$native_arch" != "$TARGET_ARCH" ]]; then
+        log_warning "Cross-compilation detected: native=$native_arch, target=$TARGET_ARCH"
+        log_warning "Homebrew packages are architecture-specific."
+        if [[ "$native_arch" == "arm64" && "$TARGET_ARCH" == "x86_64" ]]; then
+            log_info "You can use Rosetta 2 to run x86_64 binaries on Apple Silicon."
+        fi
+    fi
+
     echo "=== IPB Dependencies Installation Script for macOS ==="
+    log_info "Target architecture: $TARGET_ARCH"
     echo ""
 
     check_macos_version

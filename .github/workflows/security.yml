@@ -164,8 +164,12 @@ jobs:
           cat dependency-report.md
 
       - name: Scan with OSV-Scanner
-        uses: google/osv-scanner-action@v1
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.1
         continue-on-error: true
+        with:
+          scan-args: |-
+            --recursive
+            ./
 
       - name: Upload Dependency Report
         uses: actions/upload-artifact@v4
@@ -257,17 +261,22 @@ jobs:
 
       - name: Run Flawfinder
         run: |
-          flawfinder --html --context \
+          # Exclude test files to reduce false positives on C++ methods like read()
+          # --minlevel=2 filters out low-severity informational notices
+          flawfinder --html --context --minlevel=2 \
+            --falsepositive \
             core/ sinks/ scoops/ apps/ transport/ \
+            | grep -v '/tests/' \
             > flawfinder-report.html 2>&1 || true
 
-          # Also generate text report
+          # Text report excluding tests
           flawfinder --minlevel=2 \
             core/ sinks/ scoops/ apps/ transport/ \
+            | grep -v '/tests/' \
             > flawfinder-report.txt 2>&1 || true
 
-          # Generate SARIF for GitHub Security tab
-          flawfinder --sarif \
+          # Generate SARIF for GitHub Security tab (minlevel=3 for fewer false positives)
+          flawfinder --sarif --minlevel=3 \
             core/ sinks/ scoops/ apps/ transport/ \
             > flawfinder-results.sarif 2>&1 || true
 

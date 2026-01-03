@@ -186,6 +186,7 @@ enum class ErrorCode : uint32_t {
     PERMISSION_DENIED            = 0x0500,
     ACCESS_DENIED                = 0x0501,
     CERTIFICATE_ERROR            = 0x0502,
+    SECURITY_VIOLATION           = 0x0511,  // Path traversal, injection, etc.
     CERTIFICATE_EXPIRED          = 0x0503,
     CERTIFICATE_REVOKED          = 0x0504,
     CERTIFICATE_UNTRUSTED        = 0x0505,
@@ -461,6 +462,8 @@ constexpr std::string_view error_name(ErrorCode code) noexcept {
             return "ACCESS_DENIED";
         case ErrorCode::CERTIFICATE_ERROR:
             return "CERTIFICATE_ERROR";
+        case ErrorCode::SECURITY_VIOLATION:
+            return "SECURITY_VIOLATION";
         case ErrorCode::CERTIFICATE_EXPIRED:
             return "CERTIFICATE_EXPIRED";
         case ErrorCode::CERTIFICATE_REVOKED:
@@ -644,11 +647,11 @@ struct SourceLocation {
  */
 class Error {
 public:
-    constexpr Error() noexcept = default;
+    Error() noexcept = default;
 
-    constexpr Error(ErrorCode code) noexcept : code_(code) {}
+    Error(ErrorCode code) noexcept : code_(code) {}
 
-    constexpr Error(ErrorCode code, std::string_view message) noexcept
+    Error(ErrorCode code, std::string_view message) noexcept
         : code_(code), message_(message) {}
 
     Error(ErrorCode code, std::string_view message, SourceLocation loc) noexcept
@@ -741,10 +744,10 @@ template <>
 class Result<void> {
 public:
     // Success
-    constexpr Result() noexcept = default;
+    Result() noexcept = default;
 
     // Error from code
-    constexpr Result(ErrorCode code) noexcept : error_(code) {}
+    Result(ErrorCode code) noexcept : error_(code) {}
 
     // Error with message
     Result(ErrorCode code, std::string_view message,

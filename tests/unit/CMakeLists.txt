@@ -1,8 +1,8 @@
 # IPB Unit Tests
 cmake_minimum_required(VERSION 3.20)
 
-# Find required packages
-find_package(GTest REQUIRED)
+# GTest is already configured by the parent tests/CMakeLists.txt (via FetchContent or system install)
+# Just need to find Threads
 find_package(Threads REQUIRED)
 
 # Include directories for test files
@@ -90,6 +90,40 @@ set_tests_properties(test_debug PROPERTIES
     LABELS "unit;core;common"
     TIMEOUT 120
 )
+
+# DataSet test (covers DataSet, DataSetBuilder, filtering, sorting, grouping)
+add_executable(test_dataset test_dataset.cpp)
+target_link_libraries(test_dataset PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_dataset COMMAND test_dataset)
+set_tests_properties(test_dataset PROPERTIES
+    LABELS "unit;core;common"
+    TIMEOUT 120
+)
+
+# MemoryPool test (covers ObjectPool, PooledPtr, TieredMemoryPool, PoolAllocator)
+add_executable(test_memory_pool test_memory_pool.cpp)
+target_link_libraries(test_memory_pool PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_memory_pool COMMAND test_memory_pool)
+set_tests_properties(test_memory_pool PROPERTIES
+    LABELS "unit;core;common"
+    TIMEOUT 180
+)
+
+# NOTE: test_structured_logger disabled due to API incompatibilities
+# The structured_logger.hpp has various namespace and type issues that need fixing
+# in a separate PR
 
 # ============================================================================
 # Core/Components Tests - Coverage of scheduler, message_bus, rule_engine, etc.
@@ -192,6 +226,100 @@ set_tests_properties(test_scoop_registry PROPERTIES
 )
 
 # ============================================================================
+# Core/Common Advanced Tests (Lock-Free, Metrics, Rate Limiting, Backpressure)
+# ============================================================================
+
+# Lock-Free Queue test (covers SPSCQueue, MPSCQueue, MPMCQueue, BoundedMPMCQueue)
+add_executable(test_lockfree_queue test_lockfree_queue.cpp)
+target_link_libraries(test_lockfree_queue PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_lockfree_queue COMMAND test_lockfree_queue)
+set_tests_properties(test_lockfree_queue PROPERTIES
+    LABELS "unit;core;common;lockfree"
+    TIMEOUT 180
+)
+
+# Metrics test (covers Counter, Gauge, Histogram, Summary, Timer, MetricRegistry)
+add_executable(test_metrics test_metrics.cpp)
+target_link_libraries(test_metrics PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_metrics COMMAND test_metrics)
+set_tests_properties(test_metrics PROPERTIES
+    LABELS "unit;core;common;metrics"
+    TIMEOUT 120
+)
+
+# Rate Limiter test (covers TokenBucket, SlidingWindowLimiter, AdaptiveRateLimiter, HierarchicalRateLimiter)
+add_executable(test_rate_limiter test_rate_limiter.cpp)
+target_link_libraries(test_rate_limiter PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_rate_limiter COMMAND test_rate_limiter)
+set_tests_properties(test_rate_limiter PROPERTIES
+    LABELS "unit;core;common;ratelimit"
+    TIMEOUT 180
+)
+
+# Backpressure test (covers PressureSensor, BackpressureController, BackpressureStage, PressurePropagator)
+add_executable(test_backpressure test_backpressure.cpp)
+target_link_libraries(test_backpressure PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_backpressure COMMAND test_backpressure)
+set_tests_properties(test_backpressure PROPERTIES
+    LABELS "unit;core;common;backpressure"
+    TIMEOUT 180
+)
+
+# Result Extensions test (covers and_then, or_else, map_error, flatten, inspect, unwrap_or_throw, retry, Pipeline)
+add_executable(test_result_ext test_result_ext.cpp)
+target_link_libraries(test_result_ext PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_result_ext COMMAND test_result_ext)
+set_tests_properties(test_result_ext PROPERTIES
+    LABELS "unit;core;common;functional"
+    TIMEOUT 120
+)
+
+# Registry test (covers Registry, LoadBalanceStrategy, HealthStatus, RegistryItemInfo)
+add_executable(test_registry test_registry.cpp)
+target_link_libraries(test_registry PRIVATE
+    ipb-common
+    GTest::gtest
+    GTest::gtest_main
+    Threads::Threads
+)
+
+add_test(NAME test_registry COMMAND test_registry)
+set_tests_properties(test_registry PROPERTIES
+    LABELS "unit;core;common;registry"
+    TIMEOUT 180
+)
+
+# ============================================================================
 # Core/Common Real-Time Optimization Tests
 # ============================================================================
 
@@ -277,6 +405,52 @@ set_tests_properties(test_router PROPERTIES
 )
 
 # ============================================================================
+# Transport Tests - Coverage of MQTT and HTTP transport layers
+# ============================================================================
+
+# MQTT Transport test (covers MQTTConnection, MQTTConnectionManager, configs, utilities)
+if(TARGET ipb-mqtt-transport)
+    add_executable(test_mqtt_transport test_mqtt_transport.cpp)
+    target_include_directories(test_mqtt_transport PRIVATE
+        ${CMAKE_SOURCE_DIR}/transport/mqtt/include
+    )
+    target_link_libraries(test_mqtt_transport PRIVATE
+        ipb-mqtt-transport
+        ipb-common
+        GTest::gtest
+        GTest::gtest_main
+        Threads::Threads
+    )
+
+    add_test(NAME test_mqtt_transport COMMAND test_mqtt_transport)
+    set_tests_properties(test_mqtt_transport PROPERTIES
+        LABELS "unit;transport;mqtt"
+        TIMEOUT 180
+    )
+endif()
+
+# HTTP Transport test (covers HTTPClient, HTTPConfig, Request, Response, utilities)
+if(TARGET ipb-http-transport)
+    add_executable(test_http_transport test_http_transport.cpp)
+    target_include_directories(test_http_transport PRIVATE
+        ${CMAKE_SOURCE_DIR}/transport/http/include
+    )
+    target_link_libraries(test_http_transport PRIVATE
+        ipb-http-transport
+        ipb-common
+        GTest::gtest
+        GTest::gtest_main
+        Threads::Threads
+    )
+
+    add_test(NAME test_http_transport COMMAND test_http_transport)
+    set_tests_properties(test_http_transport PROPERTIES
+        LABELS "unit;transport;http"
+        TIMEOUT 180
+    )
+endif()
+
+# ============================================================================
 # Coverage Configuration
 # ============================================================================
 
@@ -292,6 +466,25 @@ if(ENABLE_COVERAGE)
     target_link_options(test_platform PRIVATE --coverage)
     target_compile_options(test_debug PRIVATE --coverage)
     target_link_options(test_debug PRIVATE --coverage)
+    target_compile_options(test_dataset PRIVATE --coverage)
+    target_link_options(test_dataset PRIVATE --coverage)
+    target_compile_options(test_memory_pool PRIVATE --coverage)
+    target_link_options(test_memory_pool PRIVATE --coverage)
+    # test_structured_logger removed
+
+    # Core/Common Advanced tests
+    target_compile_options(test_lockfree_queue PRIVATE --coverage)
+    target_link_options(test_lockfree_queue PRIVATE --coverage)
+    target_compile_options(test_metrics PRIVATE --coverage)
+    target_link_options(test_metrics PRIVATE --coverage)
+    target_compile_options(test_rate_limiter PRIVATE --coverage)
+    target_link_options(test_rate_limiter PRIVATE --coverage)
+    target_compile_options(test_backpressure PRIVATE --coverage)
+    target_link_options(test_backpressure PRIVATE --coverage)
+    target_compile_options(test_result_ext PRIVATE --coverage)
+    target_link_options(test_result_ext PRIVATE --coverage)
+    target_compile_options(test_registry PRIVATE --coverage)
+    target_link_options(test_registry PRIVATE --coverage)
 
     # Core/Components tests
     target_compile_options(test_scheduler PRIVATE --coverage)
@@ -320,6 +513,16 @@ if(ENABLE_COVERAGE)
     target_link_options(test_cached_pattern_matcher PRIVATE --coverage)
     target_compile_options(test_lockfree_task_queue PRIVATE --coverage)
     target_link_options(test_lockfree_task_queue PRIVATE --coverage)
+
+    # Transport tests
+    if(TARGET ipb-mqtt-transport)
+        target_compile_options(test_mqtt_transport PRIVATE --coverage)
+        target_link_options(test_mqtt_transport PRIVATE --coverage)
+    endif()
+    if(TARGET ipb-http-transport)
+        target_compile_options(test_http_transport PRIVATE --coverage)
+        target_link_options(test_http_transport PRIVATE --coverage)
+    endif()
 endif()
 
 # ============================================================================
@@ -333,6 +536,16 @@ message(STATUS "    - test_error (ErrorCode, Error, Result, SourceLocation)")
 message(STATUS "    - test_endpoint (EndPoint, ConnectionStats, rt::SPSCRingBuffer, rt::MemoryPool)")
 message(STATUS "    - test_platform (CPU detection, memory info, env vars, CPU features)")
 message(STATUS "    - test_debug (Logger, TraceId, SpanId, LogFilter, Span)")
+message(STATUS "    - test_dataset (DataSet, DataSetBuilder, filtering, sorting, grouping)")
+message(STATUS "    - test_memory_pool (ObjectPool, PooledPtr, TieredMemoryPool, PoolAllocator)")
+# test_structured_logger removed due to API issues
+message(STATUS "  Core/Common Advanced:")
+message(STATUS "    - test_lockfree_queue (SPSCQueue, MPSCQueue, MPMCQueue, BoundedMPMCQueue, LockFreeQueueStats)")
+message(STATUS "    - test_metrics (Counter, Gauge, Histogram, Summary, Timer, MetricRegistry)")
+message(STATUS "    - test_rate_limiter (TokenBucket, SlidingWindowLimiter, AdaptiveRateLimiter, HierarchicalRateLimiter)")
+message(STATUS "    - test_backpressure (PressureSensor, BackpressureController, BackpressureStage, PressurePropagator)")
+message(STATUS "    - test_result_ext (and_then, or_else, map_error, flatten, inspect, Pipeline)")
+message(STATUS "    - test_registry (Registry, LoadBalanceStrategy, HealthStatus, RegistryItemInfo)")
 message(STATUS "  Core/Components:")
 message(STATUS "    - test_scheduler (EDFScheduler, ScheduledTask, TaskQueue)")
 message(STATUS "    - test_message_bus (MessageBus, Message, Subscription, Channel)")
@@ -347,3 +560,6 @@ message(STATUS "    - test_memory_config (MemoryProfile, MemoryConfig, GlobalMem
 message(STATUS "    - test_fixed_string (FixedString, TopicString, IdentifierString)")
 message(STATUS "    - test_cached_pattern_matcher (CompiledPattern, PatternCache, PatternType)")
 message(STATUS "    - test_lockfree_task_queue (LockFreeTask, LockFreeSkipList, LockFreeTaskQueue)")
+message(STATUS "  Transport:")
+message(STATUS "    - test_mqtt_transport (MQTTConnection, MQTTConnectionManager, configs, utilities)")
+message(STATUS "    - test_http_transport (HTTPClient, HTTPConfig, Request, Response, utilities)")

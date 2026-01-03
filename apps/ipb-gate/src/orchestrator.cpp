@@ -10,9 +10,16 @@
 #include <sstream>
 
 #include <json/json.h>
-#include <sched.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#ifdef __linux__
+#include <sched.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/thread_policy.h>
+#include <pthread.h>
+#endif
 
 #include "ipb/sink/console/console_sink.hpp"
 #include "ipb/sink/syslog/syslog_sink.hpp"
@@ -562,12 +569,27 @@ common::Result<void> IPBOrchestrator::stop_sink(const std::string& sink_id) {
 }
 
 void IPBOrchestrator::setup_realtime_scheduling() {
+#ifdef __linux__
     struct sched_param param;
     param.sched_priority = config_.scheduler.realtime_priority;
 
     if (sched_setscheduler(0, SCHED_FIFO, &param) != 0) {
         std::cerr << "Warning: Failed to set real-time scheduling priority" << std::endl;
     }
+#elif defined(__APPLE__)
+    // macOS: Use thread QoS (Quality of Service) for priority hints
+    // Real-time scheduling requires special entitlements on macOS
+    pthread_t thread = pthread_self();
+    struct sched_param param;
+    param.sched_priority = config_.scheduler.realtime_priority;
+
+    // Try to set thread priority (limited effectiveness without entitlements)
+    if (pthread_setschedparam(thread, SCHED_RR, &param) != 0) {
+        std::cerr << "Warning: Failed to set real-time scheduling priority (may require elevated privileges)" << std::endl;
+    }
+#else
+    std::cerr << "Warning: Real-time scheduling not supported on this platform" << std::endl;
+#endif
 }
 
 void IPBOrchestrator::setup_cpu_affinity() {
@@ -579,6 +601,7 @@ void IPBOrchestrator::setup_cpu_affinity() {
         }
     }
 
+#ifdef __linux__
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
 
@@ -589,6 +612,29 @@ void IPBOrchestrator::setup_cpu_affinity() {
     if (sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) != 0) {
         std::cerr << "Warning: Failed to set CPU affinity" << std::endl;
     }
+#elif defined(__APPLE__)
+    // macOS doesn't support explicit CPU affinity like Linux
+    // Use thread affinity policy as a hint to the scheduler
+    if (!config_.scheduler.cpu_cores.empty()) {
+        thread_affinity_policy_data_t policy;
+        // Use first core as affinity tag (macOS uses this as a hint, not a binding)
+        policy.affinity_tag = config_.scheduler.cpu_cores[0];
+
+        thread_port_t thread_port = pthread_mach_thread_np(pthread_self());
+        kern_return_t result = thread_policy_set(
+            thread_port,
+            THREAD_AFFINITY_POLICY,
+            reinterpret_cast<thread_policy_t>(&policy),
+            THREAD_AFFINITY_POLICY_COUNT
+        );
+
+        if (result != KERN_SUCCESS) {
+            std::cerr << "Warning: Failed to set thread affinity hint" << std::endl;
+        }
+    }
+#else
+    std::cerr << "Warning: CPU affinity not supported on this platform" << std::endl;
+#endif
 }
 
 void IPBOrchestrator::setup_signal_handlers() {

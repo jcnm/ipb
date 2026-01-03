@@ -31,6 +31,8 @@ endif()
 # ==============================================================================
 if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
     message(STATUS "Config Loader: EMBEDDED mode - using ryml + cJSON")
+    # Define to indicate embedded build mode (regardless of whether ryml/cJSON are found)
+    add_compile_definitions(IPB_BUILD_EMBEDDED)
 
     # Find rapidyaml (ryml) - header-only or compiled
     find_path(RYML_INCLUDE_DIR ryml.hpp
@@ -98,13 +100,49 @@ else()
     message(STATUS "Config Loader: ${IPB_BUILD_MODE} mode - using yaml-cpp + jsoncpp")
 
     # Find dependencies for config loader
-    find_package(yaml-cpp REQUIRED)
-    find_package(PkgConfig REQUIRED)
+    # PkgConfig is optional on Windows
+    if(NOT WIN32)
+        find_package(PkgConfig REQUIRED)
+    else()
+        find_package(PkgConfig QUIET)
+    endif()
+
+    # Find yaml-cpp (check if already found by parent CMakeLists.txt)
+    # yaml-cpp can export as yaml-cpp or yaml-cpp::yaml-cpp depending on version
+    if(TARGET yaml-cpp)
+        set(YAML_CPP_TARGET yaml-cpp)
+    elseif(TARGET yaml-cpp::yaml-cpp)
+        set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+    else()
+        find_package(yaml-cpp REQUIRED)
+        if(TARGET yaml-cpp::yaml-cpp)
+            set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+        else()
+            set(YAML_CPP_TARGET yaml-cpp)
+        endif()
+    endif()
+
+    # On macOS, yaml-cpp CMake config may not have proper include directories
+    if(APPLE AND TARGET ${YAML_CPP_TARGET})
+        get_target_property(_yaml_inc ${YAML_CPP_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+        if(NOT _yaml_inc OR "${_yaml_inc}" STREQUAL "_yaml_inc-NOTFOUND")
+            find_path(YAML_CPP_COMPONENTS_INCLUDE_DIR yaml-cpp/yaml.h
+                PATHS
+                    /opt/homebrew/include
+                    /usr/local/include
+                    /usr/include
+                NO_DEFAULT_PATH
+            )
+            if(YAML_CPP_COMPONENTS_INCLUDE_DIR)
+                message(STATUS "ipb-core-components: Found yaml-cpp includes at ${YAML_CPP_COMPONENTS_INCLUDE_DIR}")
+            endif()
+        endif()
+    endif()
 
     # Find jsoncpp
     if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
         find_package(jsoncpp QUIET)
-        if(NOT jsoncpp_FOUND)
+        if(NOT jsoncpp_FOUND AND PkgConfig_FOUND)
             pkg_check_modules(JSONCPP REQUIRED jsoncpp)
         endif()
     endif()
@@ -131,15 +169,17 @@ set(SOURCES
 
     # Scoop Registry
     src/scoop_registry/scoop_registry.cpp
-
-    # Config Loader (platform-specific)
-    src/config/config_loader.cpp
 )
 
-# Add embedded config loader if enabled (requires EMBEDDED build mode)
-if(IPB_CONFIG_EMBEDDED_LOADER AND IPB_BUILD_MODE STREQUAL "EMBEDDED")
+# Config Loader: select platform-appropriate implementation
+if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
+    # EMBEDDED mode: use embedded config loader (ryml + cJSON)
     list(APPEND SOURCES src/config/config_loader_embedded.cpp)
-    message(STATUS "Embedded config loader enabled")
+    message(STATUS "Config loader: embedded implementation (ryml + cJSON)")
+else()
+    # Server/Edge mode: use full config loader (yaml-cpp + jsoncpp)
+    list(APPEND SOURCES src/config/config_loader.cpp)
+    message(STATUS "Config loader: full implementation (yaml-cpp + jsoncpp)")
 endif()
 
 add_library(ipb-core-components ${SOURCES})
@@ -162,9 +202,10 @@ endif()
 target_link_libraries(ipb-core-components
     PUBLIC
         ipb::common
-    PRIVATE
-        pthread
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-core-components PRIVATE pthread)
+endif()
 
 # Platform-specific library linking
 if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
@@ -189,13 +230,19 @@ if(IPB_BUILD_MODE STREQUAL "EMBEDDED")
     endif()
 else()
     # Server/Edge: yaml-cpp + jsoncpp
-    target_link_libraries(ipb-core-components PRIVATE yaml-cpp jsoncpp_lib)
+    target_link_libraries(ipb-core-components PRIVATE ${YAML_CPP_TARGET} jsoncpp_lib)
+    # Add explicit include directory on macOS if needed
+    if(YAML_CPP_COMPONENTS_INCLUDE_DIR)
+        target_include_directories(ipb-core-components PRIVATE ${YAML_CPP_COMPONENTS_INCLUDE_DIR})
+    endif()
 endif()
 
 # Compiler flags for real-time performance
 target_compile_options(ipb-core-components PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
-    $<$<CXX_COMPILER_ID:GNU,Clang>:-fno-rtti>  # Reduce binary size
+    # Only disable RTTI when sanitizers are not enabled
+    # Sanitizers and GTest require RTTI for proper polymorphic type handling
+    $<$<AND:$<CXX_COMPILER_ID:GNU,Clang>,$<NOT:$<BOOL:${ENABLE_SANITIZERS}>>>:-fno-rtti>
 )
 
 # Export configuration

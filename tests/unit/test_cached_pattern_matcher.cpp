@@ -268,7 +268,7 @@ protected:
 };
 
 TEST_F(PatternCacheThreadSafetyTest, ConcurrentAccess) {
-    constexpr int NUM_THREADS = 8;
+    constexpr int NUM_THREADS    = 8;
     constexpr int OPS_PER_THREAD = 1000;
 
     std::vector<std::thread> threads;
@@ -277,7 +277,8 @@ TEST_F(PatternCacheThreadSafetyTest, ConcurrentAccess) {
     for (int t = 0; t < NUM_THREADS; ++t) {
         threads.emplace_back([this, t, &successful_ops]() {
             for (int i = 0; i < OPS_PER_THREAD; ++i) {
-                std::string pattern = "pattern" + std::to_string((t * OPS_PER_THREAD + i) % 50) + "*";
+                std::string pattern =
+                    "pattern" + std::to_string((t * OPS_PER_THREAD + i) % 50) + "*";
                 const auto* compiled = cache.get(pattern);
                 if (compiled && compiled->is_valid()) {
                     ++successful_ops;

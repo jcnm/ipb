@@ -276,7 +276,7 @@ bool SyslogSink::is_healthy() const {
 
     // Check if failure rate is too high
     auto failure_rate = static_cast<double>(statistics_.messages_failed.load()) /
-                        std::max(1UL, statistics_.messages_processed.load());
+                        std::max(static_cast<uint64_t>(1), statistics_.messages_processed.load());
 
     return failure_rate < 0.1;  // Less than 10% failure rate
 }
@@ -1027,11 +1027,14 @@ void SyslogSink::print_statistics() const {
     auto stats = get_statistics();
 
     ::syslog(LOG_INFO,
-             "Syslog Sink Statistics: processed=%lu, sent=%lu, failed=%lu, filtered=%lu, "
-             "dropped=%lu, fallback_active=%s",
-             stats.messages_processed.load(), stats.messages_sent.load(),
-             stats.messages_failed.load(), stats.messages_filtered.load(),
-             stats.messages_dropped.load(), fallback_active_.load() ? "true" : "false");
+             "Syslog Sink Statistics: processed=%llu, sent=%llu, failed=%llu, filtered=%llu, "
+             "dropped=%llu, fallback_active=%s",
+             static_cast<unsigned long long>(stats.messages_processed.load()),
+             static_cast<unsigned long long>(stats.messages_sent.load()),
+             static_cast<unsigned long long>(stats.messages_failed.load()),
+             static_cast<unsigned long long>(stats.messages_filtered.load()),
+             static_cast<unsigned long long>(stats.messages_dropped.load()),
+             fallback_active_.load() ? "true" : "false");
 }
 
 // Factory implementations

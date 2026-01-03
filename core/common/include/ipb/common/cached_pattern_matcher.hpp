@@ -39,13 +39,13 @@ namespace ipb::common {
  * @brief Pattern type for optimization selection
  */
 enum class PatternType : uint8_t {
-    EXACT,           ///< Exact string match (fastest)
-    PREFIX,          ///< Prefix match (ends with *)
-    SUFFIX,          ///< Suffix match (starts with *)
-    CONTAINS,        ///< Contains substring (has * on both ends)
-    SINGLE_WILDCARD, ///< Single-level MQTT wildcard (+)
-    MULTI_WILDCARD,  ///< Multi-level MQTT wildcard (#)
-    REGEX            ///< Full regex (slowest)
+    EXACT,            ///< Exact string match (fastest)
+    PREFIX,           ///< Prefix match (ends with *)
+    SUFFIX,           ///< Suffix match (starts with *)
+    CONTAINS,         ///< Contains substring (has * on both ends)
+    SINGLE_WILDCARD,  ///< Single-level MQTT wildcard (+)
+    MULTI_WILDCARD,   ///< Multi-level MQTT wildcard (#)
+    REGEX             ///< Full regex (slowest)
 };
 
 /**
@@ -66,11 +66,11 @@ inline PatternType analyze_pattern(std::string_view pattern) noexcept {
 
     // Check for simple glob patterns
     bool starts_wild = pattern.front() == '*';
-    bool ends_wild = pattern.back() == '*';
+    bool ends_wild   = pattern.back() == '*';
 
     // Check for regex metacharacters
     constexpr std::string_view regex_chars = "^$.|?+()[]{}\\";
-    bool has_regex = false;
+    bool has_regex                         = false;
     for (char c : pattern) {
         if (c != '*' && regex_chars.find(c) != std::string_view::npos) {
             has_regex = true;
@@ -123,20 +123,17 @@ inline PatternType analyze_pattern(std::string_view pattern) noexcept {
  */
 class CompiledPattern {
 public:
-    using MatchFunction = bool(*)(std::string_view input, const void* data);
+    using MatchFunction = bool (*)(std::string_view input, const void* data);
 
     CompiledPattern() = default;
 
     // Copy constructor - must update data_ pointer
     CompiledPattern(const CompiledPattern& other)
-        : pattern_(other.pattern_),
-          type_(other.type_),
-          match_fn_(other.match_fn_),
-          data_(nullptr),
+        : pattern_(other.pattern_), type_(other.type_), match_fn_(other.match_fn_), data_(nullptr),
           valid_(other.valid_) {
         if (other.regex_) {
             regex_ = std::make_unique<std::regex>(*other.regex_);
-            data_ = regex_.get();
+            data_  = regex_.get();
         } else if (other.data_ != nullptr) {
             // data_ should point to our own pattern_ buffer
             data_ = pattern_.data();
@@ -146,13 +143,13 @@ public:
     // Copy assignment
     CompiledPattern& operator=(const CompiledPattern& other) {
         if (this != &other) {
-            pattern_ = other.pattern_;
-            type_ = other.type_;
+            pattern_  = other.pattern_;
+            type_     = other.type_;
             match_fn_ = other.match_fn_;
-            valid_ = other.valid_;
+            valid_    = other.valid_;
             if (other.regex_) {
                 regex_ = std::make_unique<std::regex>(*other.regex_);
-                data_ = regex_.get();
+                data_  = regex_.get();
             } else if (other.data_ != nullptr) {
                 data_ = pattern_.data();
             } else {
@@ -164,12 +161,8 @@ public:
 
     // Move constructor
     CompiledPattern(CompiledPattern&& other) noexcept
-        : pattern_(std::move(other.pattern_)),
-          type_(other.type_),
-          match_fn_(other.match_fn_),
-          data_(nullptr),
-          regex_(std::move(other.regex_)),
-          valid_(other.valid_) {
+        : pattern_(std::move(other.pattern_)), type_(other.type_), match_fn_(other.match_fn_),
+          data_(nullptr), regex_(std::move(other.regex_)), valid_(other.valid_) {
         if (regex_) {
             data_ = regex_.get();
         } else if (match_fn_ != nullptr && match_fn_ != &match_regex) {
@@ -181,11 +174,11 @@ public:
     // Move assignment
     CompiledPattern& operator=(CompiledPattern&& other) noexcept {
         if (this != &other) {
-            pattern_ = std::move(other.pattern_);
-            type_ = other.type_;
+            pattern_  = std::move(other.pattern_);
+            type_     = other.type_;
             match_fn_ = other.match_fn_;
-            regex_ = std::move(other.regex_);
-            valid_ = other.valid_;
+            regex_    = std::move(other.regex_);
+            valid_    = other.valid_;
             if (regex_) {
                 data_ = regex_.get();
             } else if (match_fn_ != nullptr && match_fn_ != &match_regex) {
@@ -202,12 +195,12 @@ public:
     static std::optional<CompiledPattern> compile(std::string_view pattern) noexcept {
         CompiledPattern result;
         result.pattern_ = std::string(pattern);
-        result.type_ = analyze_pattern(pattern);
+        result.type_    = analyze_pattern(pattern);
 
         switch (result.type_) {
             case PatternType::EXACT:
                 result.match_fn_ = &match_exact;
-                result.data_ = result.pattern_.data();
+                result.data_     = result.pattern_.data();
                 break;
 
             case PatternType::PREFIX:
@@ -228,23 +221,21 @@ public:
                 result.match_fn_ = &match_contains;
                 // Remove both wildcards
                 result.pattern_ = result.pattern_.substr(1, result.pattern_.size() - 2);
-                result.data_ = result.pattern_.data();
+                result.data_    = result.pattern_.data();
                 break;
 
             case PatternType::SINGLE_WILDCARD:
             case PatternType::MULTI_WILDCARD:
                 result.match_fn_ = &match_mqtt_wildcard;
-                result.data_ = result.pattern_.data();
+                result.data_     = result.pattern_.data();
                 break;
 
             case PatternType::REGEX:
                 try {
                     result.regex_ = std::make_unique<std::regex>(
-                        result.pattern_,
-                        std::regex::optimize | std::regex::ECMAScript
-                    );
+                        result.pattern_, std::regex::optimize | std::regex::ECMAScript);
                     result.match_fn_ = &match_regex;
-                    result.data_ = result.regex_.get();
+                    result.data_     = result.regex_.get();
                 } catch (...) {
                     return std::nullopt;
                 }
@@ -274,9 +265,9 @@ public:
 
 private:
     std::string pattern_;
-    PatternType type_ = PatternType::EXACT;
+    PatternType type_       = PatternType::EXACT;
     MatchFunction match_fn_ = nullptr;
-    const void* data_ = nullptr;
+    const void* data_       = nullptr;
     std::unique_ptr<std::regex> regex_;
     bool valid_ = false;
 
@@ -290,8 +281,7 @@ private:
 
     static bool match_prefix(std::string_view input, const void* data) noexcept {
         std::string_view prefix(static_cast<const char*>(data));
-        return input.size() >= prefix.size() &&
-               input.substr(0, prefix.size()) == prefix;
+        return input.size() >= prefix.size() && input.substr(0, prefix.size()) == prefix;
     }
 
     static bool match_suffix(std::string_view input, const void* data) noexcept {
@@ -366,7 +356,7 @@ private:
 class PatternCache {
 public:
     static constexpr size_t DEFAULT_CAPACITY = 128;
-    static constexpr size_t NUM_SHARDS = 16;
+    static constexpr size_t NUM_SHARDS       = 16;
 
     explicit PatternCache(size_t capacity = DEFAULT_CAPACITY) noexcept
         : capacity_per_shard_(std::max(size_t(1), capacity / NUM_SHARDS)) {
@@ -380,10 +370,13 @@ public:
      * @return Pointer to compiled pattern (nullptr if invalid)
      *
      * Thread-safe. Cache hit: ~100ns, Cache miss: ~1-10μs
+     *
+     * @warning The returned pointer is only valid until clear() is called.
+     *          For concurrent access with clear(), use matches() instead.
      */
     const CompiledPattern* get(std::string_view pattern) noexcept {
         size_t shard_idx = shard_index(pattern);
-        auto& shard = shards_[shard_idx];
+        auto& shard      = shards_[shard_idx];
 
         // Fast path: read lock check
         {
@@ -406,8 +399,7 @@ public:
         std::unique_lock lock(shard.mutex);
 
         // Double-check after acquiring write lock
-        auto [it, inserted] = shard.entries.try_emplace(
-            std::string(pattern), std::move(*compiled));
+        auto [it, inserted] = shard.entries.try_emplace(std::string(pattern), std::move(*compiled));
 
         // Evict if over capacity (simple random eviction)
         if (inserted && shard.entries.size() > capacity_per_shard_) {
@@ -425,10 +417,49 @@ public:
 
     /**
      * @brief Check if pattern matches input (with caching)
+     *
+     * Thread-safe even when clear() is called concurrently.
      */
     bool matches(std::string_view pattern, std::string_view input) noexcept {
-        const auto* compiled = get(pattern);
-        return compiled && compiled->matches(input);
+        size_t shard_idx = shard_index(pattern);
+        auto& shard      = shards_[shard_idx];
+
+        // Try fast path: read lock for cache hit
+        {
+            std::shared_lock lock(shard.mutex);
+            auto it = shard.entries.find(std::string(pattern));
+            if (it != shard.entries.end()) {
+                hits_.fetch_add(1, std::memory_order_relaxed);
+                // Match while still holding the lock
+                return it->second.matches(input);
+            }
+        }
+
+        // Slow path: compile and insert, then match
+        misses_.fetch_add(1, std::memory_order_relaxed);
+
+        auto compiled = CompiledPattern::compile(pattern);
+        if (!compiled) {
+            return false;
+        }
+
+        std::unique_lock lock(shard.mutex);
+
+        // Double-check after acquiring write lock
+        auto [it, inserted] = shard.entries.try_emplace(std::string(pattern), std::move(*compiled));
+
+        // Evict if over capacity (simple random eviction)
+        if (inserted && shard.entries.size() > capacity_per_shard_) {
+            for (auto eit = shard.entries.begin(); eit != shard.entries.end(); ++eit) {
+                if (eit != it) {
+                    shard.entries.erase(eit);
+                    break;
+                }
+            }
+        }
+
+        // Match while still holding the lock
+        return it->second.matches(input);
     }
 
     /**
@@ -459,9 +490,9 @@ public:
 
     Stats stats() const noexcept {
         Stats s;
-        s.hits = hits_.load(std::memory_order_relaxed);
+        s.hits   = hits_.load(std::memory_order_relaxed);
         s.misses = misses_.load(std::memory_order_relaxed);
-        s.size = 0;
+        s.size   = 0;
         for (const auto& shard : shards_) {
             std::shared_lock lock(shard.mutex);
             s.size += shard.entries.size();
