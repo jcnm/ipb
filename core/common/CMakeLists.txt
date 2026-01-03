@@ -57,18 +57,24 @@ if(IPB_COMPILER_GCC OR IPB_COMPILER_CLANG)
         -Wall -Wextra -Wpedantic
         -Wno-unused-parameter
         -fno-exceptions  # Real-time friendly
-        -fno-rtti       # Reduce overhead
     )
+    # Only disable RTTI when sanitizers are not enabled
+    # Sanitizers and GTest require RTTI for proper polymorphic type handling
+    if(NOT ENABLE_SANITIZERS)
+        list(APPEND IPB_COMMON_COMPILE_FLAGS -fno-rtti)
+    endif()
     
     if(IPB_COMMON_ENABLE_REALTIME)
         list(APPEND IPB_COMMON_COMPILE_FLAGS
             -fno-stack-protector
             -fomit-frame-pointer
-            -march=native
         )
+        if(NOT APPLE)
+            list(APPEND IPB_COMMON_COMPILE_FLAGS -march=native)
+        endif()
     endif()
-    
-    if(IPB_COMMON_ENABLE_NATIVE)
+
+    if(IPB_COMMON_ENABLE_NATIVE AND NOT APPLE)
         list(APPEND IPB_COMMON_COMPILE_FLAGS -march=native -mtune=native)
     endif()
     
@@ -80,8 +86,11 @@ elseif(IPB_COMPILER_MSVC)
     list(APPEND IPB_COMMON_COMPILE_FLAGS
         /W4
         /permissive-
-        /GR-  # Disable RTTI
     )
+    # Only disable RTTI when sanitizers are not enabled
+    if(NOT ENABLE_SANITIZERS)
+        list(APPEND IPB_COMMON_COMPILE_FLAGS /GR-)
+    endif()
     
     if(IPB_COMMON_ENABLE_NATIVE)
         list(APPEND IPB_COMMON_COMPILE_FLAGS /arch:AVX2)
@@ -143,6 +152,7 @@ add_library(ipb-common STATIC
     src/platform.cpp
     src/error.cpp
     src/debug.cpp
+    src/memory_pool.cpp
 )
 
 # Set target properties
@@ -208,6 +218,11 @@ endif()
 # Examples
 if(IPB_COMMON_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+# Benchmarks
+if(IPB_COMMON_ENABLE_BENCHMARKS)
+    add_subdirectory(benchmarks)
 endif()
 
 # Installation

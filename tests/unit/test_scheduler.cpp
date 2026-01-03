@@ -9,14 +9,16 @@
  * - EDFSchedulerConfig: Configuration
  */
 
-#include <gtest/gtest.h>
 #include <ipb/core/scheduler/edf_scheduler.hpp>
+
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 #include <vector>
-#include <mutex>
-#include <condition_variable>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::core;
 using namespace ipb::common;
@@ -150,7 +152,7 @@ TEST_F(EDFSchedulerStatsTest, AverageLatency) {
 
     // Set some values
     stats.tasks_completed.store(100);
-    stats.total_latency_ns.store(1000000);  // 1ms total
+    stats.total_latency_ns.store(1000000);           // 1ms total
     EXPECT_DOUBLE_EQ(stats.avg_latency_us(), 10.0);  // 10us average
 }
 
@@ -228,9 +230,7 @@ TEST_F(EDFSchedulerTest, SubmitTask) {
     scheduler.start();
 
     std::atomic<bool> executed{false};
-    auto result = scheduler.submit([&executed]() {
-        executed = true;
-    });
+    auto result = scheduler.submit([&executed]() { executed = true; });
 
     EXPECT_TRUE(result.success);
     EXPECT_GT(result.task_id, 0u);
@@ -249,9 +249,7 @@ TEST_F(EDFSchedulerTest, SubmitWithDeadline) {
     std::atomic<bool> executed{false};
     auto deadline = Timestamp::now() + std::chrono::milliseconds(100);
 
-    auto result = scheduler.submit([&executed]() {
-        executed = true;
-    }, deadline);
+    auto result = scheduler.submit([&executed]() { executed = true; }, deadline);
 
     EXPECT_TRUE(result.success);
 
@@ -268,9 +266,8 @@ TEST_F(EDFSchedulerTest, SubmitWithOffset) {
 
     std::atomic<bool> executed{false};
 
-    auto result = scheduler.submit([&executed]() {
-        executed = true;
-    }, std::chrono::milliseconds(50));
+    auto result =
+        scheduler.submit([&executed]() { executed = true; }, std::chrono::milliseconds(50));
 
     EXPECT_TRUE(result.success);
 
@@ -288,9 +285,7 @@ TEST_F(EDFSchedulerTest, SubmitNamedTask) {
     std::atomic<bool> executed{false};
     auto deadline = Timestamp::now() + std::chrono::milliseconds(100);
 
-    auto result = scheduler.submit_named("test_task", [&executed]() {
-        executed = true;
-    }, deadline);
+    auto result = scheduler.submit_named("test_task", [&executed]() { executed = true; }, deadline);
 
     EXPECT_TRUE(result.success);
 
@@ -310,13 +305,11 @@ TEST_F(EDFSchedulerTest, SubmitWithCallback) {
     auto deadline = Timestamp::now() + std::chrono::milliseconds(100);
 
     auto result = scheduler.submit_with_callback(
-        [&executed]() { executed = true; },
-        deadline,
+        [&executed]() { executed = true; }, deadline,
         [&callback_called, &callback_state](TaskState state, std::chrono::nanoseconds) {
             callback_called = true;
-            callback_state = state;
-        }
-    );
+            callback_state  = state;
+        });
 
     EXPECT_TRUE(result.success);
 
@@ -334,15 +327,14 @@ TEST_F(EDFSchedulerTest, CancelTask) {
 
     // Submit a task with long deadline
     auto deadline = Timestamp::now() + std::chrono::seconds(10);
-    auto result = scheduler.submit([]() {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }, deadline);
+    auto result =
+        scheduler.submit([]() { std::this_thread::sleep_for(std::chrono::seconds(1)); }, deadline);
 
     EXPECT_TRUE(result.success);
 
     // Cancel it
-    bool cancelled = scheduler.cancel(result.task_id);
     // Note: Cancel may fail if task already started
+    (void)scheduler.cancel(result.task_id);
 
     scheduler.stop();
 }
@@ -354,9 +346,8 @@ TEST_F(EDFSchedulerTest, PendingCount) {
     // Submit multiple tasks with long deadlines
     for (int i = 0; i < 5; ++i) {
         auto deadline = Timestamp::now() + std::chrono::seconds(10);
-        scheduler.submit([]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }, deadline);
+        scheduler.submit([]() { std::this_thread::sleep_for(std::chrono::milliseconds(100)); },
+                         deadline);
     }
 
     // Should have pending tasks
@@ -401,23 +392,21 @@ TEST_F(EDFSchedulerTest, ResetStats) {
 
 TEST_F(EDFSchedulerTest, DeadlineMissCallback) {
     EDFSchedulerConfig cfg;
-    cfg.worker_threads = 1;
+    cfg.worker_threads        = 1;
     cfg.enable_miss_callbacks = true;
 
     EDFScheduler scheduler(cfg);
 
     std::atomic<bool> miss_callback_called{false};
-    scheduler.set_deadline_miss_callback([&miss_callback_called](const ScheduledTask&) {
-        miss_callback_called = true;
-    });
+    scheduler.set_deadline_miss_callback(
+        [&miss_callback_called](const ScheduledTask&) { miss_callback_called = true; });
 
     scheduler.start();
 
     // Submit a task with very short deadline that will be missed
     auto deadline = Timestamp::now();  // Deadline is now, will be missed almost immediately
-    scheduler.submit([]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }, deadline);
+    scheduler.submit([]() { std::this_thread::sleep_for(std::chrono::milliseconds(10)); },
+                     deadline);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     scheduler.stop();
@@ -446,20 +435,26 @@ TEST_F(EDFSchedulerTest, EDFOrdering) {
 
     // Submit tasks with different deadlines (out of order)
     // Use generous deadlines to avoid timing issues on slow systems
-    scheduler.submit([&]() {
-        std::lock_guard<std::mutex> lock(order_mutex);
-        execution_order.push_back(3);
-    }, now + std::chrono::seconds(3));
+    scheduler.submit(
+        [&]() {
+            std::lock_guard<std::mutex> lock(order_mutex);
+            execution_order.push_back(3);
+        },
+        now + std::chrono::seconds(3));
 
-    scheduler.submit([&]() {
-        std::lock_guard<std::mutex> lock(order_mutex);
-        execution_order.push_back(1);
-    }, now + std::chrono::seconds(1));
+    scheduler.submit(
+        [&]() {
+            std::lock_guard<std::mutex> lock(order_mutex);
+            execution_order.push_back(1);
+        },
+        now + std::chrono::seconds(1));
 
-    scheduler.submit([&]() {
-        std::lock_guard<std::mutex> lock(order_mutex);
-        execution_order.push_back(2);
-    }, now + std::chrono::seconds(2));
+    scheduler.submit(
+        [&]() {
+            std::lock_guard<std::mutex> lock(order_mutex);
+            execution_order.push_back(2);
+        },
+        now + std::chrono::seconds(2));
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     scheduler.stop();
@@ -476,9 +471,7 @@ TEST_F(EDFSchedulerTest, EDFOrdering) {
 
 class PeriodicTaskTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        config_.worker_threads = 2;
-    }
+    void SetUp() override { config_.worker_threads = 2; }
 
     EDFSchedulerConfig config_;
 };
@@ -489,9 +482,8 @@ TEST_F(PeriodicTaskTest, SubmitPeriodic) {
 
     std::atomic<int> execution_count{0};
 
-    auto periodic_id = scheduler.submit_periodic([&execution_count]() {
-        execution_count++;
-    }, std::chrono::milliseconds(50));
+    auto periodic_id = scheduler.submit_periodic([&execution_count]() { execution_count++; },
+                                                 std::chrono::milliseconds(50));
 
     EXPECT_GT(periodic_id, 0u);
 
@@ -510,9 +502,8 @@ TEST_F(PeriodicTaskTest, CancelPeriodic) {
 
     std::atomic<int> execution_count{0};
 
-    auto periodic_id = scheduler.submit_periodic([&execution_count]() {
-        execution_count++;
-    }, std::chrono::milliseconds(50));
+    auto periodic_id = scheduler.submit_periodic([&execution_count]() { execution_count++; },
+                                                 std::chrono::milliseconds(50));
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
@@ -546,7 +537,7 @@ TEST_F(SchedulerThreadSafetyTest, ConcurrentSubmission) {
     EDFScheduler scheduler(config_);
     scheduler.start();
 
-    constexpr int NUM_THREADS = 4;
+    constexpr int NUM_THREADS      = 4;
     constexpr int TASKS_PER_THREAD = 100;
 
     std::atomic<int> completed_tasks{0};
@@ -558,9 +549,8 @@ TEST_F(SchedulerThreadSafetyTest, ConcurrentSubmission) {
     for (int t = 0; t < NUM_THREADS; ++t) {
         threads.emplace_back([&scheduler, &completed_tasks, deadline]() {
             for (int i = 0; i < TASKS_PER_THREAD; ++i) {
-                auto result = scheduler.submit([&completed_tasks]() {
-                    completed_tasks++;
-                }, deadline);
+                auto result =
+                    scheduler.submit([&completed_tasks]() { completed_tasks++; }, deadline);
                 // Most submissions should succeed
             }
         });

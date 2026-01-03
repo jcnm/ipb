@@ -9,13 +9,15 @@
  * - MessageBus: Pub/sub functionality
  */
 
-#include <gtest/gtest.h>
 #include <ipb/core/message_bus/message_bus.hpp>
+
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <thread>
 #include <vector>
-#include <mutex>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::core;
 using namespace ipb::common;
@@ -100,7 +102,7 @@ TEST_F(MessageBusStatsTest, AverageLatency) {
 
     // Set some values
     stats.messages_delivered.store(100);
-    stats.total_latency_ns.store(1000000);  // 1ms total
+    stats.total_latency_ns.store(1000000);           // 1ms total
     EXPECT_DOUBLE_EQ(stats.avg_latency_us(), 10.0);  // 10us average
 }
 
@@ -144,9 +146,9 @@ TEST_F(MessageBusConfigTest, DropPolicies) {
 class MessageBusTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.max_channels = 64;
+        config_.max_channels        = 64;
         config_.default_buffer_size = 1024;
-        config_.dispatcher_threads = 2;
+        config_.dispatcher_threads  = 2;
     }
 
     MessageBusConfig config_;
@@ -192,7 +194,7 @@ TEST_F(MessageBusTest, PublishMessage) {
 
     Message msg;
     msg.topic = "test/topic";
-    msg.type = Message::Type::CONTROL;
+    msg.type  = Message::Type::CONTROL;
 
     bool published = bus.publish("test/topic", msg);
     EXPECT_TRUE(published);
@@ -207,9 +209,8 @@ TEST_F(MessageBusTest, Subscribe) {
     std::atomic<bool> received{false};
 
     // Use non-wildcard pattern for exact topic matching
-    auto sub = bus.subscribe("sensors/temperature", [&received](const Message& msg) {
-        received = true;
-    });
+    auto sub = bus.subscribe("sensors/temperature",
+                             [&received]([[maybe_unused]] const Message& msg) { received = true; });
 
     EXPECT_TRUE(sub.is_active());
 
@@ -366,9 +367,9 @@ TEST_F(MessageBusTest, MoveConstruction) {
 class PubSubIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.max_channels = 64;
+        config_.max_channels        = 64;
         config_.default_buffer_size = 1024;
-        config_.dispatcher_threads = 2;
+        config_.dispatcher_threads  = 2;
     }
 
     MessageBusConfig config_;
@@ -407,13 +408,9 @@ TEST_F(PubSubIntegrationTest, MultipleSubscribers) {
     std::atomic<int> sub1_count{0};
     std::atomic<int> sub2_count{0};
 
-    auto sub1 = bus.subscribe("sensors/*", [&sub1_count](const Message&) {
-        sub1_count++;
-    });
+    auto sub1 = bus.subscribe("sensors/*", [&sub1_count](const Message&) { sub1_count++; });
 
-    auto sub2 = bus.subscribe("sensors/*", [&sub2_count](const Message&) {
-        sub2_count++;
-    });
+    auto sub2 = bus.subscribe("sensors/*", [&sub2_count](const Message&) { sub2_count++; });
 
     DataPoint dp("sensor/temp1");
     bus.publish("sensors/data", dp);
@@ -430,9 +427,9 @@ TEST_F(PubSubIntegrationTest, MultipleSubscribers) {
 class MessageBusThreadSafetyTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.max_channels = 256;
+        config_.max_channels        = 256;
         config_.default_buffer_size = 4096;
-        config_.dispatcher_threads = 4;
+        config_.dispatcher_threads  = 4;
     }
 
     MessageBusConfig config_;
@@ -442,7 +439,7 @@ TEST_F(MessageBusThreadSafetyTest, ConcurrentPublish) {
     MessageBus bus(config_);
     bus.start();
 
-    constexpr int NUM_THREADS = 4;
+    constexpr int NUM_THREADS         = 4;
     constexpr int MESSAGES_PER_THREAD = 100;
 
     std::vector<std::thread> threads;
@@ -473,7 +470,7 @@ TEST_F(MessageBusThreadSafetyTest, ConcurrentSubscribeUnsubscribe) {
     bus.start();
 
     constexpr int NUM_THREADS = 4;
-    constexpr int ITERATIONS = 50;
+    constexpr int ITERATIONS  = 50;
 
     std::vector<std::thread> threads;
     std::atomic<int> successful_subs{0};
@@ -483,7 +480,7 @@ TEST_F(MessageBusThreadSafetyTest, ConcurrentSubscribeUnsubscribe) {
             for (int i = 0; i < ITERATIONS; ++i) {
                 // Use non-wildcard patterns (wildcard subs return inactive by design)
                 auto sub = bus.subscribe("topic" + std::to_string(t) + "/data" + std::to_string(i),
-                    [](const Message&) {});
+                                         [](const Message&) {});
                 if (sub.is_active()) {
                     successful_subs++;
                 }
@@ -528,7 +525,7 @@ TEST_F(ChannelTest, BasicConstruction) {
 TEST_F(ChannelTest, PublishPriority) {
     // Test publish_priority method
     Message msg;
-    msg.type = Message::Type::CONTROL;
+    msg.type    = Message::Type::CONTROL;
     bool result = channel_->publish_priority(std::move(msg), Message::Priority::HIGH);
     EXPECT_TRUE(result);
 }
@@ -539,8 +536,7 @@ TEST_F(ChannelTest, SubscribeWithFilter) {
     // Subscribe with a filter that only accepts DATA_POINT messages
     auto id = channel_->subscribe(
         [&callback_count](const Message&) { callback_count++; },
-        [](const Message& msg) { return msg.type == Message::Type::DATA_POINT; }
-    );
+        [](const Message& msg) { return msg.type == Message::Type::DATA_POINT; });
 
     EXPECT_NE(id, 0u);
     EXPECT_TRUE(channel_->is_subscriber_active(id));
@@ -566,14 +562,10 @@ TEST_F(ChannelTest, SubscriberException) {
     int callback_count = 0;
 
     // First subscriber throws
-    channel_->subscribe([](const Message&) {
-        throw std::runtime_error("Subscriber error");
-    });
+    channel_->subscribe([](const Message&) { throw std::runtime_error("Subscriber error"); });
 
     // Second subscriber should still be called
-    channel_->subscribe([&callback_count](const Message&) {
-        callback_count++;
-    });
+    channel_->subscribe([&callback_count](const Message&) { callback_count++; });
 
     Message msg;
     channel_->publish(std::move(msg));
@@ -585,9 +577,7 @@ TEST_F(ChannelTest, SubscriberException) {
 TEST_F(ChannelTest, InactiveSubscriber) {
     bool callback_called = false;
 
-    auto id = channel_->subscribe([&callback_called](const Message&) {
-        callback_called = true;
-    });
+    auto id = channel_->subscribe([&callback_called](const Message&) { callback_called = true; });
 
     // Unsubscribe (makes it inactive)
     channel_->unsubscribe(id);
@@ -709,15 +699,15 @@ TEST_F(TopicMatcherTest, IsValidEmptySegment) {
 }
 
 TEST_F(TopicMatcherTest, IsValidHashPlacement) {
-    EXPECT_TRUE(TopicMatcher::is_valid("sensors/#"));  // # at end, at segment start
-    EXPECT_FALSE(TopicMatcher::is_valid("sensors#"));  // # not at segment start
+    EXPECT_TRUE(TopicMatcher::is_valid("sensors/#"));        // # at end, at segment start
+    EXPECT_FALSE(TopicMatcher::is_valid("sensors#"));        // # not at segment start
     EXPECT_FALSE(TopicMatcher::is_valid("sensors/#/more"));  // # not at end
 }
 
 TEST_F(TopicMatcherTest, IsValidStarPlacement) {
     EXPECT_TRUE(TopicMatcher::is_valid("sensors/*/value"));
     EXPECT_TRUE(TopicMatcher::is_valid("*/data"));
-    EXPECT_FALSE(TopicMatcher::is_valid("sensors*"));  // * not alone in segment
+    EXPECT_FALSE(TopicMatcher::is_valid("sensors*"));        // * not alone in segment
     EXPECT_FALSE(TopicMatcher::is_valid("sensors/*extra"));  // * not followed by /
 }
 

@@ -1,24 +1,27 @@
 #include "ipb/sink/console/console_sink.hpp"
-#include <ipb/common/error.hpp>
+
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 #include <ipb/common/platform.hpp>
 
-#include <json/json.h>
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
-#include <algorithm>
+
+#ifdef IPB_CONSOLE_HAS_JSONCPP
+#include <json/json.h>
+#endif
 
 namespace ipb::sink::console {
 
 using namespace common::debug;
 
 namespace {
-    // Use std::string_view for log category
-    constexpr std::string_view LOG_CAT = category::GENERAL;
-} // anonymous namespace
+// Use std::string_view for log category
+constexpr std::string_view LOG_CAT = category::GENERAL;
+}  // anonymous namespace
 
-ConsoleSink::ConsoleSink(const ConsoleSinkConfig& config) 
-    : config_(config) {
+ConsoleSink::ConsoleSink(const ConsoleSinkConfig& config) : config_(config) {
     compile_address_filters();
 }
 
@@ -36,25 +39,24 @@ common::Result<void> ConsoleSink::initialize(const std::string& config_path) {
             // TODO: Load configuration from YAML file
             // For now, use default configuration
         }
-        
+
         // Initialize file output if enabled
         if (config_.enable_file_output && !config_.output_file_path.empty()) {
-            file_stream_ = std::make_unique<std::ofstream>(
-                config_.output_file_path, 
-                std::ios::out | std::ios::app
-            );
-            
+            file_stream_ = std::make_unique<std::ofstream>(config_.output_file_path,
+                                                           std::ios::out | std::ios::app);
+
             if (!file_stream_->is_open()) {
-                return common::Result<void>(common::ErrorCode::WRITE_ERROR,
+                return common::Result<void>(
+                    common::ErrorCode::WRITE_ERROR,
                     "Failed to open output file: " + config_.output_file_path);
             }
         }
-        
+
         return common::Result<void>();
-        
+
     } catch (const std::exception& e) {
         return common::Result<void>(common::ErrorCode::CONFIG_INVALID,
-            "Failed to initialize console sink: " + std::string(e.what()));
+                                    "Failed to initialize console sink: " + std::string(e.what()));
     }
 }
 
@@ -63,7 +65,8 @@ common::Result<void> ConsoleSink::start() {
 
     if (IPB_UNLIKELY(running_.load())) {
         IPB_LOG_WARN(LOG_CAT, "Console sink is already running");
-        return common::Result<void>(common::ErrorCode::ALREADY_EXISTS, "Console sink is already running");
+        return common::Result<void>(common::ErrorCode::ALREADY_EXISTS,
+                                    "Console sink is already running");
     }
 
     IPB_LOG_INFO(LOG_CAT, "Starting console sink...");
@@ -93,7 +96,7 @@ common::Result<void> ConsoleSink::start() {
         running_.store(false);
         IPB_LOG_ERROR(LOG_CAT, "Failed to start console sink: " << e.what());
         return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
-            "Failed to start console sink: " + std::string(e.what()));
+                                    "Failed to start console sink: " + std::string(e.what()));
     }
 }
 
@@ -133,85 +136,87 @@ common::Result<void> ConsoleSink::stop() {
     } catch (const std::exception& e) {
         IPB_LOG_ERROR(LOG_CAT, "Failed to stop console sink: " << e.what());
         return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
-            "Failed to stop console sink: " + std::string(e.what()));
+                                    "Failed to stop console sink: " + std::string(e.what()));
     }
 }
 
 common::Result<void> ConsoleSink::shutdown() {
     shutdown_requested_.store(true);
-    
+
     auto stop_result = stop();
     if (!stop_result.is_success()) {
         return stop_result;
     }
-    
+
     try {
         // Close file stream
         if (file_stream_ && file_stream_->is_open()) {
             file_stream_->close();
         }
-        
+
         return common::Result<void>();
-        
+
     } catch (const std::exception& e) {
         return common::Result<void>(common::ErrorCode::UNKNOWN_ERROR,
-            "Failed to shutdown console sink: " + std::string(e.what()));
+                                    "Failed to shutdown console sink: " + std::string(e.what()));
     }
 }
 
 common::Result<void> ConsoleSink::send_data_point(const common::DataPoint& data_point) {
     if (!running_.load()) {
-        return common::Result<void>(common::ErrorCode::INVALID_STATE, "Console sink is not running");
+        return common::Result<void>(common::ErrorCode::INVALID_STATE,
+                                    "Console sink is not running");
     }
-    
+
     auto start_time = std::chrono::high_resolution_clock::now();
-    
+
     try {
         // Apply filtering
         if (should_filter_message(data_point)) {
             statistics_.messages_filtered.fetch_add(1);
             return common::Result<void>();
         }
-        
+
         if (config_.enable_async_output) {
             // Add to queue for async processing
             {
                 std::lock_guard<std::mutex> lock(queue_mutex_);
-                
+
                 if (message_queue_.size() >= config_.queue_size) {
                     statistics_.messages_dropped.fetch_add(1);
-                    return common::Result<void>(common::ErrorCode::QUEUE_FULL, "Message queue is full");
+                    return common::Result<void>(common::ErrorCode::QUEUE_FULL,
+                                                "Message queue is full");
                 }
-                
+
                 message_queue_.push(data_point);
             }
-            
+
             queue_condition_.notify_one();
         } else {
             // Process synchronously
             std::string formatted_message = format_message(data_point);
             write_output(formatted_message);
         }
-        
+
         statistics_.messages_processed.fetch_add(1);
-        
+
         auto end_time = std::chrono::high_resolution_clock::now();
-        auto processing_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            end_time - start_time
-        );
+        auto processing_time =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time);
         statistics_.update_processing_time(processing_time);
-        
+
         return common::Result<void>();
-        
+
     } catch (const std::exception& e) {
         return common::Result<void>(common::ErrorCode::WRITE_ERROR,
-            "Failed to send data point: " + std::string(e.what()));
+                                    "Failed to send data point: " + std::string(e.what()));
     }
 }
 
 common::Result<void> ConsoleSink::send_data_set(const common::DataSet& data_set) {
     if (!running_.load()) {
-        return common::Result<void>(common::ErrorCode::INVALID_STATE, "Console sink is not running");
+        return common::Result<void>(common::ErrorCode::INVALID_STATE,
+                                    "Console sink is not running");
     }
 
     try {
@@ -227,7 +232,7 @@ common::Result<void> ConsoleSink::send_data_set(const common::DataSet& data_set)
 
     } catch (const std::exception& e) {
         return common::Result<void>(common::ErrorCode::WRITE_ERROR,
-            "Failed to send data set: " + std::string(e.what()));
+                                    "Failed to send data set: " + std::string(e.what()));
     }
 }
 
@@ -239,65 +244,82 @@ bool ConsoleSink::is_healthy() const {
     if (!running_.load()) {
         return false;
     }
-    
+
     // Check if file output is healthy (if enabled)
     if (config_.enable_file_output && file_stream_) {
         return file_stream_->good();
     }
-    
+
     return true;
 }
 
 common::SinkMetrics ConsoleSink::get_metrics() const {
     common::SinkMetrics metrics;
-    metrics.sink_id = "console_sink";
-    metrics.messages_sent = statistics_.messages_processed.load();
-    metrics.messages_failed = statistics_.messages_dropped.load();
-    metrics.bytes_sent = statistics_.bytes_written.load();
-    metrics.is_connected = is_connected();
-    metrics.is_healthy = is_healthy();
+    metrics.sink_id             = "console_sink";
+    metrics.messages_sent       = statistics_.messages_processed.load();
+    metrics.messages_failed     = statistics_.messages_dropped.load();
+    metrics.bytes_sent          = statistics_.bytes_written.load();
+    metrics.is_connected        = is_connected();
+    metrics.is_healthy          = is_healthy();
     metrics.avg_processing_time = statistics_.get_average_processing_time();
-    
+
     return metrics;
 }
 
 std::string ConsoleSink::get_sink_info() const {
+#ifdef IPB_CONSOLE_HAS_JSONCPP
     Json::Value info;
-    info["type"] = "console";
-    info["format"] = static_cast<int>(config_.output_format);
-    info["async_enabled"] = config_.enable_async_output;
+    info["type"]                = "console";
+    info["format"]              = static_cast<int>(config_.output_format);
+    info["async_enabled"]       = config_.enable_async_output;
     info["file_output_enabled"] = config_.enable_file_output;
-    info["filtering_enabled"] = config_.enable_filtering;
-    info["statistics_enabled"] = config_.enable_statistics;
-    
+    info["filtering_enabled"]   = config_.enable_filtering;
+    info["statistics_enabled"]  = config_.enable_statistics;
+
     if (config_.enable_file_output) {
         info["output_file"] = config_.output_file_path;
     }
-    
+
     Json::StreamWriterBuilder builder;
     return Json::writeString(builder, info);
+#else
+    // Fallback: simple JSON formatting without jsoncpp
+    std::ostringstream oss;
+    oss << "{";
+    oss << "\"type\":\"console\",";
+    oss << "\"format\":" << static_cast<int>(config_.output_format) << ",";
+    oss << "\"async_enabled\":" << (config_.enable_async_output ? "true" : "false") << ",";
+    oss << "\"file_output_enabled\":" << (config_.enable_file_output ? "true" : "false") << ",";
+    oss << "\"filtering_enabled\":" << (config_.enable_filtering ? "true" : "false") << ",";
+    oss << "\"statistics_enabled\":" << (config_.enable_statistics ? "true" : "false");
+    if (config_.enable_file_output) {
+        oss << ",\"output_file\":\"" << config_.output_file_path << "\"";
+    }
+    oss << "}";
+    return oss.str();
+#endif
 }
 
 void ConsoleSink::worker_loop() {
     std::vector<common::DataPoint> batch;
     batch.reserve(config_.batch_size);
-    
+
     while (running_.load() || !message_queue_.empty()) {
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
-            
+
             // Wait for messages or timeout
             queue_condition_.wait_for(lock, config_.flush_interval, [this] {
                 return !message_queue_.empty() || !running_.load();
             });
-            
+
             // Collect batch of messages
             while (!message_queue_.empty() && batch.size() < config_.batch_size) {
                 batch.push_back(std::move(message_queue_.front()));
                 message_queue_.pop();
             }
         }
-        
+
         // Process batch
         if (!batch.empty()) {
             process_message_batch(batch);
@@ -309,7 +331,7 @@ void ConsoleSink::worker_loop() {
 void ConsoleSink::statistics_loop() {
     while (running_.load()) {
         std::this_thread::sleep_for(config_.statistics_interval);
-        
+
         if (running_.load()) {
             print_statistics();
         }
@@ -320,9 +342,9 @@ bool ConsoleSink::should_filter_message(const common::DataPoint& data_point) con
     if (!config_.enable_filtering) {
         return false;
     }
-    
+
     std::lock_guard<std::mutex> lock(filter_mutex_);
-    
+
     // Check address filters
     if (!address_regex_filters_.empty()) {
         bool address_match = false;
@@ -337,27 +359,25 @@ bool ConsoleSink::should_filter_message(const common::DataPoint& data_point) con
             return true;  // Filter out
         }
     }
-    
+
     // Check protocol ID filters
     if (!config_.protocol_id_filters.empty()) {
         auto protocol_id = data_point.get_protocol_id();
-        if (std::find(config_.protocol_id_filters.begin(), 
-                     config_.protocol_id_filters.end(), 
-                     protocol_id) == config_.protocol_id_filters.end()) {
+        if (std::find(config_.protocol_id_filters.begin(), config_.protocol_id_filters.end(),
+                      protocol_id) == config_.protocol_id_filters.end()) {
             return true;  // Filter out
         }
     }
-    
+
     // Check quality filters
     if (!config_.quality_filters.empty()) {
         auto quality = data_point.get_quality();
-        if (std::find(config_.quality_filters.begin(), 
-                     config_.quality_filters.end(), 
-                     quality) == config_.quality_filters.end()) {
+        if (std::find(config_.quality_filters.begin(), config_.quality_filters.end(), quality) ==
+            config_.quality_filters.end()) {
             return true;  // Filter out
         }
     }
-    
+
     return false;  // Don't filter
 }
 
@@ -385,144 +405,188 @@ std::string ConsoleSink::format_message(const common::DataPoint& data_point) con
 
 std::string ConsoleSink::format_plain(const common::DataPoint& data_point) const {
     std::ostringstream oss;
-    
+
     oss << config_.line_prefix;
-    
+
     if (config_.include_timestamp) {
         oss << format_timestamp(data_point.get_timestamp()) << config_.field_separator;
     }
-    
+
     if (config_.include_protocol_id) {
         oss << "P" << data_point.get_protocol_id() << config_.field_separator;
     }
-    
+
     if (config_.include_address) {
         oss << data_point.get_address() << config_.field_separator;
     }
-    
+
     if (config_.include_value && data_point.get_value().has_value()) {
         oss << format_value(data_point.get_value().value()) << config_.field_separator;
     }
-    
+
     if (config_.include_quality) {
         oss << format_quality(data_point.get_quality());
     }
-    
+
     oss << config_.line_suffix;
-    
+
     return oss.str();
 }
 
 std::string ConsoleSink::format_json(const common::DataPoint& data_point) const {
+#ifdef IPB_CONSOLE_HAS_JSONCPP
     Json::Value json;
-    
+
     if (config_.include_timestamp) {
         json["timestamp"] = format_timestamp(data_point.get_timestamp());
     }
-    
+
     if (config_.include_protocol_id) {
         json["protocol_id"] = data_point.get_protocol_id();
     }
-    
+
     if (config_.include_address) {
         json["address"] = std::string(data_point.get_address());
     }
-    
+
     if (config_.include_value && data_point.get_value().has_value()) {
         json["value"] = format_value(data_point.get_value().value());
     }
-    
+
     if (config_.include_quality) {
         json["quality"] = format_quality(data_point.get_quality());
     }
-    
+
     Json::StreamWriterBuilder builder;
     builder["indentation"] = "";
     return Json::writeString(builder, json) + config_.line_suffix;
+#else
+    // Fallback: simple JSON formatting without jsoncpp
+    std::ostringstream oss;
+    oss << "{";
+    bool first = true;
+
+    if (config_.include_timestamp) {
+        oss << "\"timestamp\":\"" << format_timestamp(data_point.get_timestamp()) << "\"";
+        first = false;
+    }
+
+    if (config_.include_protocol_id) {
+        if (!first)
+            oss << ",";
+        oss << "\"protocol_id\":" << data_point.get_protocol_id();
+        first = false;
+    }
+
+    if (config_.include_address) {
+        if (!first)
+            oss << ",";
+        oss << "\"address\":\"" << data_point.get_address() << "\"";
+        first = false;
+    }
+
+    if (config_.include_value && data_point.get_value().has_value()) {
+        if (!first)
+            oss << ",";
+        oss << "\"value\":\"" << format_value(data_point.get_value().value()) << "\"";
+        first = false;
+    }
+
+    if (config_.include_quality) {
+        if (!first)
+            oss << ",";
+        oss << "\"quality\":\"" << format_quality(data_point.get_quality()) << "\"";
+    }
+
+    oss << "}" << config_.line_suffix;
+    return oss.str();
+#endif
 }
 
 std::string ConsoleSink::format_csv(const common::DataPoint& data_point) const {
     std::ostringstream oss;
-    
+
     if (config_.include_timestamp) {
         oss << "\"" << format_timestamp(data_point.get_timestamp()) << "\",";
     }
-    
+
     if (config_.include_protocol_id) {
         oss << data_point.get_protocol_id() << ",";
     }
-    
+
     if (config_.include_address) {
         oss << "\"" << data_point.get_address() << "\",";
     }
-    
+
     if (config_.include_value && data_point.get_value().has_value()) {
         oss << "\"" << format_value(data_point.get_value().value()) << "\",";
     }
-    
+
     if (config_.include_quality) {
         oss << "\"" << format_quality(data_point.get_quality()) << "\"";
     }
-    
+
     oss << config_.line_suffix;
-    
+
     return oss.str();
 }
 
 std::string ConsoleSink::format_table(const common::DataPoint& data_point) const {
     std::ostringstream oss;
-    
+
     oss << "| ";
-    
+
     if (config_.include_timestamp) {
         oss << std::setw(23) << std::left << format_timestamp(data_point.get_timestamp()) << " | ";
     }
-    
+
     if (config_.include_protocol_id) {
         oss << std::setw(3) << std::right << data_point.get_protocol_id() << " | ";
     }
-    
+
     if (config_.include_address) {
         oss << std::setw(30) << std::left << data_point.get_address() << " | ";
     }
-    
+
     if (config_.include_value && data_point.get_value().has_value()) {
         oss << std::setw(15) << std::right << format_value(data_point.get_value().value()) << " | ";
     }
-    
+
     if (config_.include_quality) {
         oss << std::setw(10) << std::left << format_quality(data_point.get_quality()) << " |";
     }
-    
+
     oss << config_.line_suffix;
-    
+
     return oss.str();
 }
 
 std::string ConsoleSink::format_colored(const common::DataPoint& data_point) const {
     std::ostringstream oss;
-    
+
     oss << config_.line_prefix;
-    
+
     if (config_.include_timestamp) {
-        oss << apply_color(format_timestamp(data_point.get_timestamp()), config_.timestamp_color) 
+        oss << apply_color(format_timestamp(data_point.get_timestamp()), config_.timestamp_color)
             << config_.field_separator;
     }
-    
+
     if (config_.include_protocol_id) {
-        oss << apply_color("P" + std::to_string(data_point.get_protocol_id()), config_.protocol_color) 
+        oss << apply_color("P" + std::to_string(data_point.get_protocol_id()),
+                           config_.protocol_color)
             << config_.field_separator;
     }
-    
+
     if (config_.include_address) {
-        oss << apply_color(std::string(data_point.get_address()), config_.address_color) << config_.field_separator;
-    }
-    
-    if (config_.include_value && data_point.get_value().has_value()) {
-        oss << apply_color(format_value(data_point.get_value().value()), config_.value_color) 
+        oss << apply_color(std::string(data_point.get_address()), config_.address_color)
             << config_.field_separator;
     }
-    
+
+    if (config_.include_value && data_point.get_value().has_value()) {
+        oss << apply_color(format_value(data_point.get_value().value()), config_.value_color)
+            << config_.field_separator;
+    }
+
     if (config_.include_quality) {
         ConsoleColor quality_color;
         switch (data_point.get_quality()) {
@@ -541,19 +605,26 @@ std::string ConsoleSink::format_colored(const common::DataPoint& data_point) con
         }
         oss << apply_color(format_quality(data_point.get_quality()), quality_color);
     }
-    
+
     oss << apply_color("", ConsoleColor::RESET) << config_.line_suffix;
-    
+
     return oss.str();
 }
 
 std::string ConsoleSink::format_timestamp(const common::Timestamp& timestamp) const {
     // Convert nanoseconds to seconds for time_t
     auto time_t_val = static_cast<std::time_t>(timestamp.seconds());
-    auto ms = static_cast<int>(timestamp.milliseconds() % 1000);
+    auto ms         = static_cast<int>(timestamp.milliseconds() % 1000);
+
+    std::tm tm_buf{};
+#ifdef _WIN32
+    localtime_s(&tm_buf, &time_t_val);
+#else
+    localtime_r(&time_t_val, &tm_buf);
+#endif
 
     std::ostringstream oss;
-    oss << std::put_time(std::localtime(&time_t_val), "%Y-%m-%d %H:%M:%S");
+    oss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
     oss << "." << std::setfill('0') << std::setw(3) << ms;
 
     return oss.str();
@@ -591,7 +662,8 @@ std::string ConsoleSink::format_value(const common::Value& value) const {
             std::ostringstream oss;
             oss << "[";
             for (size_t i = 0; i < data.size(); ++i) {
-                if (i > 0) oss << ",";
+                if (i > 0)
+                    oss << ",";
                 oss << static_cast<int>(data[i]);
             }
             oss << "]";
@@ -605,19 +677,32 @@ std::string ConsoleSink::format_value(const common::Value& value) const {
 
 std::string ConsoleSink::format_quality(common::Quality quality) const {
     switch (quality) {
-        case common::Quality::GOOD: return "GOOD";
-        case common::Quality::UNCERTAIN: return "UNCERTAIN";
-        case common::Quality::BAD: return "BAD";
-        case common::Quality::STALE: return "STALE";
-        case common::Quality::COMM_FAILURE: return "COMM_FAILURE";
-        case common::Quality::CONFIG_ERROR: return "CONFIG_ERROR";
-        case common::Quality::NOT_CONNECTED: return "NOT_CONNECTED";
-        case common::Quality::DEVICE_FAILURE: return "DEVICE_FAILURE";
-        case common::Quality::SENSOR_FAILURE: return "SENSOR_FAILURE";
-        case common::Quality::LAST_KNOWN: return "LAST_KNOWN";
-        case common::Quality::INITIAL: return "INITIAL";
-        case common::Quality::FORCED: return "FORCED";
-        default: return "INVALID";
+        case common::Quality::GOOD:
+            return "GOOD";
+        case common::Quality::UNCERTAIN:
+            return "UNCERTAIN";
+        case common::Quality::BAD:
+            return "BAD";
+        case common::Quality::STALE:
+            return "STALE";
+        case common::Quality::COMM_FAILURE:
+            return "COMM_FAILURE";
+        case common::Quality::CONFIG_ERROR:
+            return "CONFIG_ERROR";
+        case common::Quality::NOT_CONNECTED:
+            return "NOT_CONNECTED";
+        case common::Quality::DEVICE_FAILURE:
+            return "DEVICE_FAILURE";
+        case common::Quality::SENSOR_FAILURE:
+            return "SENSOR_FAILURE";
+        case common::Quality::LAST_KNOWN:
+            return "LAST_KNOWN";
+        case common::Quality::INITIAL:
+            return "INITIAL";
+        case common::Quality::FORCED:
+            return "FORCED";
+        default:
+            return "INVALID";
     }
 }
 
@@ -625,32 +710,32 @@ std::string ConsoleSink::apply_color(const std::string& text, ConsoleColor color
     if (!config_.enable_colors) {
         return text;
     }
-    
+
     return "\033[" + std::to_string(static_cast<int>(color)) + "m" + text + "\033[0m";
 }
 
 void ConsoleSink::write_output(const std::string& message) {
     std::lock_guard<std::mutex> lock(output_mutex_);
-    
+
     // Write to console
     if (config_.enable_console_output && config_.output_stream) {
         *config_.output_stream << message;
         config_.output_stream->flush();
     }
-    
+
     // Write to file
     if (config_.enable_file_output && file_stream_ && file_stream_->is_open()) {
         *file_stream_ << message;
         file_stream_->flush();
     }
-    
+
     statistics_.bytes_written.fetch_add(message.size());
     statistics_.flush_operations.fetch_add(1);
 }
 
 void ConsoleSink::process_message_batch(const std::vector<common::DataPoint>& messages) {
     std::ostringstream batch_output;
-    
+
     for (const auto& message : messages) {
         if (!should_filter_message(message)) {
             batch_output << format_message(message);
@@ -658,7 +743,7 @@ void ConsoleSink::process_message_batch(const std::vector<common::DataPoint>& me
             statistics_.messages_filtered.fetch_add(1);
         }
     }
-    
+
     if (!batch_output.str().empty()) {
         write_output(batch_output.str());
     }
@@ -666,9 +751,9 @@ void ConsoleSink::process_message_batch(const std::vector<common::DataPoint>& me
 
 void ConsoleSink::compile_address_filters() {
     std::lock_guard<std::mutex> lock(filter_mutex_);
-    
+
     address_regex_filters_.clear();
-    
+
     for (const auto& pattern : config_.address_filters) {
         try {
             address_regex_filters_.emplace_back(pattern);
@@ -692,7 +777,8 @@ void ConsoleSink::print_statistics() {
     oss << "Messages filtered: " << stats.messages_filtered.load() << "\n";
     oss << "Messages dropped: " << stats.messages_dropped.load() << "\n";
     oss << "Bytes written: " << stats.bytes_written.load() << "\n";
-    oss << "Messages/sec: " << std::fixed << std::setprecision(2) << stats.get_messages_per_second() << "\n";
+    oss << "Messages/sec: " << std::fixed << std::setprecision(2) << stats.get_messages_per_second()
+        << "\n";
     oss << "Avg processing time: " << stats.get_average_processing_time().count() << " ns\n";
     {
         std::lock_guard<std::mutex> lock(stats.stats_mutex);
@@ -702,6 +788,20 @@ void ConsoleSink::print_statistics() {
     oss << "===============================\n";
 
     write_output(oss.str());
+}
+
+void ConsoleSink::flush() {
+    std::lock_guard<std::mutex> lock(output_mutex_);
+
+    if (config_.enable_console_output && config_.output_stream) {
+        config_.output_stream->flush();
+    }
+
+    if (config_.enable_file_output && file_stream_ && file_stream_->is_open()) {
+        file_stream_->flush();
+    }
+
+    statistics_.flush_operations.fetch_add(1);
 }
 
 // ConsoleSinkFactory implementation
@@ -734,5 +834,4 @@ std::unique_ptr<ConsoleSink> ConsoleSinkFactory::create_verbose() {
     return std::make_unique<ConsoleSink>(ConsoleSinkConfig::create_verbose());
 }
 
-} // namespace ipb::sink::console
-
+}  // namespace ipb::sink::console

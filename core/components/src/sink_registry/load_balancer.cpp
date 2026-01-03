@@ -1,7 +1,8 @@
 #include "ipb/core/sink_registry/load_balancer.hpp"
+
 #include <algorithm>
-#include <numeric>
 #include <chrono>
+#include <numeric>
 
 namespace ipb::core {
 
@@ -10,7 +11,7 @@ namespace ipb::core {
 // ============================================================================
 
 std::vector<std::string> RoundRobinBalancer::select(
-        const std::vector<const SinkInfo*>& candidates) {
+    const std::vector<const SinkInfo*>& candidates) {
     if (candidates.empty()) {
         return {};
     }
@@ -36,7 +37,7 @@ std::vector<std::string> RoundRobinBalancer::select(
 // ============================================================================
 
 std::vector<std::string> WeightedRoundRobinBalancer::select(
-        const std::vector<const SinkInfo*>& candidates) {
+    const std::vector<const SinkInfo*>& candidates) {
     if (candidates.empty()) {
         return {};
     }
@@ -57,8 +58,8 @@ std::vector<std::string> WeightedRoundRobinBalancer::select(
     }
 
     // Weighted selection
-    uint64_t counter = counter_.fetch_add(1, std::memory_order_relaxed);
-    uint64_t target = counter % total_weight;
+    uint64_t counter    = counter_.fetch_add(1, std::memory_order_relaxed);
+    uint64_t target     = counter % total_weight;
     uint64_t cumulative = 0;
 
     for (const auto* sink : available) {
@@ -77,13 +78,13 @@ std::vector<std::string> WeightedRoundRobinBalancer::select(
 // ============================================================================
 
 std::vector<std::string> LeastConnectionsBalancer::select(
-        const std::vector<const SinkInfo*>& candidates) {
+    const std::vector<const SinkInfo*>& candidates) {
     if (candidates.empty()) {
         return {};
     }
 
     const SinkInfo* best = nullptr;
-    int64_t min_pending = INT64_MAX;
+    int64_t min_pending  = INT64_MAX;
 
     for (const auto* sink : candidates) {
         if (!sink->enabled || sink->health == SinkHealth::UNHEALTHY) {
@@ -93,7 +94,7 @@ std::vector<std::string> LeastConnectionsBalancer::select(
         int64_t pending = sink->pending_count.load(std::memory_order_relaxed);
         if (pending < min_pending) {
             min_pending = pending;
-            best = sink;
+            best        = sink;
         }
     }
 
@@ -105,13 +106,13 @@ std::vector<std::string> LeastConnectionsBalancer::select(
 // ============================================================================
 
 std::vector<std::string> LeastLatencyBalancer::select(
-        const std::vector<const SinkInfo*>& candidates) {
+    const std::vector<const SinkInfo*>& candidates) {
     if (candidates.empty()) {
         return {};
     }
 
     const SinkInfo* best = nullptr;
-    double min_latency = std::numeric_limits<double>::max();
+    double min_latency   = std::numeric_limits<double>::max();
 
     for (const auto* sink : candidates) {
         if (!sink->enabled || sink->health == SinkHealth::UNHEALTHY) {
@@ -122,7 +123,7 @@ std::vector<std::string> LeastLatencyBalancer::select(
         // Consider sinks with no data (latency = 0) as good candidates
         if (latency < min_latency || (latency == 0 && best == nullptr)) {
             min_latency = latency;
-            best = sink;
+            best        = sink;
         }
     }
 
@@ -133,8 +134,7 @@ std::vector<std::string> LeastLatencyBalancer::select(
 // HashBasedBalancer
 // ============================================================================
 
-std::vector<std::string> HashBasedBalancer::select(
-        const std::vector<const SinkInfo*>& candidates) {
+std::vector<std::string> HashBasedBalancer::select(const std::vector<const SinkInfo*>& candidates) {
     // Without context, fall back to round-robin style
     if (candidates.empty()) {
         return {};
@@ -152,16 +152,14 @@ std::vector<std::string> HashBasedBalancer::select(
     }
 
     // Use current time as hash input for deterministic but varying selection
-    size_t hash = static_cast<size_t>(
-        std::chrono::steady_clock::now().time_since_epoch().count());
+    size_t hash  = static_cast<size_t>(std::chrono::steady_clock::now().time_since_epoch().count());
     size_t index = hash % available.size();
 
     return {available[index]->id};
 }
 
-std::vector<std::string> HashBasedBalancer::select(
-        const std::vector<const SinkInfo*>& candidates,
-        const common::DataPoint& context) {
+std::vector<std::string> HashBasedBalancer::select(const std::vector<const SinkInfo*>& candidates,
+                                                   const common::DataPoint& context) {
     if (candidates.empty()) {
         return {};
     }
@@ -178,7 +176,7 @@ std::vector<std::string> HashBasedBalancer::select(
     }
 
     // Hash based on address for consistent routing
-    size_t hash = compute_hash(context.address());
+    size_t hash  = compute_hash(context.address());
     size_t index = hash % available.size();
 
     return {available[index]->id};
@@ -198,11 +196,9 @@ size_t HashBasedBalancer::compute_hash(std::string_view address) const noexcept 
 // RandomBalancer
 // ============================================================================
 
-RandomBalancer::RandomBalancer()
-    : rng_(std::random_device{}()) {}
+RandomBalancer::RandomBalancer() : rng_(std::random_device{}()) {}
 
-std::vector<std::string> RandomBalancer::select(
-        const std::vector<const SinkInfo*>& candidates) {
+std::vector<std::string> RandomBalancer::select(const std::vector<const SinkInfo*>& candidates) {
     if (candidates.empty()) {
         return {};
     }
@@ -229,8 +225,7 @@ std::vector<std::string> RandomBalancer::select(
 // FailoverBalancer
 // ============================================================================
 
-std::vector<std::string> FailoverBalancer::select(
-        const std::vector<const SinkInfo*>& candidates) {
+std::vector<std::string> FailoverBalancer::select(const std::vector<const SinkInfo*>& candidates) {
     if (candidates.empty()) {
         return {};
     }
@@ -238,9 +233,7 @@ std::vector<std::string> FailoverBalancer::select(
     // Sort by priority (lower = higher priority)
     std::vector<const SinkInfo*> sorted = candidates;
     std::sort(sorted.begin(), sorted.end(),
-        [](const SinkInfo* a, const SinkInfo* b) {
-            return a->priority < b->priority;
-        });
+              [](const SinkInfo* a, const SinkInfo* b) { return a->priority < b->priority; });
 
     // Return first healthy sink
     for (const auto* sink : sorted) {
@@ -263,8 +256,7 @@ std::vector<std::string> FailoverBalancer::select(
 // BroadcastBalancer
 // ============================================================================
 
-std::vector<std::string> BroadcastBalancer::select(
-        const std::vector<const SinkInfo*>& candidates) {
+std::vector<std::string> BroadcastBalancer::select(const std::vector<const SinkInfo*>& candidates) {
     std::vector<std::string> result;
 
     for (const auto* sink : candidates) {
@@ -303,4 +295,4 @@ std::unique_ptr<ILoadBalancer> LoadBalancerFactory::create(LoadBalanceStrategy s
     }
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

@@ -1,0 +1,106 @@
+{
+  "metadata": {
+    "version": "dev",
+    "timestamp": "20251213_062238",
+    "platform": "Linux",
+    "compiler": "GCC 13.3"
+  },
+  "results": [
+    {
+      "name": "alloc_dealloc_cycle",
+      "category": "core",
+      "component": "memory_pool",
+      "iterations": 99981,
+      "duration_ms": 10.00,
+      "timing_ns": {
+        "mean": 72.20,
+        "median": 72.00,
+        "stddev": 4.48,
+        "min": 69.00,
+        "max": 292.00
+      },
+      "percentiles_ns": {
+        "p50": 72.00,
+        "p75": 72.00,
+        "p90": 74.00,
+        "p95": 74.00,
+        "p99": 92.00,
+        "p999": 109.02
+      },
+      "throughput": 13850820.75,
+      "slo_passed": true
+    },
+    {
+      "name": "allocate",
+      "category": "core",
+      "component": "memory_pool",
+      "iterations": 99903,
+      "duration_ms": 11.00,
+      "timing_ns": {
+        "mean": 52.49,
+        "median": 51.00,
+        "stddev": 8.44,
+        "min": 48.00,
+        "max": 465.00
+      },
+      "percentiles_ns": {
+        "p50": 51.00,
+        "p75": 52.00,
+        "p90": 55.00,
+        "p95": 58.00,
+        "p99": 66.00,
+        "p999": 159.10
+      },
+      "throughput": 19049716.55,
+      "slo_passed": true
+    },
+    {
+      "name": "deallocate",
+      "category": "core",
+      "component": "memory_pool",
+      "iterations": 99990,
+      "duration_ms": 10.00,
+      "timing_ns": {
+        "mean": 49.31,
+        "median": 49.00,
+        "stddev": 1.31,
+        "min": 47.00,
+        "max": 198.00
+      },
+      "percentiles_ns": {
+        "p50": 49.00,
+        "p75": 50.00,
+        "p90": 50.00,
+        "p95": 51.00,
+        "p99": 51.00,
+        "p999": 56.00
+      },
+      "throughput": 20281856.75,
+      "slo_passed": true
+    },
+    {
+      "name": "heap_new_delete",
+      "category": "core",
+      "component": "memory_pool",
+      "iterations": 99987,
+      "duration_ms": 6.00,
+      "timing_ns": {
+        "mean": 36.77,
+        "median": 34.00,
+        "stddev": 7.41,
+        "min": 30.00,
+        "max": 206.00
+      },
+      "percentiles_ns": {
+        "p50": 34.00,
+        "p75": 35.00,
+        "p90": 46.00,
+        "p95": 53.00,
+        "p99": 65.00,
+        "p999": 77.00
+      },
+      "throughput": 27194966.75,
+      "slo_passed": true
+    }
+  ]
+}

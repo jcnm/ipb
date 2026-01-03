@@ -14,22 +14,28 @@
  * - Zero-overhead when disabled
  */
 
-#include "platform.hpp"
-#include "error.hpp"
-
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <random>
+#include <sstream>
 #include <string>
 #include <string_view>
-#include <sstream>
 #include <thread>
-#include <vector>
 #include <unordered_map>
-#include <random>
+#include <vector>
+
+#include "error.hpp"
+#include "platform.hpp"
+
+// Windows defines ERROR as a macro (value 0) in wingdi.h
+// We need to undefine it to use ERROR as an enum value
+#ifdef ERROR
+#undef ERROR
+#endif
 
 namespace ipb::common::debug {
 
@@ -41,13 +47,13 @@ namespace ipb::common::debug {
  * @brief Log severity levels
  */
 enum class LogLevel : uint8_t {
-    TRACE = 0,    // Finest granularity, very verbose
-    DEBUG = 1,    // Debugging information
-    INFO = 2,     // Informational messages
-    WARN = 3,     // Warning conditions
-    ERROR = 4,    // Error conditions
-    FATAL = 5,    // Fatal errors, system about to crash
-    OFF = 6       // Logging disabled
+    TRACE = 0,  // Finest granularity, very verbose
+    DEBUG = 1,  // Debugging information
+    INFO  = 2,  // Informational messages
+    WARN  = 3,  // Warning conditions
+    ERROR = 4,  // Error conditions
+    FATAL = 5,  // Fatal errors, system about to crash
+    OFF   = 6   // Logging disabled
 };
 
 /**
@@ -55,14 +61,22 @@ enum class LogLevel : uint8_t {
  */
 constexpr std::string_view level_name(LogLevel level) noexcept {
     switch (level) {
-        case LogLevel::TRACE: return "TRACE";
-        case LogLevel::DEBUG: return "DEBUG";
-        case LogLevel::INFO:  return "INFO";
-        case LogLevel::WARN:  return "WARN";
-        case LogLevel::ERROR: return "ERROR";
-        case LogLevel::FATAL: return "FATAL";
-        case LogLevel::OFF:   return "OFF";
-        default:              return "UNKNOWN";
+        case LogLevel::TRACE:
+            return "TRACE";
+        case LogLevel::DEBUG:
+            return "DEBUG";
+        case LogLevel::INFO:
+            return "INFO";
+        case LogLevel::WARN:
+            return "WARN";
+        case LogLevel::ERROR:
+            return "ERROR";
+        case LogLevel::FATAL:
+            return "FATAL";
+        case LogLevel::OFF:
+            return "OFF";
+        default:
+            return "UNKNOWN";
     }
 }
 
@@ -71,13 +85,20 @@ constexpr std::string_view level_name(LogLevel level) noexcept {
  */
 constexpr char level_char(LogLevel level) noexcept {
     switch (level) {
-        case LogLevel::TRACE: return 'T';
-        case LogLevel::DEBUG: return 'D';
-        case LogLevel::INFO:  return 'I';
-        case LogLevel::WARN:  return 'W';
-        case LogLevel::ERROR: return 'E';
-        case LogLevel::FATAL: return 'F';
-        default:              return '?';
+        case LogLevel::TRACE:
+            return 'T';
+        case LogLevel::DEBUG:
+            return 'D';
+        case LogLevel::INFO:
+            return 'I';
+        case LogLevel::WARN:
+            return 'W';
+        case LogLevel::ERROR:
+            return 'E';
+        case LogLevel::FATAL:
+            return 'F';
+        default:
+            return '?';
     }
 }
 
@@ -94,17 +115,17 @@ IPB_API LogLevel parse_log_level(std::string_view name) noexcept;
  * @brief Predefined log categories for filtering
  */
 namespace category {
-    constexpr std::string_view GENERAL   = "general";
-    constexpr std::string_view ROUTER    = "router";
-    constexpr std::string_view SCHEDULER = "scheduler";
-    constexpr std::string_view MESSAGING = "messaging";
-    constexpr std::string_view PROTOCOL  = "protocol";
-    constexpr std::string_view TRANSPORT = "transport";
-    constexpr std::string_view CONFIG    = "config";
-    constexpr std::string_view SECURITY  = "security";
-    constexpr std::string_view METRICS   = "metrics";
-    constexpr std::string_view LIFECYCLE = "lifecycle";
-} // namespace category
+constexpr std::string_view GENERAL   = "general";
+constexpr std::string_view ROUTER    = "router";
+constexpr std::string_view SCHEDULER = "scheduler";
+constexpr std::string_view MESSAGING = "messaging";
+constexpr std::string_view PROTOCOL  = "protocol";
+constexpr std::string_view TRANSPORT = "transport";
+constexpr std::string_view CONFIG    = "config";
+constexpr std::string_view SECURITY  = "security";
+constexpr std::string_view METRICS   = "metrics";
+constexpr std::string_view LIFECYCLE = "lifecycle";
+}  // namespace category
 
 // ============================================================================
 // TRACE/CORRELATION IDS
@@ -148,6 +169,10 @@ public:
     std::string to_string() const;
     constexpr uint64_t value() const noexcept { return id_; }
     constexpr bool is_valid() const noexcept { return id_ != 0; }
+
+    // Comparison operators
+    constexpr bool operator==(const SpanId& other) const noexcept { return id_ == other.id_; }
+    constexpr bool operator!=(const SpanId& other) const noexcept { return id_ != other.id_; }
 
 private:
     uint64_t id_;
@@ -220,12 +245,12 @@ public:
 class ConsoleSink : public ILogSink {
 public:
     struct Config {
-        bool use_colors = true;
-        bool use_stderr = false;  // Use stderr for errors
+        bool use_colors        = true;
+        bool use_stderr        = false;  // Use stderr for errors
         bool include_timestamp = true;
         bool include_thread_id = true;
-        bool include_location = true;
-        bool include_trace_id = false;
+        bool include_location  = true;
+        bool include_trace_id  = false;
     };
 
     ConsoleSink();  // Uses default config
@@ -249,8 +274,8 @@ public:
     struct Config {
         std::string file_path;
         size_t max_file_size = 10 * 1024 * 1024;  // 10MB
-        uint32_t max_files = 5;                    // Keep last 5 files
-        bool async_write = false;
+        uint32_t max_files   = 5;                 // Keep last 5 files
+        bool async_write     = false;
     };
 
     explicit FileSink(Config config);
@@ -275,7 +300,8 @@ public:
     explicit CallbackSink(Callback cb) : callback_(std::move(cb)) {}
 
     void write(const LogRecord& record) override {
-        if (callback_) callback_(record);
+        if (callback_)
+            callback_(record);
     }
 
     void flush() override {}
@@ -367,20 +393,14 @@ public:
     /**
      * @brief Log a message
      */
-    void log(LogLevel level,
-             std::string_view category,
-             std::string message,
+    void log(LogLevel level, std::string_view category, std::string message,
              SourceLocation loc = IPB_CURRENT_LOCATION);
 
     /**
      * @brief Log a message with trace context
      */
-    void log(LogLevel level,
-             std::string_view category,
-             std::string message,
-             TraceId trace_id,
-             SpanId span_id,
-             SourceLocation loc = IPB_CURRENT_LOCATION);
+    void log(LogLevel level, std::string_view category, std::string message, TraceId trace_id,
+             SpanId span_id, SourceLocation loc = IPB_CURRENT_LOCATION);
 
     /**
      * @brief Flush all sinks
@@ -417,7 +437,7 @@ public:
     TraceScope(TraceId trace_id, SpanId span_id);
     ~TraceScope();
 
-    TraceScope(const TraceScope&) = delete;
+    TraceScope(const TraceScope&)            = delete;
     TraceScope& operator=(const TraceScope&) = delete;
 
     TraceId trace_id() const noexcept { return trace_id_; }
@@ -452,20 +472,17 @@ public:
     /**
      * @brief Create a span with automatic timing
      */
-    Span(std::string_view name,
-         std::string_view category = category::GENERAL,
+    Span(std::string_view name, std::string_view category = category::GENERAL,
          SourceLocation loc = IPB_CURRENT_LOCATION);
 
     /**
      * @brief Create a child span
      */
-    Span(std::string_view name,
-         const Span& parent,
-         SourceLocation loc = IPB_CURRENT_LOCATION);
+    Span(std::string_view name, const Span& parent, SourceLocation loc = IPB_CURRENT_LOCATION);
 
     ~Span();
 
-    Span(const Span&) = delete;
+    Span(const Span&)            = delete;
     Span& operator=(const Span&) = delete;
 
     /**
@@ -500,7 +517,7 @@ private:
     std::chrono::steady_clock::time_point start_time_;
     std::vector<std::pair<std::string, std::string>> context_;
 
-    bool has_error_ = false;
+    bool has_error_       = false;
     ErrorCode error_code_ = ErrorCode::SUCCESS;
     std::string error_message_;
 };
@@ -517,17 +534,15 @@ private:
     ::ipb::common::debug::Logger::instance().is_enabled(::ipb::common::debug::LogLevel::level, cat)
 
 // Core logging macro
-#define IPB_LOG_IMPL(level, category, ...) \
-    do { \
-        auto& _ipb_logger = ::ipb::common::debug::Logger::instance(); \
-        if (_ipb_logger.is_enabled(::ipb::common::debug::LogLevel::level, category)) { \
-            std::ostringstream _ipb_oss; \
-            _ipb_oss << __VA_ARGS__; \
-            _ipb_logger.log(::ipb::common::debug::LogLevel::level, \
-                           category, \
-                           _ipb_oss.str(), \
-                           IPB_CURRENT_LOCATION); \
-        } \
+#define IPB_LOG_IMPL(level, category, ...)                                                   \
+    do {                                                                                     \
+        auto& _ipb_logger = ::ipb::common::debug::Logger::instance();                        \
+        if (_ipb_logger.is_enabled(::ipb::common::debug::LogLevel::level, category)) {       \
+            std::ostringstream _ipb_oss;                                                     \
+            _ipb_oss << __VA_ARGS__;                                                         \
+            _ipb_logger.log(::ipb::common::debug::LogLevel::level, category, _ipb_oss.str(), \
+                            IPB_CURRENT_LOCATION);                                           \
+        }                                                                                    \
     } while (0)
 
 // Category-specific macros
@@ -547,9 +562,9 @@ private:
 #define IPB_FATAL(...) IPB_LOG_FATAL(::ipb::common::debug::category::GENERAL, __VA_ARGS__)
 
 // Span creation macro
-#define IPB_SPAN(name) \
-    ::ipb::common::debug::Span _ipb_span_##__LINE__(name, \
-        ::ipb::common::debug::category::GENERAL, IPB_CURRENT_LOCATION)
+#define IPB_SPAN(name)                                                                             \
+    ::ipb::common::debug::Span _ipb_span_##__LINE__(name, ::ipb::common::debug::category::GENERAL, \
+                                                    IPB_CURRENT_LOCATION)
 
 #define IPB_SPAN_CAT(name, cat) \
     ::ipb::common::debug::Span _ipb_span_##__LINE__(name, cat, IPB_CURRENT_LOCATION)
@@ -561,9 +576,7 @@ private:
 /**
  * @brief Assertion handler callback
  */
-using AssertHandler = void (*)(const char* expr,
-                               const char* msg,
-                               const SourceLocation& loc);
+using AssertHandler = void (*)(const char* expr, const char* msg, const SourceLocation& loc);
 
 /**
  * @brief Set custom assertion handler
@@ -578,59 +591,56 @@ IPB_API AssertHandler get_assert_handler() noexcept;
 /**
  * @brief Default assertion handler (logs and aborts in debug, logs only in release)
  */
-IPB_API void default_assert_handler(const char* expr,
-                                    const char* msg,
-                                    const SourceLocation& loc);
+IPB_API void default_assert_handler(const char* expr, const char* msg, const SourceLocation& loc);
 
 // Assertion implementation
-IPB_API void assert_fail(const char* expr,
-                         const char* msg,
-                         const SourceLocation& loc);
+IPB_API void assert_fail(const char* expr, const char* msg, const SourceLocation& loc);
 
 // Main assertion macro - always checked
-#define IPB_ASSERT(expr) \
-    do { \
-        if (IPB_UNLIKELY(!(expr))) { \
+#define IPB_ASSERT(expr)                                                             \
+    do {                                                                             \
+        if (IPB_UNLIKELY(!(expr))) {                                                 \
             ::ipb::common::debug::assert_fail(#expr, nullptr, IPB_CURRENT_LOCATION); \
-        } \
+        }                                                                            \
     } while (0)
 
-#define IPB_ASSERT_MSG(expr, msg) \
-    do { \
-        if (IPB_UNLIKELY(!(expr))) { \
+#define IPB_ASSERT_MSG(expr, msg)                                                \
+    do {                                                                         \
+        if (IPB_UNLIKELY(!(expr))) {                                             \
             ::ipb::common::debug::assert_fail(#expr, msg, IPB_CURRENT_LOCATION); \
-        } \
+        }                                                                        \
     } while (0)
 
 // Debug-only assertions (compiled out in release)
 #ifdef IPB_BUILD_DEBUG
-    #define IPB_DEBUG_ASSERT(expr)          IPB_ASSERT(expr)
-    #define IPB_DEBUG_ASSERT_MSG(expr, msg) IPB_ASSERT_MSG(expr, msg)
+#define IPB_DEBUG_ASSERT(expr)          IPB_ASSERT(expr)
+#define IPB_DEBUG_ASSERT_MSG(expr, msg) IPB_ASSERT_MSG(expr, msg)
 #else
-    #define IPB_DEBUG_ASSERT(expr)          ((void)0)
-    #define IPB_DEBUG_ASSERT_MSG(expr, msg) ((void)0)
+#define IPB_DEBUG_ASSERT(expr)          ((void)0)
+#define IPB_DEBUG_ASSERT_MSG(expr, msg) ((void)0)
 #endif
 
 // Precondition/Postcondition macros
-#define IPB_PRECONDITION(expr) \
-    do { \
-        if (IPB_UNLIKELY(!(expr))) { \
+#define IPB_PRECONDITION(expr)                                                                     \
+    do {                                                                                           \
+        if (IPB_UNLIKELY(!(expr))) {                                                               \
             ::ipb::common::debug::assert_fail(#expr, "Precondition failed", IPB_CURRENT_LOCATION); \
-        } \
+        }                                                                                          \
     } while (0)
 
-#define IPB_POSTCONDITION(expr) \
-    do { \
-        if (IPB_UNLIKELY(!(expr))) { \
-            ::ipb::common::debug::assert_fail(#expr, "Postcondition failed", IPB_CURRENT_LOCATION); \
-        } \
+#define IPB_POSTCONDITION(expr)                                              \
+    do {                                                                     \
+        if (IPB_UNLIKELY(!(expr))) {                                         \
+            ::ipb::common::debug::assert_fail(#expr, "Postcondition failed", \
+                                              IPB_CURRENT_LOCATION);         \
+        }                                                                    \
     } while (0)
 
-#define IPB_INVARIANT(expr) \
-    do { \
-        if (IPB_UNLIKELY(!(expr))) { \
+#define IPB_INVARIANT(expr)                                                                       \
+    do {                                                                                          \
+        if (IPB_UNLIKELY(!(expr))) {                                                              \
             ::ipb::common::debug::assert_fail(#expr, "Invariant violated", IPB_CURRENT_LOCATION); \
-        } \
+        }                                                                                         \
     } while (0)
 
 // ============================================================================
@@ -647,4 +657,4 @@ IPB_API void init_logging(LogLevel level = LogLevel::INFO);
  */
 IPB_API void shutdown_logging();
 
-} // namespace ipb::common::debug
+}  // namespace ipb::common::debug

@@ -5,19 +5,21 @@
 
 #include <ipb/security/tls_context.hpp>
 
-#if defined(IPB_SSL_OPENSSL) || !defined(IPB_SSL_MBEDTLS) && !defined(IPB_SSL_WOLFSSL) && !defined(IPB_SSL_NONE)
+#if defined(IPB_SSL_OPENSSL) || \
+    !defined(IPB_SSL_MBEDTLS) && !defined(IPB_SSL_WOLFSSL) && !defined(IPB_SSL_NONE)
 
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/x509.h>
-#include <openssl/x509v3.h>
-#include <openssl/pem.h>
-#include <openssl/rand.h>
-#include <openssl/bio.h>
-
-#include <mutex>
 #include <atomic>
 #include <cstring>
+#include <iostream>
+#include <mutex>
+
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/pem.h>
+#include <openssl/rand.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 namespace ipb::security {
 
@@ -30,7 +32,8 @@ std::atomic<bool> ssl_initialized{false};
 // Error helper
 std::string get_openssl_error() {
     unsigned long err = ERR_get_error();
-    if (err == 0) return "Unknown error";
+    if (err == 0)
+        return "Unknown error";
 
     char buf[256];
     ERR_error_string_n(err, buf, sizeof(buf));
@@ -38,28 +41,48 @@ std::string get_openssl_error() {
 }
 
 // Version conversion
+// SECURITY: TLS 1.0 and 1.1 are deprecated (RFC 8996) and vulnerable to POODLE, BEAST attacks
+// Minimum enforced version is TLS 1.2
 int tls_version_to_openssl(TLSVersion version) {
     switch (version) {
-        case TLSVersion::TLS_1_0: return TLS1_VERSION;
-        case TLSVersion::TLS_1_1: return TLS1_1_VERSION;
-        case TLSVersion::TLS_1_2: return TLS1_2_VERSION;
-        case TLSVersion::TLS_1_3: return TLS1_3_VERSION;
-        case TLSVersion::AUTO: return 0;
-        default: return TLS1_2_VERSION;
+        case TLSVersion::TLS_1_0:
+            // SECURITY: TLS 1.0 is deprecated - upgrade to TLS 1.2
+            std::cerr << "[SECURITY WARNING] TLS 1.0 requested but deprecated (RFC 8996). "
+                      << "Using TLS 1.2 minimum instead." << std::endl;
+            return TLS1_2_VERSION;
+        case TLSVersion::TLS_1_1:
+            // SECURITY: TLS 1.1 is deprecated - upgrade to TLS 1.2
+            std::cerr << "[SECURITY WARNING] TLS 1.1 requested but deprecated (RFC 8996). "
+                      << "Using TLS 1.2 minimum instead." << std::endl;
+            return TLS1_2_VERSION;
+        case TLSVersion::TLS_1_2:
+            return TLS1_2_VERSION;
+        case TLSVersion::TLS_1_3:
+            return TLS1_3_VERSION;
+        case TLSVersion::AUTO:
+            // AUTO now defaults to TLS 1.2 minimum for security
+            return TLS1_2_VERSION;
+        default:
+            return TLS1_2_VERSION;
     }
 }
 
 TLSVersion openssl_version_to_tls(int version) {
     switch (version) {
-        case TLS1_VERSION: return TLSVersion::TLS_1_0;
-        case TLS1_1_VERSION: return TLSVersion::TLS_1_1;
-        case TLS1_2_VERSION: return TLSVersion::TLS_1_2;
-        case TLS1_3_VERSION: return TLSVersion::TLS_1_3;
-        default: return TLSVersion::AUTO;
+        case TLS1_VERSION:
+            return TLSVersion::TLS_1_0;
+        case TLS1_1_VERSION:
+            return TLSVersion::TLS_1_1;
+        case TLS1_2_VERSION:
+            return TLSVersion::TLS_1_2;
+        case TLS1_3_VERSION:
+            return TLSVersion::TLS_1_3;
+        default:
+            return TLSVersion::AUTO;
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // ============================================================================
 // Certificate Implementation
@@ -71,8 +94,7 @@ Certificate::~Certificate() {
     }
 }
 
-Certificate::Certificate(Certificate&& other) noexcept
-    : handle_(other.handle_) {
+Certificate::Certificate(Certificate&& other) noexcept : handle_(other.handle_) {
     other.handle_ = nullptr;
 }
 
@@ -81,7 +103,7 @@ Certificate& Certificate::operator=(Certificate&& other) noexcept {
         if (handle_) {
             X509_free(static_cast<X509*>(handle_));
         }
-        handle_ = other.handle_;
+        handle_       = other.handle_;
         other.handle_ = nullptr;
     }
     return *this;
@@ -90,18 +112,16 @@ Certificate& Certificate::operator=(Certificate&& other) noexcept {
 Result<Certificate> Certificate::from_pem_file(const std::string& path) {
     FILE* fp = fopen(path.c_str(), "r");
     if (!fp) {
-        return Result<Certificate>(
-            SecurityError::FILE_NOT_FOUND,
-            "Failed to open certificate file: " + path);
+        return Result<Certificate>(SecurityError::FILE_NOT_FOUND,
+                                   "Failed to open certificate file: " + path);
     }
 
     X509* cert = PEM_read_X509(fp, nullptr, nullptr, nullptr);
     fclose(fp);
 
     if (!cert) {
-        return Result<Certificate>(
-            SecurityError::CERTIFICATE_INVALID,
-            "Failed to read certificate: " + get_openssl_error());
+        return Result<Certificate>(SecurityError::CERTIFICATE_INVALID,
+                                   "Failed to read certificate: " + get_openssl_error());
     }
 
     Certificate result;
@@ -112,18 +132,15 @@ Result<Certificate> Certificate::from_pem_file(const std::string& path) {
 Result<Certificate> Certificate::from_pem_string(std::string_view pem) {
     BIO* bio = BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size()));
     if (!bio) {
-        return Result<Certificate>(
-            SecurityError::MEMORY_ALLOCATION_FAILED,
-            "Failed to create BIO");
+        return Result<Certificate>(SecurityError::MEMORY_ALLOCATION_FAILED, "Failed to create BIO");
     }
 
     X509* cert = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
     BIO_free(bio);
 
     if (!cert) {
-        return Result<Certificate>(
-            SecurityError::CERTIFICATE_INVALID,
-            "Failed to parse certificate: " + get_openssl_error());
+        return Result<Certificate>(SecurityError::CERTIFICATE_INVALID,
+                                   "Failed to parse certificate: " + get_openssl_error());
     }
 
     Certificate result;
@@ -133,12 +150,11 @@ Result<Certificate> Certificate::from_pem_string(std::string_view pem) {
 
 Result<Certificate> Certificate::from_der(const std::vector<uint8_t>& der) {
     const unsigned char* p = der.data();
-    X509* cert = d2i_X509(nullptr, &p, static_cast<long>(der.size()));
+    X509* cert             = d2i_X509(nullptr, &p, static_cast<long>(der.size()));
 
     if (!cert) {
-        return Result<Certificate>(
-            SecurityError::CERTIFICATE_INVALID,
-            "Failed to parse DER certificate: " + get_openssl_error());
+        return Result<Certificate>(SecurityError::CERTIFICATE_INVALID,
+                                   "Failed to parse DER certificate: " + get_openssl_error());
     }
 
     Certificate result;
@@ -147,11 +163,13 @@ Result<Certificate> Certificate::from_der(const std::vector<uint8_t>& der) {
 }
 
 std::string Certificate::subject() const {
-    if (!handle_) return {};
+    if (!handle_)
+        return {};
 
-    X509* cert = static_cast<X509*>(handle_);
+    X509* cert      = static_cast<X509*>(handle_);
     X509_NAME* name = X509_get_subject_name(cert);
-    if (!name) return {};
+    if (!name)
+        return {};
 
     char buf[256];
     X509_NAME_oneline(name, buf, sizeof(buf));
@@ -159,11 +177,13 @@ std::string Certificate::subject() const {
 }
 
 std::string Certificate::issuer() const {
-    if (!handle_) return {};
+    if (!handle_)
+        return {};
 
-    X509* cert = static_cast<X509*>(handle_);
+    X509* cert      = static_cast<X509*>(handle_);
     X509_NAME* name = X509_get_issuer_name(cert);
-    if (!name) return {};
+    if (!name)
+        return {};
 
     char buf[256];
     X509_NAME_oneline(name, buf, sizeof(buf));
@@ -171,19 +191,23 @@ std::string Certificate::issuer() const {
 }
 
 std::string Certificate::serial_number() const {
-    if (!handle_) return {};
+    if (!handle_)
+        return {};
 
-    X509* cert = static_cast<X509*>(handle_);
+    X509* cert           = static_cast<X509*>(handle_);
     ASN1_INTEGER* serial = X509_get_serialNumber(cert);
-    if (!serial) return {};
+    if (!serial)
+        return {};
 
     BIGNUM* bn = ASN1_INTEGER_to_BN(serial, nullptr);
-    if (!bn) return {};
+    if (!bn)
+        return {};
 
     char* hex = BN_bn2hex(bn);
     BN_free(bn);
 
-    if (!hex) return {};
+    if (!hex)
+        return {};
 
     std::string result(hex);
     OPENSSL_free(hex);
@@ -191,11 +215,13 @@ std::string Certificate::serial_number() const {
 }
 
 std::chrono::system_clock::time_point Certificate::not_before() const {
-    if (!handle_) return {};
+    if (!handle_)
+        return {};
 
-    X509* cert = static_cast<X509*>(handle_);
+    X509* cert            = static_cast<X509*>(handle_);
     const ASN1_TIME* time = X509_get0_notBefore(cert);
-    if (!time) return {};
+    if (!time)
+        return {};
 
     struct tm tm_time;
     ASN1_TIME_to_tm(time, &tm_time);
@@ -203,11 +229,13 @@ std::chrono::system_clock::time_point Certificate::not_before() const {
 }
 
 std::chrono::system_clock::time_point Certificate::not_after() const {
-    if (!handle_) return {};
+    if (!handle_)
+        return {};
 
-    X509* cert = static_cast<X509*>(handle_);
+    X509* cert            = static_cast<X509*>(handle_);
     const ASN1_TIME* time = X509_get0_notAfter(cert);
-    if (!time) return {};
+    if (!time)
+        return {};
 
     struct tm tm_time;
     ASN1_TIME_to_tm(time, &tm_time);
@@ -220,7 +248,7 @@ bool Certificate::is_valid() const {
 }
 
 bool Certificate::expires_within(std::chrono::seconds duration) const {
-    auto expiry = not_after();
+    auto expiry    = not_after();
     auto threshold = std::chrono::system_clock::now() + duration;
     return expiry <= threshold;
 }
@@ -235,8 +263,7 @@ PrivateKey::~PrivateKey() {
     }
 }
 
-PrivateKey::PrivateKey(PrivateKey&& other) noexcept
-    : handle_(other.handle_) {
+PrivateKey::PrivateKey(PrivateKey&& other) noexcept : handle_(other.handle_) {
     other.handle_ = nullptr;
 }
 
@@ -245,32 +272,26 @@ PrivateKey& PrivateKey::operator=(PrivateKey&& other) noexcept {
         if (handle_) {
             EVP_PKEY_free(static_cast<EVP_PKEY*>(handle_));
         }
-        handle_ = other.handle_;
+        handle_       = other.handle_;
         other.handle_ = nullptr;
     }
     return *this;
 }
 
-Result<PrivateKey> PrivateKey::from_pem_file(
-    const std::string& path,
-    std::string_view password) {
-
+Result<PrivateKey> PrivateKey::from_pem_file(const std::string& path, std::string_view password) {
     FILE* fp = fopen(path.c_str(), "r");
     if (!fp) {
-        return Result<PrivateKey>(
-            SecurityError::FILE_NOT_FOUND,
-            "Failed to open key file: " + path);
+        return Result<PrivateKey>(SecurityError::FILE_NOT_FOUND,
+                                  "Failed to open key file: " + path);
     }
 
     EVP_PKEY* key = PEM_read_PrivateKey(
-        fp, nullptr, nullptr,
-        password.empty() ? nullptr : const_cast<char*>(password.data()));
+        fp, nullptr, nullptr, password.empty() ? nullptr : const_cast<char*>(password.data()));
     fclose(fp);
 
     if (!key) {
-        return Result<PrivateKey>(
-            SecurityError::KEY_INVALID,
-            "Failed to read private key: " + get_openssl_error());
+        return Result<PrivateKey>(SecurityError::KEY_INVALID,
+                                  "Failed to read private key: " + get_openssl_error());
     }
 
     PrivateKey result;
@@ -278,26 +299,19 @@ Result<PrivateKey> PrivateKey::from_pem_file(
     return result;
 }
 
-Result<PrivateKey> PrivateKey::from_pem_string(
-    std::string_view pem,
-    std::string_view password) {
-
+Result<PrivateKey> PrivateKey::from_pem_string(std::string_view pem, std::string_view password) {
     BIO* bio = BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size()));
     if (!bio) {
-        return Result<PrivateKey>(
-            SecurityError::MEMORY_ALLOCATION_FAILED,
-            "Failed to create BIO");
+        return Result<PrivateKey>(SecurityError::MEMORY_ALLOCATION_FAILED, "Failed to create BIO");
     }
 
     EVP_PKEY* key = PEM_read_bio_PrivateKey(
-        bio, nullptr, nullptr,
-        password.empty() ? nullptr : const_cast<char*>(password.data()));
+        bio, nullptr, nullptr, password.empty() ? nullptr : const_cast<char*>(password.data()));
     BIO_free(bio);
 
     if (!key) {
-        return Result<PrivateKey>(
-            SecurityError::KEY_INVALID,
-            "Failed to parse private key: " + get_openssl_error());
+        return Result<PrivateKey>(SecurityError::KEY_INVALID,
+                                  "Failed to parse private key: " + get_openssl_error());
     }
 
     PrivateKey result;
@@ -316,9 +330,7 @@ public:
 
     Result<void> load_certificate(const std::string& path) override;
     Result<void> load_certificate_chain(const std::string& path) override;
-    Result<void> load_private_key(
-        const std::string& path,
-        std::string_view password) override;
+    Result<void> load_private_key(const std::string& path, std::string_view password) override;
     Result<void> load_ca_certificates(const std::string& path) override;
     Result<void> load_ca_path(const std::string& path) override;
     Result<void> set_certificate(Certificate cert, PrivateKey key) override;
@@ -328,8 +340,7 @@ public:
     Result<void> set_cipher_suites(std::string_view suites) override;
     void set_verify_mode(VerifyMode mode) override;
     void set_verify_depth(int depth) override;
-    Result<void> set_alpn_protocols(
-        const std::vector<std::string>& protocols) override;
+    Result<void> set_alpn_protocols(const std::vector<std::string>& protocols) override;
 
     Result<std::unique_ptr<TLSSocket>> wrap_socket(int fd) override;
 
@@ -354,8 +365,8 @@ public:
     ~OpenSSLSocket() override;
 
     HandshakeStatus do_handshake(std::chrono::milliseconds timeout) override;
-    ssize_t read(void* buffer, size_t length) override;
-    ssize_t write(const void* buffer, size_t length) override;
+    ssize_t tls_read(void* buffer, size_t length) override;
+    ssize_t tls_write(const void* buffer, size_t length) override;
     Result<void> shutdown() override;
 
     std::string get_alpn_protocol() const override;
@@ -377,12 +388,9 @@ private:
 // OpenSSL Context Implementation
 // ============================================================================
 
-OpenSSLContext::OpenSSLContext(const TLSConfig& config)
-    : config_(config) {
-
-    const SSL_METHOD* method = config.mode == TLSMode::SERVER
-        ? TLS_server_method()
-        : TLS_client_method();
+OpenSSLContext::OpenSSLContext(const TLSConfig& config) : config_(config) {
+    const SSL_METHOD* method =
+        config.mode == TLSMode::SERVER ? TLS_server_method() : TLS_client_method();
 
     ctx_ = SSL_CTX_new(method);
     if (!ctx_) {
@@ -459,40 +467,32 @@ OpenSSLContext::~OpenSSLContext() {
 
 Result<void> OpenSSLContext::load_certificate(const std::string& path) {
     if (SSL_CTX_use_certificate_file(ctx_, path.c_str(), SSL_FILETYPE_PEM) != 1) {
-        return Result<void>(
-            SecurityError::CERTIFICATE_INVALID,
-            "Failed to load certificate: " + get_openssl_error());
+        return Result<void>(SecurityError::CERTIFICATE_INVALID,
+                            "Failed to load certificate: " + get_openssl_error());
     }
     return Result<void>();
 }
 
 Result<void> OpenSSLContext::load_certificate_chain(const std::string& path) {
     if (SSL_CTX_use_certificate_chain_file(ctx_, path.c_str()) != 1) {
-        return Result<void>(
-            SecurityError::CERTIFICATE_INVALID,
-            "Failed to load certificate chain: " + get_openssl_error());
+        return Result<void>(SecurityError::CERTIFICATE_INVALID,
+                            "Failed to load certificate chain: " + get_openssl_error());
     }
     return Result<void>();
 }
 
-Result<void> OpenSSLContext::load_private_key(
-    const std::string& path,
-    std::string_view password) {
-
+Result<void> OpenSSLContext::load_private_key(const std::string& path, std::string_view password) {
     if (!password.empty()) {
         SSL_CTX_set_default_passwd_cb_userdata(ctx_, const_cast<char*>(password.data()));
     }
 
     if (SSL_CTX_use_PrivateKey_file(ctx_, path.c_str(), SSL_FILETYPE_PEM) != 1) {
-        return Result<void>(
-            SecurityError::KEY_INVALID,
-            "Failed to load private key: " + get_openssl_error());
+        return Result<void>(SecurityError::KEY_INVALID,
+                            "Failed to load private key: " + get_openssl_error());
     }
 
     if (SSL_CTX_check_private_key(ctx_) != 1) {
-        return Result<void>(
-            SecurityError::KEY_INVALID,
-            "Private key does not match certificate");
+        return Result<void>(SecurityError::KEY_INVALID, "Private key does not match certificate");
     }
 
     return Result<void>();
@@ -500,36 +500,32 @@ Result<void> OpenSSLContext::load_private_key(
 
 Result<void> OpenSSLContext::load_ca_certificates(const std::string& path) {
     if (SSL_CTX_load_verify_locations(ctx_, path.c_str(), nullptr) != 1) {
-        return Result<void>(
-            SecurityError::CERTIFICATE_INVALID,
-            "Failed to load CA certificates: " + get_openssl_error());
+        return Result<void>(SecurityError::CERTIFICATE_INVALID,
+                            "Failed to load CA certificates: " + get_openssl_error());
     }
     return Result<void>();
 }
 
 Result<void> OpenSSLContext::load_ca_path(const std::string& path) {
     if (SSL_CTX_load_verify_locations(ctx_, nullptr, path.c_str()) != 1) {
-        return Result<void>(
-            SecurityError::CERTIFICATE_INVALID,
-            "Failed to load CA path: " + get_openssl_error());
+        return Result<void>(SecurityError::CERTIFICATE_INVALID,
+                            "Failed to load CA path: " + get_openssl_error());
     }
     return Result<void>();
 }
 
 Result<void> OpenSSLContext::set_certificate(Certificate cert, PrivateKey key) {
-    X509* x509 = static_cast<X509*>(cert.native_handle());
+    X509* x509     = static_cast<X509*>(cert.native_handle());
     EVP_PKEY* pkey = static_cast<EVP_PKEY*>(key.native_handle());
 
     if (SSL_CTX_use_certificate(ctx_, x509) != 1) {
-        return Result<void>(
-            SecurityError::CERTIFICATE_INVALID,
-            "Failed to set certificate: " + get_openssl_error());
+        return Result<void>(SecurityError::CERTIFICATE_INVALID,
+                            "Failed to set certificate: " + get_openssl_error());
     }
 
     if (SSL_CTX_use_PrivateKey(ctx_, pkey) != 1) {
-        return Result<void>(
-            SecurityError::KEY_INVALID,
-            "Failed to set private key: " + get_openssl_error());
+        return Result<void>(SecurityError::KEY_INVALID,
+                            "Failed to set private key: " + get_openssl_error());
     }
 
     return Result<void>();
@@ -546,18 +542,16 @@ void OpenSSLContext::set_version(TLSVersion min, TLSVersion max) {
 
 Result<void> OpenSSLContext::set_cipher_list(std::string_view ciphers) {
     if (SSL_CTX_set_cipher_list(ctx_, std::string(ciphers).c_str()) != 1) {
-        return Result<void>(
-            SecurityError::CONFIG_INVALID,
-            "Invalid cipher list: " + get_openssl_error());
+        return Result<void>(SecurityError::CONFIG_INVALID,
+                            "Invalid cipher list: " + get_openssl_error());
     }
     return Result<void>();
 }
 
 Result<void> OpenSSLContext::set_cipher_suites(std::string_view suites) {
     if (SSL_CTX_set_ciphersuites(ctx_, std::string(suites).c_str()) != 1) {
-        return Result<void>(
-            SecurityError::CONFIG_INVALID,
-            "Invalid cipher suites: " + get_openssl_error());
+        return Result<void>(SecurityError::CONFIG_INVALID,
+                            "Invalid cipher suites: " + get_openssl_error());
     }
     return Result<void>();
 }
@@ -566,6 +560,11 @@ void OpenSSLContext::set_verify_mode(VerifyMode mode) {
     int ssl_mode;
     switch (mode) {
         case VerifyMode::NONE:
+            // SECURITY WARNING: Certificate verification is DISABLED
+            // This makes the connection vulnerable to man-in-the-middle attacks
+            // Only use this mode for development/testing purposes
+            std::cerr << "[SECURITY WARNING] TLS certificate verification DISABLED - "
+                      << "connection is vulnerable to MITM attacks!" << std::endl;
             ssl_mode = SSL_VERIFY_NONE;
             break;
         case VerifyMode::OPTIONAL:
@@ -587,9 +586,7 @@ void OpenSSLContext::set_verify_depth(int depth) {
     SSL_CTX_set_verify_depth(ctx_, depth);
 }
 
-Result<void> OpenSSLContext::set_alpn_protocols(
-    const std::vector<std::string>& protocols) {
-
+Result<void> OpenSSLContext::set_alpn_protocols(const std::vector<std::string>& protocols) {
     alpn_data_.clear();
     for (const auto& proto : protocols) {
         alpn_data_.push_back(static_cast<uint8_t>(proto.size()));
@@ -597,9 +594,7 @@ Result<void> OpenSSLContext::set_alpn_protocols(
     }
 
     if (SSL_CTX_set_alpn_protos(ctx_, alpn_data_.data(), alpn_data_.size()) != 0) {
-        return Result<void>(
-            SecurityError::CONFIG_INVALID,
-            "Failed to set ALPN protocols");
+        return Result<void>(SecurityError::CONFIG_INVALID, "Failed to set ALPN protocols");
     }
     return Result<void>();
 }
@@ -614,9 +609,8 @@ Result<std::unique_ptr<TLSSocket>> OpenSSLContext::wrap_socket(int fd) {
 
     if (SSL_set_fd(ssl, fd) != 1) {
         SSL_free(ssl);
-        return Result<std::unique_ptr<TLSSocket>>(
-            SecurityError::SOCKET_ERROR,
-            "Failed to set socket: " + get_openssl_error());
+        return Result<std::unique_ptr<TLSSocket>>(SecurityError::SOCKET_ERROR,
+                                                  "Failed to set socket: " + get_openssl_error());
     }
 
     // Set SNI if configured and client mode
@@ -647,9 +641,7 @@ std::vector<std::string> OpenSSLContext::get_available_ciphers() const {
 // OpenSSL Socket Implementation
 // ============================================================================
 
-OpenSSLSocket::OpenSSLSocket(SSL* ssl, int fd)
-    : ssl_(ssl), fd_(fd) {
-}
+OpenSSLSocket::OpenSSLSocket(SSL* ssl, int fd) : ssl_(ssl), fd_(fd) {}
 
 OpenSSLSocket::~OpenSSLSocket() {
     if (ssl_) {
@@ -675,7 +667,7 @@ HandshakeStatus OpenSSLSocket::do_handshake(std::chrono::milliseconds /*timeout*
     }
 }
 
-ssize_t OpenSSLSocket::read(void* buffer, size_t length) {
+ssize_t OpenSSLSocket::tls_read(void* buffer, size_t length) {
     int ret = SSL_read(ssl_, buffer, static_cast<int>(length));
     if (ret <= 0) {
         int err = SSL_get_error(ssl_, ret);
@@ -687,7 +679,7 @@ ssize_t OpenSSLSocket::read(void* buffer, size_t length) {
     return ret;
 }
 
-ssize_t OpenSSLSocket::write(const void* buffer, size_t length) {
+ssize_t OpenSSLSocket::tls_write(const void* buffer, size_t length) {
     int ret = SSL_write(ssl_, buffer, static_cast<int>(length));
     if (ret <= 0) {
         int err = SSL_get_error(ssl_, ret);
@@ -702,9 +694,8 @@ ssize_t OpenSSLSocket::write(const void* buffer, size_t length) {
 Result<void> OpenSSLSocket::shutdown() {
     int ret = SSL_shutdown(ssl_);
     if (ret < 0) {
-        return Result<void>(
-            SecurityError::SOCKET_ERROR,
-            "SSL shutdown failed: " + get_openssl_error());
+        return Result<void>(SecurityError::SOCKET_ERROR,
+                            "SSL shutdown failed: " + get_openssl_error());
     }
     return Result<void>();
 }
@@ -734,9 +725,8 @@ std::string OpenSSLSocket::get_cipher_name() const {
 Result<Certificate> OpenSSLSocket::get_peer_certificate() const {
     X509* cert = SSL_get_peer_certificate(ssl_);
     if (!cert) {
-        return Result<Certificate>(
-            SecurityError::CERTIFICATE_INVALID,
-            "No peer certificate available");
+        return Result<Certificate>(SecurityError::CERTIFICATE_INVALID,
+                                   "No peer certificate available");
     }
 
     Certificate result;
@@ -764,8 +754,8 @@ Result<std::unique_ptr<TLSContext>> TLSContext::create(const TLSConfig& config) 
     // Ensure OpenSSL is initialized
     auto init_result = initialize();
     if (!init_result.is_success()) {
-        return Result<std::unique_ptr<TLSContext>>(
-            init_result.error(), init_result.error_message());
+        return Result<std::unique_ptr<TLSContext>>(init_result.error(),
+                                                   init_result.error_message());
     }
 
     auto ctx = std::make_unique<OpenSSLContext>(config);
@@ -799,9 +789,7 @@ Result<void> initialize() {
     });
 
     if (!ssl_initialized.load()) {
-        return Result<void>(
-            SecurityError::INITIALIZATION_FAILED,
-            "Failed to initialize OpenSSL");
+        return Result<void>(SecurityError::INITIALIZATION_FAILED, "Failed to initialize OpenSSL");
     }
 
     return Result<void>();
@@ -817,9 +805,8 @@ void cleanup() {
 Result<std::vector<uint8_t>> random_bytes(size_t count) {
     std::vector<uint8_t> result(count);
     if (RAND_bytes(result.data(), static_cast<int>(count)) != 1) {
-        return Result<std::vector<uint8_t>>(
-            SecurityError::CRYPTO_ERROR,
-            "Failed to generate random bytes");
+        return Result<std::vector<uint8_t>>(SecurityError::CRYPTO_ERROR,
+                                            "Failed to generate random bytes");
     }
     return result;
 }
@@ -852,6 +839,6 @@ std::string_view default_cipher_suites(SecurityLevel level) {
     }
 }
 
-} // namespace ipb::security
+}  // namespace ipb::security
 
-#endif // IPB_SSL_OPENSSL
+#endif  // IPB_SSL_OPENSSL

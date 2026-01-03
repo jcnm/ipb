@@ -131,11 +131,12 @@ target_include_directories(ipb-transport-mqtt
 
 # Link dependencies
 target_link_libraries(ipb-transport-mqtt
-    PUBLIC
-        pthread
     PRIVATE
         ${BACKEND_LIBS}
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-transport-mqtt PUBLIC pthread)
+endif()
 
 # Find and link SSL if available (needed for TLS support)
 find_package(OpenSSL QUIET)
@@ -167,15 +168,21 @@ target_compile_definitions(ipb-transport-mqtt
 )
 
 # Compiler options
-target_compile_options(ipb-transport-mqtt PRIVATE
-    -Wall -Wextra -Wpedantic
-    -fPIC
-)
-
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-transport-mqtt PRIVATE -O3)
-    if(NOT APPLE)
-        target_compile_options(ipb-transport-mqtt PRIVATE -march=native)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ipb-transport-mqtt PRIVATE
+        -Wall -Wextra -Wpedantic
+        -fPIC
+    )
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(ipb-transport-mqtt PRIVATE -O3)
+        if(NOT APPLE)
+            target_compile_options(ipb-transport-mqtt PRIVATE -march=native)
+        endif()
+    endif()
+elseif(MSVC)
+    target_compile_options(ipb-transport-mqtt PRIVATE /W4)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(ipb-transport-mqtt PRIVATE /O2)
     endif()
 endif()
 

@@ -5,13 +5,16 @@
  * Tests cover: Timestamp, Value, Quality, DataPoint, RawMessage
  */
 
-#include <gtest/gtest.h>
 #include <ipb/common/data_point.hpp>
+
+#include <atomic>
 #include <chrono>
+#include <cstring>
+#include <limits>
 #include <thread>
 #include <vector>
-#include <atomic>
-#include <cstring>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::common;
 using namespace std::chrono_literals;
@@ -38,12 +41,14 @@ TEST_F(TimestampTest, ConstructFromDuration) {
 }
 
 TEST_F(TimestampTest, Now) {
-    auto before = std::chrono::steady_clock::now();
+    auto before  = std::chrono::steady_clock::now();
     Timestamp ts = Timestamp::now();
-    auto after = std::chrono::steady_clock::now();
+    auto after   = std::chrono::steady_clock::now();
 
-    auto before_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(before.time_since_epoch()).count();
-    auto after_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(after.time_since_epoch()).count();
+    auto before_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(before.time_since_epoch()).count();
+    auto after_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(after.time_since_epoch()).count();
 
     EXPECT_GE(ts.nanoseconds(), before_ns);
     EXPECT_LE(ts.nanoseconds(), after_ns);
@@ -306,7 +311,7 @@ TEST_F(QualityTest, QualityValues) {
 class DataPointTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_address = "test.device.register.001";
+        test_address     = "test.device.register.001";
         test_protocol_id = 1;
     }
 
@@ -393,14 +398,8 @@ TEST_F(DataPointTest, ValueTypes) {
 }
 
 TEST_F(DataPointTest, QualityLevels) {
-    std::vector<Quality> qualities = {
-        Quality::GOOD,
-        Quality::UNCERTAIN,
-        Quality::BAD,
-        Quality::STALE,
-        Quality::COMM_FAILURE,
-        Quality::INITIAL
-    };
+    std::vector<Quality> qualities = {Quality::GOOD,  Quality::UNCERTAIN,    Quality::BAD,
+                                      Quality::STALE, Quality::COMM_FAILURE, Quality::INITIAL};
 
     for (auto quality : qualities) {
         Value v;
@@ -433,7 +432,7 @@ TEST_F(DataPointTest, MoveConstructor) {
 
     std::string original_address(original.address());
     uint16_t original_protocol_id = original.protocol_id();
-    Quality original_quality = original.quality();
+    Quality original_quality      = original.quality();
 
     DataPoint moved(std::move(original));
 
@@ -599,18 +598,18 @@ TEST_F(DataPointTest, Performance) {
         (void)addr;
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
     // Should be able to create at least 100k DataPoints per second
     EXPECT_LT(duration.count() / num_iterations, 10000);  // Less than 10μs per construction
 
-    std::cout << "DataPoint construction: "
-              << (duration.count() / num_iterations) << " ns/op" << std::endl;
+    std::cout << "DataPoint construction: " << (duration.count() / num_iterations) << " ns/op"
+              << std::endl;
 }
 
 TEST_F(DataPointTest, ThreadSafety) {
-    const size_t num_threads = 4;
+    const size_t num_threads           = 4;
     const size_t operations_per_thread = 10000;
 
     std::vector<std::thread> threads;
@@ -620,7 +619,8 @@ TEST_F(DataPointTest, ThreadSafety) {
         threads.emplace_back([&, t]() {
             for (size_t i = 0; i < operations_per_thread; ++i) {
                 try {
-                    std::string addr = test_address + "." + std::to_string(t) + "." + std::to_string(i);
+                    std::string addr =
+                        test_address + "." + std::to_string(t) + "." + std::to_string(i);
                     Value v;
                     v.set(static_cast<double>(i));
                     DataPoint dp(addr, v, test_protocol_id);
@@ -651,11 +651,7 @@ TEST_F(DataPointTest, MemoryUsage) {
     for (size_t i = 0; i < num_datapoints; ++i) {
         Value v;
         v.set(static_cast<double>(i));
-        datapoints.emplace_back(
-            test_address + std::to_string(i),
-            v,
-            test_protocol_id
-        );
+        datapoints.emplace_back(test_address + std::to_string(i), v, test_protocol_id);
         datapoints.back().set_quality(Quality::GOOD);
     }
 
@@ -824,7 +820,7 @@ TEST_F(ValueSerializationTest, SerializeBufferTooSmall) {
     Value original;
     original.set(static_cast<int32_t>(42));
 
-    std::vector<uint8_t> small_buffer(1);  // Too small
+    std::vector<uint8_t> small_buffer(1);                  // Too small
     original.serialize(std::span<uint8_t>(small_buffer));  // Should not crash
 }
 
@@ -874,25 +870,31 @@ TEST_F(ValueSerializationTest, RoundTripAllTypes) {
     std::vector<std::pair<Value, std::string>> test_cases;
 
     // Bool
-    Value v1; v1.set(false);
+    Value v1;
+    v1.set(false);
     test_cases.push_back({v1, "bool"});
 
     // Int types
-    Value v2; v2.set(static_cast<int8_t>(-128));
+    Value v2;
+    v2.set(static_cast<int8_t>(-128));
     test_cases.push_back({v2, "int8"});
 
-    Value v3; v3.set(static_cast<int64_t>(-9223372036854775807LL));
+    Value v3;
+    v3.set(static_cast<int64_t>(-9223372036854775807LL));
     test_cases.push_back({v3, "int64"});
 
     // Uint types
-    Value v4; v4.set(static_cast<uint64_t>(18446744073709551615ULL));
+    Value v4;
+    v4.set(static_cast<uint64_t>(18446744073709551615ULL));
     test_cases.push_back({v4, "uint64"});
 
     // Float types
-    Value v5; v5.set(static_cast<float>(-1.0f / 0.0f));  // -inf
+    Value v5;
+    v5.set(-std::numeric_limits<float>::infinity());  // -inf
     test_cases.push_back({v5, "float-inf"});
 
-    Value v6; v6.set(static_cast<double>(1e308));
+    Value v6;
+    v6.set(static_cast<double>(1e308));
     test_cases.push_back({v6, "double-large"});
 
     for (const auto& [original, name] : test_cases) {
@@ -902,8 +904,7 @@ TEST_F(ValueSerializationTest, RoundTripAllTypes) {
         Value restored;
         EXPECT_TRUE(restored.deserialize(std::span<const uint8_t>(buffer)))
             << "Failed for type: " << name;
-        EXPECT_EQ(restored.type(), original.type())
-            << "Type mismatch for: " << name;
+        EXPECT_EQ(restored.type(), original.type()) << "Type mismatch for: " << name;
     }
 }
 
@@ -913,7 +914,7 @@ TEST_F(ValueSerializationTest, RoundTripAllTypes) {
 
 class DataPointSerializationTest : public ::testing::Test {
 protected:
-    const std::string test_address = "sensors/temp/1";
+    const std::string test_address  = "sensors/temp/1";
     const uint16_t test_protocol_id = 42;
 };
 
@@ -983,7 +984,7 @@ TEST_F(DataPointSerializationTest, SerializeBufferTooSmall) {
     v.set(static_cast<int32_t>(42));
     DataPoint original(test_address, v, test_protocol_id);
 
-    std::vector<uint8_t> small_buffer(1);  // Too small
+    std::vector<uint8_t> small_buffer(1);                  // Too small
     original.serialize(std::span<uint8_t>(small_buffer));  // Should not crash
 }
 
@@ -992,14 +993,13 @@ TEST_F(DataPointSerializationTest, SerializedSize) {
     v.set(static_cast<int32_t>(42));
     DataPoint dp(test_address, v, test_protocol_id);
 
-    size_t expected_size =
-        sizeof(uint16_t) +          // address size
-        test_address.size() +       // address data
-        v.serialized_size() +       // value
-        sizeof(int64_t) +           // timestamp
-        sizeof(uint16_t) +          // protocol_id
-        sizeof(Quality) +           // quality
-        sizeof(uint32_t);           // sequence_number
+    size_t expected_size = sizeof(uint16_t) +     // address size
+                           test_address.size() +  // address data
+                           v.serialized_size() +  // value
+                           sizeof(int64_t) +      // timestamp
+                           sizeof(uint16_t) +     // protocol_id
+                           sizeof(Quality) +      // quality
+                           sizeof(uint32_t);      // sequence_number
 
     EXPECT_EQ(dp.serialized_size(), expected_size);
 }
@@ -1029,7 +1029,7 @@ TEST_F(DataPointSerializationTest, MultipleRoundTrips) {
 // Main
 // ============================================================================
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }

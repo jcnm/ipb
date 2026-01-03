@@ -19,31 +19,30 @@
  * - Full tracing and logging support
  */
 
-#include <ipb/common/interfaces.hpp>
 #include <ipb/common/data_point.hpp>
 #include <ipb/common/dataset.hpp>
+#include <ipb/common/debug.hpp>
 #include <ipb/common/endpoint.hpp>
 #include <ipb/common/error.hpp>
-#include <ipb/common/debug.hpp>
+#include <ipb/common/interfaces.hpp>
 #include <ipb/common/platform.hpp>
-
 #include <ipb/core/message_bus/message_bus.hpp>
 #include <ipb/core/rule_engine/rule_engine.hpp>
 #include <ipb/core/scheduler/edf_scheduler.hpp>
 #include <ipb/core/sink_registry/sink_registry.hpp>
 
-#include <memory>
-#include <string>
-#include <string_view>
-#include <vector>
 #include <atomic>
-#include <thread>
-#include <mutex>
-#include <shared_mutex>
 #include <chrono>
 #include <functional>
 #include <future>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <vector>
 
 namespace ipb::router {
 
@@ -55,16 +54,16 @@ namespace ipb::router {
  * @brief Routing rule types
  */
 enum class RuleType : uint8_t {
-    STATIC = 0,         ///< Static address-based routing
-    PROTOCOL_BASED,     ///< Route based on protocol ID
-    REGEX_PATTERN,      ///< Route based on regex pattern matching
-    QUALITY_BASED,      ///< Route based on data quality
-    TIMESTAMP_BASED,    ///< Route based on timestamp ranges
-    VALUE_BASED,        ///< Route based on data value conditions
-    CUSTOM_LOGIC,       ///< Custom logic function
-    LOAD_BALANCING,     ///< Load balancing across multiple sinks
-    FAILOVER,           ///< Failover to backup sinks
-    BROADCAST           ///< Broadcast to all matching sinks
+    STATIC = 0,       ///< Static address-based routing
+    PROTOCOL_BASED,   ///< Route based on protocol ID
+    REGEX_PATTERN,    ///< Route based on regex pattern matching
+    QUALITY_BASED,    ///< Route based on data quality
+    TIMESTAMP_BASED,  ///< Route based on timestamp ranges
+    VALUE_BASED,      ///< Route based on data value conditions
+    CUSTOM_LOGIC,     ///< Custom logic function
+    LOAD_BALANCING,   ///< Load balancing across multiple sinks
+    FAILOVER,         ///< Failover to backup sinks
+    BROADCAST         ///< Broadcast to all matching sinks
 };
 
 /**
@@ -72,17 +71,28 @@ enum class RuleType : uint8_t {
  */
 constexpr std::string_view rule_type_name(RuleType type) noexcept {
     switch (type) {
-        case RuleType::STATIC:         return "STATIC";
-        case RuleType::PROTOCOL_BASED: return "PROTOCOL_BASED";
-        case RuleType::REGEX_PATTERN:  return "REGEX_PATTERN";
-        case RuleType::QUALITY_BASED:  return "QUALITY_BASED";
-        case RuleType::TIMESTAMP_BASED: return "TIMESTAMP_BASED";
-        case RuleType::VALUE_BASED:    return "VALUE_BASED";
-        case RuleType::CUSTOM_LOGIC:   return "CUSTOM_LOGIC";
-        case RuleType::LOAD_BALANCING: return "LOAD_BALANCING";
-        case RuleType::FAILOVER:       return "FAILOVER";
-        case RuleType::BROADCAST:      return "BROADCAST";
-        default:                       return "UNKNOWN";
+        case RuleType::STATIC:
+            return "STATIC";
+        case RuleType::PROTOCOL_BASED:
+            return "PROTOCOL_BASED";
+        case RuleType::REGEX_PATTERN:
+            return "REGEX_PATTERN";
+        case RuleType::QUALITY_BASED:
+            return "QUALITY_BASED";
+        case RuleType::TIMESTAMP_BASED:
+            return "TIMESTAMP_BASED";
+        case RuleType::VALUE_BASED:
+            return "VALUE_BASED";
+        case RuleType::CUSTOM_LOGIC:
+            return "CUSTOM_LOGIC";
+        case RuleType::LOAD_BALANCING:
+            return "LOAD_BALANCING";
+        case RuleType::FAILOVER:
+            return "FAILOVER";
+        case RuleType::BROADCAST:
+            return "BROADCAST";
+        default:
+            return "UNKNOWN";
     }
 }
 
@@ -90,12 +100,12 @@ constexpr std::string_view rule_type_name(RuleType type) noexcept {
  * @brief Routing priority levels
  */
 enum class RoutingPriority : uint8_t {
-    LOWEST = 0,
-    LOW = 64,
-    NORMAL = 128,
-    HIGH = 192,
-    HIGHEST = 255,
-    REALTIME = 254     ///< Special priority for real-time data
+    LOWEST   = 0,
+    LOW      = 64,
+    NORMAL   = 128,
+    HIGH     = 192,
+    HIGHEST  = 255,
+    REALTIME = 254  ///< Special priority for real-time data
 };
 
 /**
@@ -143,23 +153,23 @@ struct ValueCondition {
 struct RoutingRule {
     uint32_t rule_id = 0;
     std::string name;
-    RuleType type = RuleType::STATIC;
+    RuleType type            = RuleType::STATIC;
     RoutingPriority priority = RoutingPriority::NORMAL;
-    bool enabled = true;
+    bool enabled             = true;
 
     // Rule conditions
-    std::vector<std::string> source_addresses;        ///< Static addresses
-    std::vector<uint16_t> protocol_ids;               ///< Protocol IDs
-    std::string address_pattern;                      ///< Regex pattern for addresses
-    std::vector<common::Quality> quality_levels;      ///< Quality conditions
-    common::Timestamp start_time;                     ///< Timestamp range start
-    common::Timestamp end_time;                       ///< Timestamp range end
-    std::vector<ValueCondition> value_conditions;     ///< Value-based conditions
+    std::vector<std::string> source_addresses;     ///< Static addresses
+    std::vector<uint16_t> protocol_ids;            ///< Protocol IDs
+    std::string address_pattern;                   ///< Regex pattern for addresses
+    std::vector<common::Quality> quality_levels;   ///< Quality conditions
+    common::Timestamp start_time;                  ///< Timestamp range start
+    common::Timestamp end_time;                    ///< Timestamp range end
+    std::vector<ValueCondition> value_conditions;  ///< Value-based conditions
 
     // Target sinks
     std::vector<std::string> target_sink_ids;
     LoadBalanceStrategy load_balance_strategy = LoadBalanceStrategy::ROUND_ROBIN;
-    std::vector<uint32_t> sink_weights;               ///< For weighted load balancing
+    std::vector<uint32_t> sink_weights;  ///< For weighted load balancing
 
     // Failover settings
     bool enable_failover = false;
@@ -172,7 +182,7 @@ struct RoutingRule {
 
     // Performance settings
     bool enable_batching = false;
-    uint32_t batch_size = 100;
+    uint32_t batch_size  = 100;
     std::chrono::milliseconds batch_timeout{10};
 
     // Statistics (atomic for thread safety)
@@ -186,92 +196,68 @@ struct RoutingRule {
 
     // Copy constructor (atomics need explicit handling)
     RoutingRule(const RoutingRule& other)
-        : rule_id(other.rule_id)
-        , name(other.name)
-        , type(other.type)
-        , priority(other.priority)
-        , enabled(other.enabled)
-        , source_addresses(other.source_addresses)
-        , protocol_ids(other.protocol_ids)
-        , address_pattern(other.address_pattern)
-        , quality_levels(other.quality_levels)
-        , start_time(other.start_time)
-        , end_time(other.end_time)
-        , value_conditions(other.value_conditions)
-        , target_sink_ids(other.target_sink_ids)
-        , load_balance_strategy(other.load_balance_strategy)
-        , sink_weights(other.sink_weights)
-        , enable_failover(other.enable_failover)
-        , backup_sink_ids(other.backup_sink_ids)
-        , failover_timeout(other.failover_timeout)
-        , custom_condition(other.custom_condition)
-        , custom_target_selector(other.custom_target_selector)
-        , enable_batching(other.enable_batching)
-        , batch_size(other.batch_size)
-        , batch_timeout(other.batch_timeout)
-        , match_count(other.match_count.load())
-        , success_count(other.success_count.load())
-        , failure_count(other.failure_count.load())
-        , total_processing_time_ns(other.total_processing_time_ns.load())
-    {}
+        : rule_id(other.rule_id), name(other.name), type(other.type), priority(other.priority),
+          enabled(other.enabled), source_addresses(other.source_addresses),
+          protocol_ids(other.protocol_ids), address_pattern(other.address_pattern),
+          quality_levels(other.quality_levels), start_time(other.start_time),
+          end_time(other.end_time), value_conditions(other.value_conditions),
+          target_sink_ids(other.target_sink_ids),
+          load_balance_strategy(other.load_balance_strategy), sink_weights(other.sink_weights),
+          enable_failover(other.enable_failover), backup_sink_ids(other.backup_sink_ids),
+          failover_timeout(other.failover_timeout), custom_condition(other.custom_condition),
+          custom_target_selector(other.custom_target_selector),
+          enable_batching(other.enable_batching), batch_size(other.batch_size),
+          batch_timeout(other.batch_timeout), match_count(other.match_count.load()),
+          success_count(other.success_count.load()), failure_count(other.failure_count.load()),
+          total_processing_time_ns(other.total_processing_time_ns.load()) {}
 
     // Move constructor
     RoutingRule(RoutingRule&& other) noexcept
-        : rule_id(other.rule_id)
-        , name(std::move(other.name))
-        , type(other.type)
-        , priority(other.priority)
-        , enabled(other.enabled)
-        , source_addresses(std::move(other.source_addresses))
-        , protocol_ids(std::move(other.protocol_ids))
-        , address_pattern(std::move(other.address_pattern))
-        , quality_levels(std::move(other.quality_levels))
-        , start_time(other.start_time)
-        , end_time(other.end_time)
-        , value_conditions(std::move(other.value_conditions))
-        , target_sink_ids(std::move(other.target_sink_ids))
-        , load_balance_strategy(other.load_balance_strategy)
-        , sink_weights(std::move(other.sink_weights))
-        , enable_failover(other.enable_failover)
-        , backup_sink_ids(std::move(other.backup_sink_ids))
-        , failover_timeout(other.failover_timeout)
-        , custom_condition(std::move(other.custom_condition))
-        , custom_target_selector(std::move(other.custom_target_selector))
-        , enable_batching(other.enable_batching)
-        , batch_size(other.batch_size)
-        , batch_timeout(other.batch_timeout)
-        , match_count(other.match_count.load())
-        , success_count(other.success_count.load())
-        , failure_count(other.failure_count.load())
-        , total_processing_time_ns(other.total_processing_time_ns.load())
-    {}
+        : rule_id(other.rule_id), name(std::move(other.name)), type(other.type),
+          priority(other.priority), enabled(other.enabled),
+          source_addresses(std::move(other.source_addresses)),
+          protocol_ids(std::move(other.protocol_ids)),
+          address_pattern(std::move(other.address_pattern)),
+          quality_levels(std::move(other.quality_levels)), start_time(other.start_time),
+          end_time(other.end_time), value_conditions(std::move(other.value_conditions)),
+          target_sink_ids(std::move(other.target_sink_ids)),
+          load_balance_strategy(other.load_balance_strategy),
+          sink_weights(std::move(other.sink_weights)), enable_failover(other.enable_failover),
+          backup_sink_ids(std::move(other.backup_sink_ids)),
+          failover_timeout(other.failover_timeout),
+          custom_condition(std::move(other.custom_condition)),
+          custom_target_selector(std::move(other.custom_target_selector)),
+          enable_batching(other.enable_batching), batch_size(other.batch_size),
+          batch_timeout(other.batch_timeout), match_count(other.match_count.load()),
+          success_count(other.success_count.load()), failure_count(other.failure_count.load()),
+          total_processing_time_ns(other.total_processing_time_ns.load()) {}
 
     // Copy assignment
     RoutingRule& operator=(const RoutingRule& other) {
         if (this != &other) {
-            rule_id = other.rule_id;
-            name = other.name;
-            type = other.type;
-            priority = other.priority;
-            enabled = other.enabled;
-            source_addresses = other.source_addresses;
-            protocol_ids = other.protocol_ids;
-            address_pattern = other.address_pattern;
-            quality_levels = other.quality_levels;
-            start_time = other.start_time;
-            end_time = other.end_time;
-            value_conditions = other.value_conditions;
-            target_sink_ids = other.target_sink_ids;
-            load_balance_strategy = other.load_balance_strategy;
-            sink_weights = other.sink_weights;
-            enable_failover = other.enable_failover;
-            backup_sink_ids = other.backup_sink_ids;
-            failover_timeout = other.failover_timeout;
-            custom_condition = other.custom_condition;
+            rule_id                = other.rule_id;
+            name                   = other.name;
+            type                   = other.type;
+            priority               = other.priority;
+            enabled                = other.enabled;
+            source_addresses       = other.source_addresses;
+            protocol_ids           = other.protocol_ids;
+            address_pattern        = other.address_pattern;
+            quality_levels         = other.quality_levels;
+            start_time             = other.start_time;
+            end_time               = other.end_time;
+            value_conditions       = other.value_conditions;
+            target_sink_ids        = other.target_sink_ids;
+            load_balance_strategy  = other.load_balance_strategy;
+            sink_weights           = other.sink_weights;
+            enable_failover        = other.enable_failover;
+            backup_sink_ids        = other.backup_sink_ids;
+            failover_timeout       = other.failover_timeout;
+            custom_condition       = other.custom_condition;
             custom_target_selector = other.custom_target_selector;
-            enable_batching = other.enable_batching;
-            batch_size = other.batch_size;
-            batch_timeout = other.batch_timeout;
+            enable_batching        = other.enable_batching;
+            batch_size             = other.batch_size;
+            batch_timeout          = other.batch_timeout;
             match_count.store(other.match_count.load());
             success_count.store(other.success_count.load());
             failure_count.store(other.failure_count.load());
@@ -283,29 +269,29 @@ struct RoutingRule {
     // Move assignment
     RoutingRule& operator=(RoutingRule&& other) noexcept {
         if (this != &other) {
-            rule_id = other.rule_id;
-            name = std::move(other.name);
-            type = other.type;
-            priority = other.priority;
-            enabled = other.enabled;
-            source_addresses = std::move(other.source_addresses);
-            protocol_ids = std::move(other.protocol_ids);
-            address_pattern = std::move(other.address_pattern);
-            quality_levels = std::move(other.quality_levels);
-            start_time = other.start_time;
-            end_time = other.end_time;
-            value_conditions = std::move(other.value_conditions);
-            target_sink_ids = std::move(other.target_sink_ids);
-            load_balance_strategy = other.load_balance_strategy;
-            sink_weights = std::move(other.sink_weights);
-            enable_failover = other.enable_failover;
-            backup_sink_ids = std::move(other.backup_sink_ids);
-            failover_timeout = other.failover_timeout;
-            custom_condition = std::move(other.custom_condition);
+            rule_id                = other.rule_id;
+            name                   = std::move(other.name);
+            type                   = other.type;
+            priority               = other.priority;
+            enabled                = other.enabled;
+            source_addresses       = std::move(other.source_addresses);
+            protocol_ids           = std::move(other.protocol_ids);
+            address_pattern        = std::move(other.address_pattern);
+            quality_levels         = std::move(other.quality_levels);
+            start_time             = other.start_time;
+            end_time               = other.end_time;
+            value_conditions       = std::move(other.value_conditions);
+            target_sink_ids        = std::move(other.target_sink_ids);
+            load_balance_strategy  = other.load_balance_strategy;
+            sink_weights           = std::move(other.sink_weights);
+            enable_failover        = other.enable_failover;
+            backup_sink_ids        = std::move(other.backup_sink_ids);
+            failover_timeout       = other.failover_timeout;
+            custom_condition       = std::move(other.custom_condition);
             custom_target_selector = std::move(other.custom_target_selector);
-            enable_batching = other.enable_batching;
-            batch_size = other.batch_size;
-            batch_timeout = other.batch_timeout;
+            enable_batching        = other.enable_batching;
+            batch_size             = other.batch_size;
+            batch_timeout          = other.batch_timeout;
             match_count.store(other.match_count.load());
             success_count.store(other.success_count.load());
             failure_count.store(other.failure_count.load());
@@ -343,12 +329,12 @@ struct RouterConfig {
     core::SinkRegistryConfig sink_registry;
 
     // Router-specific settings
-    bool enable_dead_letter_queue = true;
+    bool enable_dead_letter_queue   = true;
     std::string dead_letter_sink_id = "dead_letter";
 
     // Debug/logging settings
     common::debug::LogLevel log_level = common::debug::LogLevel::INFO;
-    bool enable_tracing = true;
+    bool enable_tracing               = true;
 
     // Validation
     IPB_NODISCARD common::Result<> validate() const;
@@ -395,7 +381,7 @@ struct RouterConfig {
  */
 class Router : public common::IIPBComponent {
 public:
-    static constexpr std::string_view COMPONENT_NAME = "IPBRouter";
+    static constexpr std::string_view COMPONENT_NAME    = "IPBRouter";
     static constexpr std::string_view COMPONENT_VERSION = "2.0.0";
 
     Router();
@@ -403,7 +389,7 @@ public:
     ~Router() override;
 
     // Non-copyable, movable
-    Router(const Router&) = delete;
+    Router(const Router&)            = delete;
     Router& operator=(const Router&) = delete;
     Router(Router&&) noexcept;
     Router& operator=(Router&&) noexcept;
@@ -438,17 +424,15 @@ public:
      * @param sink The sink implementation
      * @return Success or error with code INVALID_ARGUMENT, ALREADY_EXISTS
      */
-    IPB_NODISCARD common::Result<> register_sink(
-        std::string_view sink_id,
-        std::shared_ptr<common::IIPBSink> sink);
+    IPB_NODISCARD common::Result<> register_sink(std::string_view sink_id,
+                                                 std::shared_ptr<common::IIPBSink> sink);
 
     /**
      * @brief Register a sink with weight for load balancing
      */
-    IPB_NODISCARD common::Result<> register_sink(
-        std::string_view sink_id,
-        std::shared_ptr<common::IIPBSink> sink,
-        uint32_t weight);
+    IPB_NODISCARD common::Result<> register_sink(std::string_view sink_id,
+                                                 std::shared_ptr<common::IIPBSink> sink,
+                                                 uint32_t weight);
 
     /**
      * @brief Unregister a sink
@@ -531,9 +515,8 @@ public:
     /**
      * @brief Route a message with explicit deadline
      */
-    IPB_NODISCARD common::Result<> route_with_deadline(
-        const common::DataPoint& data_point,
-        common::Timestamp deadline);
+    IPB_NODISCARD common::Result<> route_with_deadline(const common::DataPoint& data_point,
+                                                       common::Timestamp deadline);
 
     /**
      * @brief Route a batch of messages
@@ -575,9 +558,9 @@ public:
 
     struct Metrics {
         // Throughput
-        uint64_t total_messages = 0;
+        uint64_t total_messages    = 0;
         uint64_t successful_routes = 0;
-        uint64_t failed_routes = 0;
+        uint64_t failed_routes     = 0;
         double messages_per_second = 0.0;
 
         // Latency
@@ -586,14 +569,14 @@ public:
         double max_routing_time_us = 0.0;
 
         // Deadlines
-        uint64_t deadlines_met = 0;
-        uint64_t deadlines_missed = 0;
+        uint64_t deadlines_met          = 0;
+        uint64_t deadlines_missed       = 0;
         double deadline_compliance_rate = 100.0;
 
         // Rule engine
-        uint64_t rule_evaluations = 0;
+        uint64_t rule_evaluations    = 0;
         double avg_rule_eval_time_ns = 0.0;
-        double cache_hit_rate = 0.0;
+        double cache_hit_rate        = 0.0;
 
         // Sink registry
         uint64_t sink_selections = 0;
@@ -602,7 +585,7 @@ public:
         // Message bus
         uint64_t messages_published = 0;
         uint64_t messages_delivered = 0;
-        uint64_t queue_overflows = 0;
+        uint64_t queue_overflows    = 0;
     };
 
     /**
@@ -648,9 +631,8 @@ private:
 
     // Internal routing logic
     void handle_message(const core::Message& msg);
-    common::Result<> dispatch_to_sinks(
-        const common::DataPoint& dp,
-        const std::vector<core::RuleMatchResult>& matches);
+    common::Result<> dispatch_to_sinks(const common::DataPoint& dp,
+                                       const std::vector<core::RuleMatchResult>& matches);
 
     // Rule conversion helpers
     static core::RoutingRule convert_rule(const RoutingRule& legacy);
@@ -741,4 +723,4 @@ private:
     uint32_t rule_id_counter_ = 1;
 };
 
-} // namespace ipb::router
+}  // namespace ipb::router

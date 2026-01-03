@@ -4,9 +4,10 @@
  */
 
 #include <ipb/common/endpoint.hpp>
-#include <functional>
+
 #include <algorithm>
 #include <charconv>
+#include <functional>
 
 namespace ipb::common {
 
@@ -24,7 +25,7 @@ EndPoint EndPoint::from_url(std::string_view url) {
     }
 
     std::string_view scheme = url.substr(0, scheme_end);
-    std::string_view rest = url.substr(scheme_end + 3);
+    std::string_view rest   = url.substr(scheme_end + 3);
 
     // Determine protocol from scheme
     if (scheme == "tcp") {
@@ -66,7 +67,7 @@ EndPoint EndPoint::from_url(std::string_view url) {
     auto at_pos = rest.find('@');
     if (at_pos != std::string_view::npos) {
         std::string_view credentials = rest.substr(0, at_pos);
-        rest = rest.substr(at_pos + 1);
+        rest                         = rest.substr(at_pos + 1);
 
         auto colon_pos = credentials.find(':');
         if (colon_pos != std::string_view::npos) {
@@ -79,8 +80,8 @@ EndPoint EndPoint::from_url(std::string_view url) {
 
     // Parse host and port
     auto path_start = rest.find('/');
-    std::string_view host_port = (path_start != std::string_view::npos) ?
-        rest.substr(0, path_start) : rest;
+    std::string_view host_port =
+        (path_start != std::string_view::npos) ? rest.substr(0, path_start) : rest;
 
     if (path_start != std::string_view::npos) {
         ep.set_path(rest.substr(path_start));
@@ -94,7 +95,7 @@ EndPoint EndPoint::from_url(std::string_view url) {
 
             if (bracket_end + 1 < host_port.size() && host_port[bracket_end + 1] == ':') {
                 std::string_view port_str = host_port.substr(bracket_end + 2);
-                uint16_t port = 0;
+                uint16_t port             = 0;
                 std::from_chars(port_str.data(), port_str.data() + port_str.size(), port);
                 ep.set_port(port);
             }
@@ -105,7 +106,7 @@ EndPoint EndPoint::from_url(std::string_view url) {
         if (port_pos != std::string_view::npos) {
             ep.set_host(host_port.substr(0, port_pos));
             std::string_view port_str = host_port.substr(port_pos + 1);
-            uint16_t port = 0;
+            uint16_t port             = 0;
             std::from_chars(port_str.data(), port_str.data() + port_str.size(), port);
             ep.set_port(port);
         } else {
@@ -113,15 +114,20 @@ EndPoint EndPoint::from_url(std::string_view url) {
 
             // Set default ports based on protocol
             switch (ep.protocol()) {
-                case Protocol::HTTP: ep.set_port(80); break;
-                case Protocol::HTTPS: ep.set_port(443); break;
+                case Protocol::HTTP:
+                    ep.set_port(80);
+                    break;
+                case Protocol::HTTPS:
+                    ep.set_port(443);
+                    break;
                 case Protocol::MQTT:
                     ep.set_port(ep.security_level() == SecurityLevel::TLS ? 8883 : 1883);
                     break;
                 case Protocol::WEBSOCKET:
                     ep.set_port(ep.security_level() == SecurityLevel::TLS ? 443 : 80);
                     break;
-                default: break;
+                default:
+                    break;
             }
         }
     }
@@ -149,7 +155,7 @@ size_t EndPoint::hash() const noexcept {
 namespace rt {
 
 bool CPUAffinity::set_thread_affinity([[maybe_unused]] std::thread::id thread_id,
-                                       [[maybe_unused]] int cpu_id) noexcept {
+                                      [[maybe_unused]] int cpu_id) noexcept {
 #ifdef __linux__
     // Linux implementation would require converting thread::id to pthread_t
     // This is platform-specific and may not be portable
@@ -195,7 +201,7 @@ bool CPUAffinity::isolate_cpu([[maybe_unused]] int cpu_id) noexcept {
 }
 
 bool ThreadPriority::set_thread_priority([[maybe_unused]] std::thread::id thread_id,
-                                          [[maybe_unused]] Level priority) noexcept {
+                                         [[maybe_unused]] Level priority) noexcept {
 #ifdef __linux__
     // Linux implementation would require converting thread::id to pthread_t
     return false;
@@ -210,13 +216,13 @@ bool ThreadPriority::set_current_thread_priority([[maybe_unused]] Level priority
     int policy;
 
     if (priority == Level::REALTIME) {
-        policy = SCHED_FIFO;
+        policy               = SCHED_FIFO;
         param.sched_priority = 99;
     } else if (priority >= Level::HIGH) {
-        policy = SCHED_FIFO;
+        policy               = SCHED_FIFO;
         param.sched_priority = static_cast<int>(priority);
     } else {
-        policy = SCHED_OTHER;
+        policy               = SCHED_OTHER;
         param.sched_priority = 0;
     }
 
@@ -227,7 +233,7 @@ bool ThreadPriority::set_current_thread_priority([[maybe_unused]] Level priority
 }
 
 bool ThreadPriority::set_realtime_priority([[maybe_unused]] std::thread::id thread_id,
-                                            [[maybe_unused]] int priority) noexcept {
+                                           [[maybe_unused]] int priority) noexcept {
 #ifdef __linux__
     return false;
 #else
@@ -245,6 +251,6 @@ bool ThreadPriority::set_current_realtime_priority([[maybe_unused]] int priority
 #endif
 }
 
-} // namespace rt
+}  // namespace rt
 
-} // namespace ipb::common
+}  // namespace ipb::common

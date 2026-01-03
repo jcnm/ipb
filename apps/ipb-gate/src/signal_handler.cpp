@@ -1,6 +1,7 @@
 #include <ipb/gate/signal_handler.hpp>
-#include <iostream>
+
 #include <csignal>
+#include <iostream>
 
 namespace ipb {
 namespace gate {
@@ -15,9 +16,7 @@ extern "C" void signal_handler_function(int signal) {
     }
 }
 
-SignalHandler::SignalHandler() 
-    : shutdown_requested_(false)
-{
+SignalHandler::SignalHandler() : shutdown_requested_(false) {
     g_signal_handler = this;
 }
 
@@ -29,39 +28,40 @@ void SignalHandler::install_handlers() {
     // Install signal handlers for graceful shutdown
     std::signal(SIGINT, signal_handler_function);   // Ctrl+C
     std::signal(SIGTERM, signal_handler_function);  // Termination request
-    
-    #ifndef _WIN32
+
+#ifndef _WIN32
     std::signal(SIGHUP, signal_handler_function);   // Hangup (reload config)
     std::signal(SIGUSR1, signal_handler_function);  // User signal 1
     std::signal(SIGUSR2, signal_handler_function);  // User signal 2
-    #endif
+#endif
 }
 
 void SignalHandler::handle_signal(int signal) {
     switch (signal) {
         case SIGINT:
         case SIGTERM:
-            std::cout << "\nReceived shutdown signal (" << signal << "). Initiating graceful shutdown..." << std::endl;
+            std::cout << "\nReceived shutdown signal (" << signal
+                      << "). Initiating graceful shutdown..." << std::endl;
             shutdown_requested_ = true;
             break;
-            
-        #ifndef _WIN32
+
+#ifndef _WIN32
         case SIGHUP:
             std::cout << "Received SIGHUP. Reloading configuration..." << std::endl;
             // TODO: Implement config reload
             break;
-            
+
         case SIGUSR1:
             std::cout << "Received SIGUSR1. Printing statistics..." << std::endl;
             // TODO: Implement statistics printing
             break;
-            
+
         case SIGUSR2:
             std::cout << "Received SIGUSR2. Toggling debug mode..." << std::endl;
             // TODO: Implement debug mode toggle
             break;
-        #endif
-            
+#endif
+
         default:
             std::cout << "Received unknown signal: " << signal << std::endl;
             break;
@@ -76,6 +76,5 @@ void SignalHandler::reset_shutdown_request() {
     shutdown_requested_ = false;
 }
 
-} // namespace gate
-} // namespace ipb
-
+}  // namespace gate
+}  // namespace ipb

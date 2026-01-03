@@ -1,0 +1,474 @@
+# IPB Benchmark CI Workflow
+# Runs benchmarks and stores results as artifacts
+# Compares with baseline and posts results to PR
+# Includes memory profiling and scalability tests
+
+name: Benchmarks
+
+on:
+  push:
+    branches: [main, develop, 'claude/*']
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run nightly for trend tracking
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: 'Git ref to compare against'
+        required: false
+        default: 'main'
+      run_memory_benchmarks:
+        description: 'Run memory profiling benchmarks'
+        type: boolean
+        default: true
+      run_scalability_tests:
+        description: 'Run multi-threaded scalability tests'
+        type: boolean
+        default: true
+      threads_list:
+        description: 'Thread counts for scalability (comma-separated)'
+        required: false
+        default: '1,2,4,8'
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  # ===========================================================================
+  # Performance Benchmarks
+  # ===========================================================================
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for baseline comparison
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential cmake ninja-build \
+          libssl-dev libcurl4-openssl-dev \
+          libjsoncpp-dev libprotobuf-dev protobuf-compiler \
+          libbenchmark-dev
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DIPB_BUILD_MODE=SERVER \
+          -DIPB_BUILD_BENCHMARKS=ON \
+          -DENABLE_OPTIMIZATIONS=ON
+
+    - name: Build
+      run: cmake --build build --target ipb-benchmark --parallel $(nproc)
+
+    - name: Run benchmarks
+      run: |
+        mkdir -p benchmark-results
+        ./build/benchmarks/ipb-benchmark \
+          --category=all \
+          --output=benchmark-results \
+          --json \
+          --verbose
+        # Copy the latest JSON result to current.json for comparison
+        LATEST=$(ls -t benchmark-results/*.json 2>/dev/null | head -1)
+        if [ -n "$LATEST" ]; then
+          cp "$LATEST" benchmark-results/current.json
+        fi
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ github.sha }}
+        path: benchmark-results/
+        retention-days: 90
+
+    - name: Download baseline (if exists)
+      if: github.event_name == 'pull_request'
+      continue-on-error: true
+      uses: dawidd6/action-download-artifact@v12
+      with:
+        workflow: benchmarks.yml
+        branch: ${{ github.base_ref }}
+        name: benchmark-results-*
+        path: benchmark-baseline/
+
+    - name: Compare with baseline
+      if: github.event_name == 'pull_request'
+      id: compare
+      run: |
+        if [ -f benchmark-baseline/current.json ]; then
+          python3 scripts/compare-benchmarks.py \
+            --baseline benchmark-baseline/current.json \
+            --current benchmark-results/current.json \
+            --output comparison.md \
+            --threshold 10
+
+          echo "has_comparison=true" >> $GITHUB_OUTPUT
+
+          # Check for regressions
+          if grep -q "🔴 REGRESSION" comparison.md; then
+            echo "has_regression=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_regression=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "No baseline found for comparison"
+          echo "has_comparison=false" >> $GITHUB_OUTPUT
+          echo "has_regression=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Post comparison to PR
+      if: github.event_name == 'pull_request' && steps.compare.outputs.has_comparison == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const comparison = fs.readFileSync('comparison.md', 'utf8');
+
+          // Find existing benchmark comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('📊 Benchmark Results')
+          );
+
+          const body = '## 📊 Benchmark Results\n\n' + comparison;
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+          }
+
+    - name: Check for regressions
+      if: github.event_name == 'pull_request'
+      run: |
+        if [ "${{ steps.compare.outputs.has_regression }}" == "true" ]; then
+          echo "::warning::Performance regression detected! Review benchmark results."
+          # Uncomment to fail on regression:
+          # exit 1
+        fi
+
+  # ===========================================================================
+  # Memory Benchmarks
+  # ===========================================================================
+  memory-benchmark:
+    name: Memory Benchmarks
+    runs-on: ubuntu-24.04
+    if: |
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.run_memory_benchmarks == 'true'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential cmake ninja-build \
+          libssl-dev libcurl4-openssl-dev \
+          libjsoncpp-dev \
+          valgrind heaptrack
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DIPB_BUILD_MODE=SERVER \
+          -DIPB_BUILD_BENCHMARKS=ON
+
+    - name: Build
+      run: cmake --build build --target ipb-benchmark --parallel $(nproc)
+
+    - name: Run Memory Benchmarks with Massif
+      run: |
+        mkdir -p memory-results
+
+        # Run with Valgrind massif for heap profiling
+        valgrind --tool=massif \
+          --massif-out-file=memory-results/massif.out \
+          --stacks=yes \
+          --detailed-freq=1 \
+          ./build/benchmarks/ipb-benchmark \
+          --category=core \
+          --verbose 2>&1 || true
+
+        # Generate text report
+        ms_print memory-results/massif.out > memory-results/massif-report.txt 2>&1 || true
+
+        # Extract peak memory usage
+        if [ -f memory-results/massif.out ]; then
+          PEAK=$(grep -E "^mem_heap_B=" memory-results/massif.out | \
+            cut -d= -f2 | sort -n | tail -1)
+          if [ -n "$PEAK" ]; then
+            echo "Peak heap usage: $((PEAK / 1024 / 1024)) MB"
+            echo "peak_heap_mb=$((PEAK / 1024 / 1024))" >> memory-results/summary.txt
+          fi
+        fi
+      continue-on-error: true
+
+    - name: Run Heaptrack Analysis
+      run: |
+        # Run with heaptrack for detailed allocation tracking
+        heaptrack ./build/benchmarks/ipb-benchmark \
+          --category=core \
+          --verbose 2>&1 || true
+
+        # Find and analyze the heaptrack output
+        HEAPTRACK_FILE=$(ls -t heaptrack.ipb-benchmark.*.gz 2>/dev/null | head -1)
+        if [ -n "$HEAPTRACK_FILE" ]; then
+          heaptrack_print "$HEAPTRACK_FILE" > memory-results/heaptrack-report.txt 2>&1 || true
+          mv "$HEAPTRACK_FILE" memory-results/
+        fi
+      continue-on-error: true
+
+    - name: Generate Memory Summary
+      run: |
+        echo "## Memory Benchmark Summary" > memory-results/SUMMARY.md
+        echo "" >> memory-results/SUMMARY.md
+        echo "### Peak Memory Usage" >> memory-results/SUMMARY.md
+        if [ -f memory-results/summary.txt ]; then
+          cat memory-results/summary.txt >> memory-results/SUMMARY.md
+        fi
+        echo "" >> memory-results/SUMMARY.md
+        echo "### Massif Report (top allocations)" >> memory-results/SUMMARY.md
+        echo '```' >> memory-results/SUMMARY.md
+        head -100 memory-results/massif-report.txt >> memory-results/SUMMARY.md 2>/dev/null || echo "No massif report available"
+        echo '```' >> memory-results/SUMMARY.md
+
+    - name: Upload Memory Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: memory-benchmark-results-${{ github.sha }}
+        path: memory-results/
+        retention-days: 30
+
+  # ===========================================================================
+  # Scalability Tests (Multi-threaded)
+  # ===========================================================================
+  scalability-benchmark:
+    name: Scalability Benchmarks
+    runs-on: ubuntu-24.04
+    if: |
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.run_scalability_tests == 'true'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential cmake ninja-build \
+          libssl-dev libcurl4-openssl-dev \
+          libjsoncpp-dev
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DIPB_BUILD_MODE=SERVER \
+          -DIPB_BUILD_BENCHMARKS=ON \
+          -DENABLE_OPTIMIZATIONS=ON
+
+    - name: Build
+      run: cmake --build build --target ipb-benchmark --parallel $(nproc)
+
+    - name: Run Scalability Tests
+      run: |
+        mkdir -p scalability-results
+
+        echo "## Scalability Test Results" > scalability-results/SUMMARY.md
+        echo "" >> scalability-results/SUMMARY.md
+        echo "Running benchmark with all categories..." >> scalability-results/SUMMARY.md
+        echo "" >> scalability-results/SUMMARY.md
+
+        # Run full benchmark suite
+        ./build/benchmarks/ipb-benchmark \
+          --category=all \
+          --output=scalability-results \
+          --json \
+          --verbose 2>&1 || true
+
+        # Copy the latest JSON result
+        LATEST=$(ls -t scalability-results/*.json 2>/dev/null | head -1)
+        if [ -n "$LATEST" ]; then
+          echo "### Results" >> scalability-results/SUMMARY.md
+          echo "Benchmark results saved to: $LATEST" >> scalability-results/SUMMARY.md
+        fi
+
+        cat scalability-results/SUMMARY.md
+
+    - name: Generate Scaling Graph Data
+      run: |
+        python3 -c "
+        import json, os
+        results = []
+        for f in os.listdir('scalability-results'):
+            if f.startswith('scaling-') and f.endswith('.json'):
+                threads = int(f.split('-')[1].split('.')[0])
+                try:
+                    with open(f'scalability-results/{f}') as fp:
+                        data = json.load(fp)
+                        for b in data.get('benchmarks', []):
+                            results.append({'threads': threads, 'name': b.get('name', ''), 'time_ns': b.get('real_time', 0), 'iterations': b.get('iterations', 0)})
+                except: pass
+        with open('scalability-results/scaling-data.json', 'w') as f:
+            json.dump(results, f, indent=2)
+        "
+      continue-on-error: true
+
+    - name: Upload Scalability Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: scalability-results-${{ github.sha }}
+        path: scalability-results/
+        retention-days: 30
+
+  # ===========================================================================
+  # Store Historical Results (for trending)
+  # ===========================================================================
+  store-results:
+    name: Store Historical Results
+    needs: [benchmark, memory-benchmark, scalability-benchmark]
+    runs-on: ubuntu-24.04
+    if: |
+      always() &&
+      needs.benchmark.result == 'success' &&
+      github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download benchmark results
+      uses: actions/download-artifact@v4
+      with:
+        name: benchmark-results-${{ github.sha }}
+        path: results/
+
+    - name: Download memory results
+      uses: actions/download-artifact@v4
+      with:
+        name: memory-benchmark-results-${{ github.sha }}
+        path: memory-results/
+      continue-on-error: true
+
+    - name: Download scalability results
+      uses: actions/download-artifact@v4
+      with:
+        name: scalability-results-${{ github.sha }}
+        path: scalability-results/
+      continue-on-error: true
+
+    - name: Push to metrics branch
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Create or checkout metrics branch
+        git fetch origin metrics:metrics 2>/dev/null || git checkout --orphan metrics
+        git checkout metrics || git checkout --orphan metrics
+
+        # Add timestamped results
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        mkdir -p history
+
+        # Copy performance results
+        if [ -f results/current.json ]; then
+          cp results/current.json "history/${TIMESTAMP}_${{ github.sha }}_perf.json"
+        fi
+
+        # Copy memory results
+        if [ -f memory-results/summary.txt ]; then
+          cp memory-results/summary.txt "history/${TIMESTAMP}_${{ github.sha }}_memory.txt"
+        fi
+
+        # Keep only last 100 results
+        ls -t history/*.json 2>/dev/null | tail -n +101 | xargs -r rm
+
+        git add history/
+        git commit -m "Add benchmark results for ${{ github.sha }}" || true
+        git push origin metrics || true
+      continue-on-error: true
+
+    - name: Update Benchmark Trend
+      uses: benchmark-action/github-action-benchmark@v1
+      continue-on-error: true
+      with:
+        tool: 'customSmallerIsBetter'
+        output-file-path: results/current.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        alert-threshold: '150%'
+        comment-on-alert: true
+        fail-on-alert: false
+        alert-comment-cc-users: '@jcnm'
+
+  # ===========================================================================
+  # Benchmark Summary
+  # ===========================================================================
+  benchmark-summary:
+    name: Benchmark Summary
+    needs: [benchmark, memory-benchmark, scalability-benchmark]
+    runs-on: ubuntu-24.04
+    if: always()
+
+    steps:
+    - name: Generate Summary
+      run: |
+        echo "# 📊 Benchmark Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        echo "| Benchmark Type | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|---------------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Performance | ${{ needs.benchmark.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Memory | ${{ needs.memory-benchmark.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Scalability | ${{ needs.scalability-benchmark.result }} |" >> $GITHUB_STEP_SUMMARY
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **benchmark-results-${{ github.sha }}**: Performance benchmark JSON" >> $GITHUB_STEP_SUMMARY
+        echo "- **memory-benchmark-results-${{ github.sha }}**: Massif and heaptrack reports" >> $GITHUB_STEP_SUMMARY
+        echo "- **scalability-results-${{ github.sha }}**: Multi-threaded scaling data" >> $GITHUB_STEP_SUMMARY
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Download from workflow artifacts." >> $GITHUB_STEP_SUMMARY
+
+    - name: Notify on Failure
+      if: |
+        needs.benchmark.result == 'failure' ||
+        needs.memory-benchmark.result == 'failure'
+      run: |
+        echo "::error::One or more benchmark jobs failed!"
+        # Add webhook notification here if needed

@@ -8,11 +8,28 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find dependencies
-find_package(PkgConfig REQUIRED)
+# PkgConfig is optional on Windows
+if(NOT WIN32)
+    find_package(PkgConfig REQUIRED)
+else()
+    find_package(PkgConfig QUIET)
+endif()
 # Find jsoncpp (avoid conflicts)
-if(NOT TARGET jsoncpp_lib AND NOT TARGET JsonCpp::JsonCpp)
+set(SYSLOG_JSONCPP_TARGET "")
+if(TARGET jsoncpp_lib)
+    set(SYSLOG_JSONCPP_TARGET jsoncpp_lib)
+elseif(TARGET JsonCpp::JsonCpp)
+    set(SYSLOG_JSONCPP_TARGET JsonCpp::JsonCpp)
+else()
     find_package(jsoncpp QUIET)
-    if(NOT jsoncpp_FOUND)
+    if(jsoncpp_FOUND)
+        if(TARGET jsoncpp_lib)
+            set(SYSLOG_JSONCPP_TARGET jsoncpp_lib)
+        elseif(TARGET JsonCpp::JsonCpp)
+            set(SYSLOG_JSONCPP_TARGET JsonCpp::JsonCpp)
+        endif()
+    endif()
+    if(NOT SYSLOG_JSONCPP_TARGET AND PkgConfig_FOUND)
         pkg_check_modules(JSONCPP REQUIRED jsoncpp)
     endif()
 endif()
@@ -34,16 +51,33 @@ add_library(ipb-sink-syslog SHARED ${SYSLOG_SINK_SOURCES})
 # Link libraries
 target_link_libraries(ipb-sink-syslog
     ipb-common
-    jsoncpp_lib
-    pthread
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-sink-syslog pthread)
+endif()
+
+# Link jsoncpp based on how it was found
+if(SYSLOG_JSONCPP_TARGET)
+    target_link_libraries(ipb-sink-syslog ${SYSLOG_JSONCPP_TARGET})
+elseif(JSONCPP_FOUND)
+    target_include_directories(ipb-sink-syslog PRIVATE ${JSONCPP_INCLUDE_DIRS})
+    target_link_directories(ipb-sink-syslog PRIVATE ${JSONCPP_LIBRARY_DIRS})
+    target_link_libraries(ipb-sink-syslog ${JSONCPP_LIBRARIES})
+endif()
 
 # Compiler flags
-target_compile_options(ipb-sink-syslog PRIVATE
-    -Wall -Wextra -Wpedantic
-    -O3 -march=native
-    -fPIC
-)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ipb-sink-syslog PRIVATE
+        -Wall -Wextra -Wpedantic
+        -O3
+        -fPIC
+    )
+    if(NOT APPLE)
+        target_compile_options(ipb-sink-syslog PRIVATE -march=native)
+    endif()
+elseif(MSVC)
+    target_compile_options(ipb-sink-syslog PRIVATE /W4 /O2)
+endif()
 
 # Install targets
 install(TARGETS ipb-sink-syslog

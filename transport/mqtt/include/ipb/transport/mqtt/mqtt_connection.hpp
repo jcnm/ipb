@@ -18,17 +18,17 @@
  * - Runtime: ConnectionConfig::backend field
  */
 
-#include "backends/mqtt_backend.hpp"
-
-#include <memory>
-#include <string>
-#include <functional>
 #include <atomic>
-#include <mutex>
-#include <unordered_map>
 #include <chrono>
-#include <vector>
+#include <functional>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "backends/mqtt_backend.hpp"
 
 namespace ipb::transport::mqtt {
 
@@ -42,14 +42,14 @@ namespace ipb::transport::mqtt {
  * @brief TLS/SSL configuration
  */
 struct TLSConfig {
-    std::string ca_cert_path;           ///< CA certificate file path
-    std::string client_cert_path;       ///< Client certificate file path
-    std::string client_key_path;        ///< Client private key file path
-    std::string psk_identity;           ///< PSK identity (for TLS_PSK)
-    std::string psk_key;                ///< PSK key (for TLS_PSK)
-    bool verify_hostname = true;        ///< Verify server hostname
-    bool verify_certificate = true;     ///< Verify server certificate
-    bool verify_server = true;          ///< Verify server (alias for verify_certificate)
+    std::string ca_cert_path;                 ///< CA certificate file path
+    std::string client_cert_path;             ///< Client certificate file path
+    std::string client_key_path;              ///< Client private key file path
+    std::string psk_identity;                 ///< PSK identity (for TLS_PSK)
+    std::string psk_key;                      ///< PSK key (for TLS_PSK)
+    bool verify_hostname    = true;           ///< Verify server hostname
+    bool verify_certificate = true;           ///< Verify server certificate
+    bool verify_server      = true;           ///< Verify server (alias for verify_certificate)
     std::vector<std::string> alpn_protocols;  ///< ALPN protocols
 };
 
@@ -60,7 +60,7 @@ struct LWTConfig {
     bool enabled = false;
     std::string topic;
     std::string payload;
-    QoS qos = QoS::AT_LEAST_ONCE;
+    QoS qos       = QoS::AT_LEAST_ONCE;
     bool retained = false;
 };
 
@@ -73,7 +73,7 @@ struct ConnectionConfig {
 
     // Broker settings
     std::string broker_url = "tcp://localhost:1883";
-    std::string client_id;              ///< Empty = auto-generated
+    std::string client_id;  ///< Empty = auto-generated
 
     // Authentication
     std::string username;
@@ -81,7 +81,7 @@ struct ConnectionConfig {
 
     // Connection parameters
     std::chrono::seconds keep_alive{60};
-    uint16_t keep_alive_seconds = 60;   ///< Keep-alive in seconds (for backends)
+    uint16_t keep_alive_seconds = 60;  ///< Keep-alive in seconds (for backends)
     std::chrono::seconds connect_timeout{30};
     bool clean_session = true;
 
@@ -89,8 +89,8 @@ struct ConnectionConfig {
     bool auto_reconnect = true;
     std::chrono::seconds min_reconnect_delay{1};
     std::chrono::seconds max_reconnect_delay{60};
-    uint32_t reconnect_delay_seconds = 5;  ///< For backends
-    int max_reconnect_attempts = -1;    ///< -1 = infinite
+    uint32_t reconnect_delay_seconds = 5;   ///< For backends
+    int max_reconnect_attempts       = -1;  ///< -1 = infinite
 
     // Security
     SecurityMode security = SecurityMode::NONE;
@@ -98,21 +98,21 @@ struct ConnectionConfig {
 
     // Last Will and Testament
     LWTConfig lwt;
-    std::string lwt_topic;              ///< For backends
-    std::string lwt_payload;            ///< For backends
-    QoS lwt_qos = QoS::AT_LEAST_ONCE;   ///< For backends
-    bool lwt_retained = false;          ///< For backends
+    std::string lwt_topic;                   ///< For backends
+    std::string lwt_payload;                 ///< For backends
+    QoS lwt_qos       = QoS::AT_LEAST_ONCE;  ///< For backends
+    bool lwt_retained = false;               ///< For backends
 
     // Performance
-    size_t max_inflight = 100;          ///< Max in-flight messages
-    size_t max_buffered = 10000;        ///< Max buffered messages when disconnected
+    size_t max_inflight = 100;    ///< Max in-flight messages
+    size_t max_buffered = 10000;  ///< Max buffered messages when disconnected
 
     // Sync LWT fields from LWTConfig
     void sync_lwt() {
         if (lwt.enabled) {
-            lwt_topic = lwt.topic;
-            lwt_payload = lwt.payload;
-            lwt_qos = lwt.qos;
+            lwt_topic    = lwt.topic;
+            lwt_payload  = lwt.payload;
+            lwt_qos      = lwt.qos;
             lwt_retained = lwt.retained;
         }
     }
@@ -123,12 +123,18 @@ struct ConnectionConfig {
 };
 
 //=============================================================================
-// Callbacks
+// High-Level Callbacks (with owned strings for convenience)
+// Note: ConnectionCallback, MessageCallback, DeliveryCallback with zero-copy
+// signatures are defined in backends/mqtt_backend.hpp. These are higher-level
+// versions that use owned strings for user convenience.
 //=============================================================================
 
-using ConnectionCallback = std::function<void(ConnectionState state, const std::string& reason)>;
-using MessageCallback = std::function<void(const std::string& topic, const std::string& payload, QoS qos, bool retained)>;
-using DeliveryCallback = std::function<void(int token, bool success, const std::string& error)>;
+using HighLevelConnectionCallback =
+    std::function<void(ConnectionState state, const std::string& reason)>;
+using HighLevelMessageCallback = std::function<void(
+    const std::string& topic, const std::string& payload, QoS qos, bool retained)>;
+using HighLevelDeliveryCallback =
+    std::function<void(int token, bool success, const std::string& error)>;
 
 //=============================================================================
 // MQTTConnection - Individual connection wrapper
@@ -160,7 +166,7 @@ public:
     ~MQTTConnection();
 
     // Non-copyable, movable
-    MQTTConnection(const MQTTConnection&) = delete;
+    MQTTConnection(const MQTTConnection&)            = delete;
     MQTTConnection& operator=(const MQTTConnection&) = delete;
     MQTTConnection(MQTTConnection&&) noexcept;
     MQTTConnection& operator=(MQTTConnection&&) noexcept;
@@ -230,27 +236,21 @@ public:
      * @param retained Retain flag
      * @return Delivery token (for tracking)
      */
-    int publish(const std::string& topic,
-                const std::string& payload,
-                QoS qos = QoS::AT_LEAST_ONCE,
+    int publish(const std::string& topic, const std::string& payload, QoS qos = QoS::AT_LEAST_ONCE,
                 bool retained = false);
 
     /**
      * @brief Publish a message (binary payload)
      */
-    int publish(const std::string& topic,
-                const std::vector<uint8_t>& payload,
-                QoS qos = QoS::AT_LEAST_ONCE,
-                bool retained = false);
+    int publish(const std::string& topic, const std::vector<uint8_t>& payload,
+                QoS qos = QoS::AT_LEAST_ONCE, bool retained = false);
 
     /**
      * @brief Publish and wait for completion
      * @return true if delivery confirmed
      */
-    bool publish_sync(const std::string& topic,
-                      const std::string& payload,
-                      QoS qos = QoS::AT_LEAST_ONCE,
-                      bool retained = false,
+    bool publish_sync(const std::string& topic, const std::string& payload,
+                      QoS qos = QoS::AT_LEAST_ONCE, bool retained = false,
                       std::chrono::milliseconds timeout = std::chrono::milliseconds{30000});
 
     //=========================================================================
@@ -287,17 +287,17 @@ public:
     /**
      * @brief Set connection state callback
      */
-    void set_connection_callback(ConnectionCallback cb);
+    void set_connection_callback(HighLevelConnectionCallback cb);
 
     /**
      * @brief Set message received callback
      */
-    void set_message_callback(MessageCallback cb);
+    void set_message_callback(HighLevelMessageCallback cb);
 
     /**
      * @brief Set delivery complete callback
      */
-    void set_delivery_callback(DeliveryCallback cb);
+    void set_delivery_callback(HighLevelDeliveryCallback cb);
 
     //=========================================================================
     // Statistics
@@ -314,11 +314,11 @@ public:
 
         void reset() {
             messages_published = 0;
-            messages_received = 0;
-            messages_failed = 0;
-            bytes_sent = 0;
-            bytes_received = 0;
-            reconnect_count = 0;
+            messages_received  = 0;
+            messages_failed    = 0;
+            bytes_sent         = 0;
+            bytes_received     = 0;
+            reconnect_count    = 0;
         }
     };
 
@@ -367,9 +367,8 @@ public:
      * @param config Connection configuration (used only if creating new)
      * @return Shared pointer to the connection
      */
-    std::shared_ptr<MQTTConnection> get_or_create(
-        const std::string& connection_id,
-        const ConnectionConfig& config);
+    std::shared_ptr<MQTTConnection> get_or_create(const std::string& connection_id,
+                                                  const ConnectionConfig& config);
 
     /**
      * @brief Get an existing connection
@@ -407,7 +406,7 @@ private:
     MQTTConnectionManager() = default;
     ~MQTTConnectionManager();
 
-    MQTTConnectionManager(const MQTTConnectionManager&) = delete;
+    MQTTConnectionManager(const MQTTConnectionManager&)            = delete;
     MQTTConnectionManager& operator=(const MQTTConnectionManager&) = delete;
 
     mutable std::mutex mutex_;
@@ -430,7 +429,8 @@ std::string generate_client_id(const std::string& prefix = "ipb");
  * @param url Broker URL (e.g., "tcp://host:1883", "ssl://host:8883")
  * @return Tuple of (protocol, host, port) or nullopt on error
  */
-std::optional<std::tuple<std::string, std::string, uint16_t>> parse_broker_url(const std::string& url);
+std::optional<std::tuple<std::string, std::string, uint16_t>> parse_broker_url(
+    const std::string& url);
 
 /**
  * @brief Build a broker URL
@@ -440,4 +440,4 @@ std::optional<std::tuple<std::string, std::string, uint16_t>> parse_broker_url(c
  */
 std::string build_broker_url(const std::string& host, uint16_t port, bool use_tls = false);
 
-} // namespace ipb::transport::mqtt
+}  // namespace ipb::transport::mqtt

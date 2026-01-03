@@ -11,15 +11,15 @@
  * - Native IPB (future, ultra-low latency)
  */
 
-#include <cstdint>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
-#include <functional>
-#include <chrono>
-#include <memory>
-#include <span>
-#include <optional>
 
 namespace ipb::transport::mqtt {
 
@@ -38,9 +38,9 @@ struct TLSConfig;
  * @brief Available MQTT backend implementations
  */
 enum class BackendType {
-    PAHO,       ///< Eclipse Paho MQTT (default)
-    COREMQTT,   ///< AWS coreMQTT (embedded)
-    NATIVE      ///< Native IPB implementation (future)
+    PAHO,      ///< Eclipse Paho MQTT (default)
+    COREMQTT,  ///< AWS coreMQTT (embedded)
+    NATIVE     ///< Native IPB implementation (future)
 };
 
 /**
@@ -48,10 +48,14 @@ enum class BackendType {
  */
 constexpr std::string_view backend_type_name(BackendType type) noexcept {
     switch (type) {
-        case BackendType::PAHO: return "paho";
-        case BackendType::COREMQTT: return "coremqtt";
-        case BackendType::NATIVE: return "native";
-        default: return "unknown";
+        case BackendType::PAHO:
+            return "paho";
+        case BackendType::COREMQTT:
+            return "coremqtt";
+        case BackendType::NATIVE:
+            return "native";
+        default:
+            return "unknown";
     }
 }
 
@@ -63,30 +67,24 @@ constexpr std::string_view backend_type_name(BackendType type) noexcept {
  * @brief MQTT Quality of Service levels
  */
 enum class QoS : uint8_t {
-    AT_MOST_ONCE = 0,   ///< Fire and forget
+    AT_MOST_ONCE  = 0,  ///< Fire and forget
     AT_LEAST_ONCE = 1,  ///< Acknowledged delivery
-    EXACTLY_ONCE = 2    ///< Assured delivery (4-way handshake)
+    EXACTLY_ONCE  = 2   ///< Assured delivery (4-way handshake)
 };
 
 /**
  * @brief Connection state
  */
-enum class ConnectionState : uint8_t {
-    DISCONNECTED,
-    CONNECTING,
-    CONNECTED,
-    RECONNECTING,
-    FAILED
-};
+enum class ConnectionState : uint8_t { DISCONNECTED, CONNECTING, CONNECTED, RECONNECTING, FAILED };
 
 /**
  * @brief Security mode
  */
 enum class SecurityMode : uint8_t {
-    NONE,               ///< Plain TCP
-    TLS,                ///< TLS encryption
-    TLS_PSK,            ///< TLS with Pre-Shared Key
-    TLS_CLIENT_CERT     ///< TLS with client certificate
+    NONE,            ///< Plain TCP
+    TLS,             ///< TLS encryption
+    TLS_PSK,         ///< TLS with Pre-Shared Key
+    TLS_CLIENT_CERT  ///< TLS with client certificate
 };
 
 //=============================================================================
@@ -105,12 +103,8 @@ using ConnectionCallback = std::function<void(ConnectionState state, std::string
  * @param qos Message QoS
  * @param retained Was message retained
  */
-using MessageCallback = std::function<void(
-    std::string_view topic,
-    std::span<const uint8_t> payload,
-    QoS qos,
-    bool retained
-)>;
+using MessageCallback = std::function<void(std::string_view topic, std::span<const uint8_t> payload,
+                                           QoS qos, bool retained)>;
 
 /**
  * @brief Delivery complete callback
@@ -127,30 +121,30 @@ using DeliveryCallback = std::function<void(uint16_t token, bool success)>;
  * @brief Backend statistics (zero-overhead when not used)
  */
 struct BackendStats {
-    uint64_t messages_sent = 0;
+    uint64_t messages_sent     = 0;
     uint64_t messages_received = 0;
-    uint64_t messages_failed = 0;
-    uint64_t bytes_sent = 0;
-    uint64_t bytes_received = 0;
-    uint64_t reconnect_count = 0;
+    uint64_t messages_failed   = 0;
+    uint64_t bytes_sent        = 0;
+    uint64_t bytes_received    = 0;
+    uint64_t reconnect_count   = 0;
 
     // Latency tracking (optional)
     uint64_t total_publish_time_ns = 0;
-    uint64_t publish_count = 0;
+    uint64_t publish_count         = 0;
 
     constexpr uint64_t avg_publish_time_ns() const noexcept {
         return publish_count > 0 ? total_publish_time_ns / publish_count : 0;
     }
 
     constexpr void reset() noexcept {
-        messages_sent = 0;
-        messages_received = 0;
-        messages_failed = 0;
-        bytes_sent = 0;
-        bytes_received = 0;
-        reconnect_count = 0;
+        messages_sent         = 0;
+        messages_received     = 0;
+        messages_failed       = 0;
+        bytes_sent            = 0;
+        bytes_received        = 0;
+        reconnect_count       = 0;
         total_publish_time_ns = 0;
-        publish_count = 0;
+        publish_count         = 0;
     }
 };
 
@@ -240,24 +234,15 @@ public:
      * @param retained Retain flag
      * @return Message token (>0) on success, 0 on failure
      */
-    virtual uint16_t publish(
-        std::string_view topic,
-        std::span<const uint8_t> payload,
-        QoS qos = QoS::AT_LEAST_ONCE,
-        bool retained = false
-    ) = 0;
+    virtual uint16_t publish(std::string_view topic, std::span<const uint8_t> payload,
+                             QoS qos = QoS::AT_LEAST_ONCE, bool retained = false) = 0;
 
     /**
      * @brief Publish message (sync with timeout)
      * @return true if delivery confirmed within timeout
      */
-    virtual bool publish_sync(
-        std::string_view topic,
-        std::span<const uint8_t> payload,
-        QoS qos,
-        bool retained,
-        uint32_t timeout_ms
-    ) = 0;
+    virtual bool publish_sync(std::string_view topic, std::span<const uint8_t> payload, QoS qos,
+                              bool retained, uint32_t timeout_ms) = 0;
 
     //=========================================================================
     // Subscribing
@@ -371,4 +356,4 @@ BackendType default_backend_type() noexcept;
  */
 bool is_backend_available(BackendType type) noexcept;
 
-} // namespace ipb::transport::mqtt
+}  // namespace ipb::transport::mqtt

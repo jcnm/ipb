@@ -73,9 +73,8 @@ public:
     };
 
     /// Create a matcher for the given pattern
-    static std::unique_ptr<IPatternMatcher> create(
-        std::string_view pattern,
-        MatcherType type = MatcherType::AUTO);
+    static std::unique_ptr<IPatternMatcher> create(std::string_view pattern,
+                                                   MatcherType type = MatcherType::AUTO);
 
     /// Check if CTRE is available
     static constexpr bool has_ctre() noexcept {
@@ -165,6 +164,215 @@ private:
     std::string pattern_;
 };
 
+/**
+ * @brief Trie-based matcher for O(m) prefix/exact matching
+ *
+ * Uses a trie data structure to efficiently match addresses against
+ * multiple patterns. Ideal for large routing tables with static or
+ * prefix-based rules.
+ *
+ * Performance:
+ * - Lookup: O(m) where m is input string length
+ * - Insert: O(m) where m is pattern length
+ * - Memory: O(n*avg_len) where n is number of patterns
+ *
+ * This is much more efficient than checking each pattern individually
+ * (O(n*m)) when there are many static routing rules.
+ */
+/**
+ * @brief Fast composite pattern matcher for enterprise-grade performance
+ *
+ * Combines multiple matching strategies for optimal performance:
+ * - TrieMatcher for static/prefix patterns (O(m) lookup)
+ * - CompiledPatternCache for regex patterns (cached compilation)
+ * - Automatic strategy selection based on pattern analysis
+ *
+ * Usage:
+ * @code
+ * FastPatternMatcher matcher;
+ *
+ * // Add patterns with their associated data
+ * matcher.add_pattern("sensors/temp1", 1, PatternType::EXACT);
+ * matcher.add_pattern("sensors/+", 2, PatternType::PREFIX);
+ * matcher.add_pattern("alarms/.*", 3, PatternType::REGEX);
+ *
+ * // Fast lookup
+ * auto matches = matcher.find_all_matches("sensors/temp1");
+ * // matches = [1, 2]  (exact match + prefix match)
+ * @endcode
+ *
+ * Thread-safe for concurrent reads after construction.
+ */
+class FastPatternMatcher {
+public:
+    /// Pattern types for optimization hints
+    enum class PatternType {
+        AUTO,      ///< Auto-detect best strategy
+        EXACT,     ///< Exact string match (uses Trie)
+        PREFIX,    ///< Prefix match (uses Trie)
+        WILDCARD,  ///< Simple wildcard (* and ?)
+        REGEX      ///< Full regex (uses CompiledPatternCache)
+    };
+
+    FastPatternMatcher();
+    ~FastPatternMatcher();
+
+    // Non-copyable but movable
+    FastPatternMatcher(const FastPatternMatcher&)            = delete;
+    FastPatternMatcher& operator=(const FastPatternMatcher&) = delete;
+    FastPatternMatcher(FastPatternMatcher&&) noexcept;
+    FastPatternMatcher& operator=(FastPatternMatcher&&) noexcept;
+
+    /**
+     * @brief Add a pattern with associated rule ID
+     * @param pattern The pattern string
+     * @param rule_id Associated rule identifier
+     * @param type Pattern type hint (AUTO for auto-detection)
+     * @return true if pattern was added successfully
+     */
+    bool add_pattern(std::string_view pattern, uint32_t rule_id,
+                     PatternType type = PatternType::AUTO);
+
+    /**
+     * @brief Remove a pattern
+     * @param pattern The pattern to remove
+     * @return true if pattern was found and removed
+     */
+    bool remove_pattern(std::string_view pattern);
+
+    /**
+     * @brief Find all matching rule IDs for input
+     * @param input The input string to match
+     * @return Vector of matching rule IDs
+     *
+     * Performance: O(m) for exact/prefix, O(r*m) for r regex patterns
+     */
+    std::vector<uint32_t> find_all_matches(std::string_view input) const;
+
+    /**
+     * @brief Check if any pattern matches
+     * @param input The input string to check
+     * @return true if any match found
+     */
+    bool has_match(std::string_view input) const noexcept;
+
+    /**
+     * @brief Clear all patterns
+     */
+    void clear();
+
+    /**
+     * @brief Get statistics
+     */
+    struct Stats {
+        size_t exact_patterns    = 0;
+        size_t prefix_patterns   = 0;
+        size_t wildcard_patterns = 0;
+        size_t regex_patterns    = 0;
+        size_t trie_nodes        = 0;
+        size_t memory_bytes      = 0;
+    };
+    Stats stats() const noexcept;
+
+    /**
+     * @brief Detect best pattern type
+     */
+    static PatternType detect_type(std::string_view pattern) noexcept;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+class TrieMatcher {
+public:
+    TrieMatcher();
+    ~TrieMatcher();
+
+    // Non-copyable but movable
+    TrieMatcher(const TrieMatcher&)            = delete;
+    TrieMatcher& operator=(const TrieMatcher&) = delete;
+    TrieMatcher(TrieMatcher&&) noexcept;
+    TrieMatcher& operator=(TrieMatcher&&) noexcept;
+
+    /**
+     * @brief Add an exact pattern to match
+     * @param pattern The exact string to match
+     * @param rule_id Associated rule ID for this pattern
+     */
+    void add_exact(std::string_view pattern, uint32_t rule_id);
+
+    /**
+     * @brief Add a prefix pattern to match
+     * @param prefix The prefix to match (input must start with this)
+     * @param rule_id Associated rule ID for this pattern
+     */
+    void add_prefix(std::string_view prefix, uint32_t rule_id);
+
+    /**
+     * @brief Find all matching rule IDs for an input string
+     * @param input The input string to match
+     * @return Vector of matching rule IDs (exact matches first, then prefix)
+     *
+     * Complexity: O(m) where m is input length
+     */
+    std::vector<uint32_t> find_matches(std::string_view input) const noexcept;
+
+    /**
+     * @brief Check if there's any exact match for input
+     * @param input The input string to check
+     * @return Optional rule ID if exact match found
+     *
+     * Complexity: O(m) where m is input length
+     */
+    std::optional<uint32_t> find_exact(std::string_view input) const noexcept;
+
+    /**
+     * @brief Check if any pattern (exact or prefix) matches input
+     * @param input The input string to check
+     * @return true if any match found
+     *
+     * Complexity: O(m) where m is input length
+     */
+    bool matches(std::string_view input) const noexcept;
+
+    /**
+     * @brief Remove a pattern from the trie
+     * @param pattern The pattern to remove
+     * @return true if pattern was found and removed
+     */
+    bool remove(std::string_view pattern);
+
+    /**
+     * @brief Clear all patterns
+     */
+    void clear();
+
+    /**
+     * @brief Get number of patterns stored
+     */
+    size_t size() const noexcept;
+
+    /**
+     * @brief Check if trie is empty
+     */
+    bool empty() const noexcept;
+
+    /**
+     * @brief Get memory usage statistics
+     */
+    struct Stats {
+        size_t pattern_count = 0;
+        size_t node_count    = 0;
+        size_t memory_bytes  = 0;
+    };
+    Stats stats() const noexcept;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
 #ifdef IPB_HAS_CTRE
 /**
  * @brief Compile-time regex matcher using CTRE
@@ -211,36 +419,36 @@ inline constexpr auto SENSOR_ADDRESS = ctll::fixed_string{R"(sensors/(\w+)/(\w+)
 inline constexpr auto ALARM_ADDRESS = ctll::fixed_string{R"(alarms/(critical|warning|info)/(\w+))"};
 
 /// Check OPC UA node ID
-template<typename Input>
+template <typename Input>
 constexpr auto match_opcua(Input&& input) noexcept {
     return ctre::match<OPC_UA_NODE_ID>(std::forward<Input>(input));
 }
 
 /// Check Modbus address
-template<typename Input>
+template <typename Input>
 constexpr auto match_modbus(Input&& input) noexcept {
     return ctre::match<MODBUS_ADDRESS>(std::forward<Input>(input));
 }
 
 /// Check Sparkplug topic
-template<typename Input>
+template <typename Input>
 constexpr auto match_sparkplug(Input&& input) noexcept {
     return ctre::match<SPARKPLUG_TOPIC>(std::forward<Input>(input));
 }
 
 /// Check sensor address
-template<typename Input>
+template <typename Input>
 constexpr auto match_sensor(Input&& input) noexcept {
     return ctre::match<SENSOR_ADDRESS>(std::forward<Input>(input));
 }
 
 /// Check alarm address
-template<typename Input>
+template <typename Input>
 constexpr auto match_alarm(Input&& input) noexcept {
     return ctre::match<ALARM_ADDRESS>(std::forward<Input>(input));
 }
 
-} // namespace patterns
-#endif // IPB_HAS_CTRE
+}  // namespace patterns
+#endif  // IPB_HAS_CTRE
 
-} // namespace ipb::core
+}  // namespace ipb::core

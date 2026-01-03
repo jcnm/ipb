@@ -11,10 +11,7 @@
 namespace ipb::bridge {
 
 Bridge::Bridge()
-    : start_time_(std::chrono::steady_clock::now())
-    , last_watchdog_feed_(start_time_)
-{
-}
+    : start_time_(std::chrono::steady_clock::now()), last_watchdog_feed_(start_time_) {}
 
 Bridge::~Bridge() {
     stop();
@@ -22,15 +19,13 @@ Bridge::~Bridge() {
 
 common::Result<void> Bridge::initialize(const BridgeConfig& config) {
     if (state_ != BridgeState::STOPPED) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_STATE,
-            "Bridge already initialized");
+        return common::Result<void>(common::ErrorCode::INVALID_STATE, "Bridge already initialized");
     }
 
     state_ = BridgeState::INITIALIZING;
 
     // Apply configuration
-    watchdog_timeout_ = config.watchdog_timeout;
+    watchdog_timeout_  = config.watchdog_timeout;
     round_robin_sinks_ = config.round_robin_sinks;
 
     // Reserve capacity
@@ -63,9 +58,8 @@ common::Result<void> Bridge::start() {
     }
 
     if (state_ != BridgeState::STOPPED && state_ != BridgeState::PAUSED) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_STATE,
-            "Cannot start bridge from current state");
+        return common::Result<void>(common::ErrorCode::INVALID_STATE,
+                                    "Cannot start bridge from current state");
     }
 
     // Start all sources
@@ -90,10 +84,10 @@ common::Result<void> Bridge::start() {
         }
     }
 
-    start_time_ = std::chrono::steady_clock::now();
+    start_time_         = std::chrono::steady_clock::now();
     last_watchdog_feed_ = start_time_;
-    paused_ = false;
-    state_ = BridgeState::RUNNING;
+    paused_             = false;
+    state_              = BridgeState::RUNNING;
 
     return common::Result<void>();
 }
@@ -124,14 +118,14 @@ void Bridge::stop() {
 void Bridge::pause() {
     if (state_ == BridgeState::RUNNING) {
         paused_ = true;
-        state_ = BridgeState::PAUSED;
+        state_  = BridgeState::PAUSED;
     }
 }
 
 void Bridge::resume() {
     if (state_ == BridgeState::PAUSED) {
         paused_ = false;
-        state_ = BridgeState::RUNNING;
+        state_  = BridgeState::RUNNING;
     }
 }
 
@@ -143,7 +137,7 @@ void Bridge::run() {
         }
 
         // Update uptime
-        auto now = std::chrono::steady_clock::now();
+        auto now    = std::chrono::steady_clock::now();
         auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - start_time_);
         stats_.uptime_seconds.store(static_cast<uint64_t>(uptime.count()));
     }
@@ -171,24 +165,19 @@ bool Bridge::tick() {
 
 common::Result<void> Bridge::add_source(std::unique_ptr<DataSource> source) {
     if (!source) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "Null source");
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Null source");
     }
 
     // Check for duplicate ID
     for (const auto& existing : sources_) {
         if (existing->id() == source->id()) {
-            return common::Result<void>(
-                common::ErrorCode::ALREADY_EXISTS,
-                "Source with ID already exists: " + source->id());
+            return common::Result<void>(common::ErrorCode::ALREADY_EXISTS,
+                                        "Source with ID already exists: " + source->id());
         }
     }
 
     // Set up callback
-    source->set_callback([this](const common::DataPoint& data) {
-        this->data_received(data);
-    });
+    source->set_callback([this](const common::DataPoint& data) { this->data_received(data); });
 
     sources_.push_back(std::move(source));
     return common::Result<void>();
@@ -196,17 +185,14 @@ common::Result<void> Bridge::add_source(std::unique_ptr<DataSource> source) {
 
 common::Result<void> Bridge::add_sink(std::unique_ptr<DataSink> sink) {
     if (!sink) {
-        return common::Result<void>(
-            common::ErrorCode::INVALID_ARGUMENT,
-            "Null sink");
+        return common::Result<void>(common::ErrorCode::INVALID_ARGUMENT, "Null sink");
     }
 
     // Check for duplicate ID
     for (const auto& existing : sinks_) {
         if (existing->id() == sink->id()) {
-            return common::Result<void>(
-                common::ErrorCode::ALREADY_EXISTS,
-                "Sink with ID already exists: " + sink->id());
+            return common::Result<void>(common::ErrorCode::ALREADY_EXISTS,
+                                        "Sink with ID already exists: " + sink->id());
         }
     }
 
@@ -216,12 +202,10 @@ common::Result<void> Bridge::add_sink(std::unique_ptr<DataSink> sink) {
 
 common::Result<void> Bridge::remove_source(const std::string& id) {
     auto it = std::find_if(sources_.begin(), sources_.end(),
-        [&id](const auto& s) { return s->id() == id; });
+                           [&id](const auto& s) { return s->id() == id; });
 
     if (it == sources_.end()) {
-        return common::Result<void>(
-            common::ErrorCode::NOT_FOUND,
-            "Source not found: " + id);
+        return common::Result<void>(common::ErrorCode::NOT_FOUND, "Source not found: " + id);
     }
 
     (*it)->stop();
@@ -235,13 +219,11 @@ common::Result<void> Bridge::remove_source(const std::string& id) {
 }
 
 common::Result<void> Bridge::remove_sink(const std::string& id) {
-    auto it = std::find_if(sinks_.begin(), sinks_.end(),
-        [&id](const auto& s) { return s->id() == id; });
+    auto it =
+        std::find_if(sinks_.begin(), sinks_.end(), [&id](const auto& s) { return s->id() == id; });
 
     if (it == sinks_.end()) {
-        return common::Result<void>(
-            common::ErrorCode::NOT_FOUND,
-            "Sink not found: " + id);
+        return common::Result<void>(common::ErrorCode::NOT_FOUND, "Sink not found: " + id);
     }
 
     (*it)->flush();
@@ -276,7 +258,7 @@ bool Bridge::is_healthy() const {
 
     // Check if at least one source and sink are running
     bool has_running_source = false;
-    bool has_running_sink = false;
+    bool has_running_sink   = false;
 
     for (const auto& source : sources_) {
         if (source->is_running()) {
@@ -314,7 +296,7 @@ void Bridge::forward_data(const common::DataPoint& data) {
 
     if (round_robin_sinks_) {
         // Send to one sink (round-robin)
-        auto& sink = sinks_[current_sink_index_];
+        auto& sink  = sinks_[current_sink_index_];
         auto result = sink->send(data);
         if (result) {
             stats_.messages_forwarded.fetch_add(1);
@@ -348,4 +330,4 @@ void Bridge::handle_error(const std::string& message) {
     stats_.errors.fetch_add(1);
 }
 
-} // namespace ipb::bridge
+}  // namespace ipb::bridge

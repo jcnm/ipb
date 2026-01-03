@@ -1,0 +1,5 @@
+category,component,name,iterations,duration_ms,mean_ns,median_ns,stddev_ns,min_ns,max_ns,p50_ns,p95_ns,p99_ns,ops_per_sec,slo_status
+core,memory_pool,alloc_dealloc_cycle,99981,10.00,72.20,72.00,4.48,69.00,292.00,72.00,74.00,92.00,13850820.75,PASS
+core,memory_pool,allocate,99903,11.00,52.49,51.00,8.44,48.00,465.00,51.00,58.00,66.00,19049716.55,PASS
+core,memory_pool,deallocate,99990,10.00,49.31,49.00,1.31,47.00,198.00,49.00,51.00,51.00,20281856.75,PASS
+core,memory_pool,heap_new_delete,99987,6.00,36.77,34.00,7.41,30.00,206.00,34.00,53.00,65.00,27194966.75,PASS

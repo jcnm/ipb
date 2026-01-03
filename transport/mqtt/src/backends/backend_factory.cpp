@@ -1,6 +1,6 @@
+#include "ipb/transport/mqtt/backends/coremqtt_backend.hpp"
 #include "ipb/transport/mqtt/backends/mqtt_backend.hpp"
 #include "ipb/transport/mqtt/backends/paho_backend.hpp"
-#include "ipb/transport/mqtt/backends/coremqtt_backend.hpp"
 
 namespace ipb::transport::mqtt {
 
@@ -66,4 +66,4 @@ bool is_backend_available(BackendType type) noexcept {
     }
 }
 
-} // namespace ipb::transport::mqtt
+}  // namespace ipb::transport::mqtt

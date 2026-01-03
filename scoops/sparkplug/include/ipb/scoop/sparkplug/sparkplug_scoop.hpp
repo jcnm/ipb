@@ -16,21 +16,21 @@
  * @see https://sparkplug.eclipse.org/
  */
 
-#include "ipb/common/interfaces.hpp"
-#include "ipb/common/data_point.hpp"
-#include "ipb/common/dataset.hpp"
-#include "ipb/transport/mqtt/mqtt_connection.hpp"
-
-#include <memory>
-#include <string>
-#include <vector>
-#include <unordered_map>
 #include <atomic>
-#include <mutex>
-#include <shared_mutex>
 #include <chrono>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "ipb/common/data_point.hpp"
+#include "ipb/common/dataset.hpp"
+#include "ipb/common/interfaces.hpp"
+#include "ipb/transport/mqtt/mqtt_connection.hpp"
 
 namespace ipb::scoop::sparkplug {
 
@@ -53,21 +53,21 @@ constexpr uint8_t SPARKPLUG_VERSION = 3;
  */
 enum class MessageType {
     // Node messages
-    NBIRTH,     ///< Node Birth Certificate - sent when a node comes online
-    NDEATH,     ///< Node Death Certificate - sent when a node goes offline
-    NDATA,      ///< Node Data - periodic/sporadic data from node
-    NCMD,       ///< Node Command - command sent to node
+    NBIRTH,  ///< Node Birth Certificate - sent when a node comes online
+    NDEATH,  ///< Node Death Certificate - sent when a node goes offline
+    NDATA,   ///< Node Data - periodic/sporadic data from node
+    NCMD,    ///< Node Command - command sent to node
 
     // Device messages
-    DBIRTH,     ///< Device Birth Certificate - sent when a device comes online
-    DDEATH,     ///< Device Death Certificate - sent when a device goes offline
-    DDATA,      ///< Device Data - periodic/sporadic data from device
-    DCMD,       ///< Device Command - command sent to device
+    DBIRTH,  ///< Device Birth Certificate - sent when a device comes online
+    DDEATH,  ///< Device Death Certificate - sent when a device goes offline
+    DDATA,   ///< Device Data - periodic/sporadic data from device
+    DCMD,    ///< Device Command - command sent to device
 
     // State message
-    STATE,      ///< Host application state
+    STATE,  ///< Host application state
 
-    UNKNOWN     ///< Unknown message type
+    UNKNOWN  ///< Unknown message type
 };
 
 /**
@@ -88,41 +88,41 @@ MessageType string_to_message_type(std::string_view str);
  * @brief Sparkplug B metric data types
  */
 enum class SparkplugDataType : uint32_t {
-    Unknown         = 0,
-    Int8            = 1,
-    Int16           = 2,
-    Int32           = 3,
-    Int64           = 4,
-    UInt8           = 5,
-    UInt16          = 6,
-    UInt32          = 7,
-    UInt64          = 8,
-    Float           = 9,
-    Double          = 10,
-    Boolean         = 11,
-    String          = 12,
-    DateTime        = 13,
-    Text            = 14,
-    UUID            = 15,
-    DataSet         = 16,
-    Bytes           = 17,
-    File            = 18,
-    Template        = 19,
+    Unknown  = 0,
+    Int8     = 1,
+    Int16    = 2,
+    Int32    = 3,
+    Int64    = 4,
+    UInt8    = 5,
+    UInt16   = 6,
+    UInt32   = 7,
+    UInt64   = 8,
+    Float    = 9,
+    Double   = 10,
+    Boolean  = 11,
+    String   = 12,
+    DateTime = 13,
+    Text     = 14,
+    UUID     = 15,
+    DataSet  = 16,
+    Bytes    = 17,
+    File     = 18,
+    Template = 19,
 
     // Arrays (starting at 20)
-    Int8Array       = 20,
-    Int16Array      = 21,
-    Int32Array      = 22,
-    Int64Array      = 23,
-    UInt8Array      = 24,
-    UInt16Array     = 25,
-    UInt32Array     = 26,
-    UInt64Array     = 27,
-    FloatArray      = 28,
-    DoubleArray     = 29,
-    BooleanArray    = 30,
-    StringArray     = 31,
-    DateTimeArray   = 32
+    Int8Array     = 20,
+    Int16Array    = 21,
+    Int32Array    = 22,
+    Int64Array    = 23,
+    UInt8Array    = 24,
+    UInt16Array   = 25,
+    UInt32Array   = 26,
+    UInt64Array   = 27,
+    FloatArray    = 28,
+    DoubleArray   = 29,
+    BooleanArray  = 30,
+    StringArray   = 31,
+    DateTimeArray = 32
 };
 
 //=============================================================================
@@ -133,23 +133,18 @@ enum class SparkplugDataType : uint32_t {
  * @brief Sparkplug B Metric representation
  */
 struct SparkplugMetric {
-    std::string name;                   ///< Metric name
-    uint64_t alias = 0;                 ///< Metric alias (for efficient referencing)
-    uint64_t timestamp = 0;             ///< Timestamp in milliseconds since epoch
+    std::string name;                ///< Metric name
+    uint64_t alias             = 0;  ///< Metric alias (for efficient referencing)
+    uint64_t timestamp         = 0;  ///< Timestamp in milliseconds since epoch
     SparkplugDataType datatype = SparkplugDataType::Unknown;
-    bool is_historical = false;         ///< Is this historical data?
-    bool is_transient = false;          ///< Is this transient (not persisted)?
-    bool is_null = false;               ///< Is value null?
+    bool is_historical         = false;  ///< Is this historical data?
+    bool is_transient          = false;  ///< Is this transient (not persisted)?
+    bool is_null               = false;  ///< Is value null?
 
     // Value (stored based on datatype)
-    std::variant<
-        bool,
-        int8_t, int16_t, int32_t, int64_t,
-        uint8_t, uint16_t, uint32_t, uint64_t,
-        float, double,
-        std::string,
-        std::vector<uint8_t>
-    > value;
+    std::variant<bool, int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t,
+                 float, double, std::string, std::vector<uint8_t>>
+        value;
 
     // Metadata (optional)
     std::optional<std::string> description;
@@ -171,9 +166,9 @@ struct SparkplugMetric {
  * @brief Sparkplug B Payload (decoded)
  */
 struct SparkplugPayload {
-    uint64_t timestamp = 0;             ///< Payload timestamp
-    uint64_t seq = 0;                   ///< Sequence number (0-255, wrapping)
-    std::string uuid;                   ///< Optional UUID
+    uint64_t timestamp = 0;  ///< Payload timestamp
+    uint64_t seq       = 0;  ///< Sequence number (0-255, wrapping)
+    std::string uuid;        ///< Optional UUID
     std::vector<SparkplugMetric> metrics;
 
     /**
@@ -198,7 +193,7 @@ struct SparkplugTopic {
     std::string group_id;
     MessageType message_type = MessageType::UNKNOWN;
     std::string edge_node_id;
-    std::string device_id;              ///< Empty for node-level messages
+    std::string device_id;  ///< Empty for node-level messages
 
     /**
      * @brief Parse a Sparkplug B topic string
@@ -249,11 +244,11 @@ struct SparkplugTopic {
  * @brief Subscription filter for Sparkplug topics
  */
 struct SubscriptionFilter {
-    std::string group_id_pattern = "#";     ///< Group ID filter (supports wildcards)
-    std::string edge_node_pattern = "#";    ///< Edge node filter
-    std::string device_pattern = "#";       ///< Device filter (empty = node only)
+    std::string group_id_pattern  = "#";  ///< Group ID filter (supports wildcards)
+    std::string edge_node_pattern = "#";  ///< Edge node filter
+    std::string device_pattern    = "#";  ///< Device filter (empty = node only)
 
-    std::vector<MessageType> message_types; ///< Message types to receive (empty = all)
+    std::vector<MessageType> message_types;  ///< Message types to receive (empty = all)
 
     /**
      * @brief Build MQTT topic filters from this configuration
@@ -273,23 +268,23 @@ struct SparkplugScoopConfig {
     std::vector<SubscriptionFilter> filters;
 
     // Processing options
-    bool process_births = true;             ///< Process birth certificates
-    bool process_deaths = true;             ///< Process death certificates
-    bool process_data = true;               ///< Process data messages
-    bool ignore_commands = true;            ///< Ignore CMD messages (we're a scoop, not a host)
+    bool process_births  = true;  ///< Process birth certificates
+    bool process_deaths  = true;  ///< Process death certificates
+    bool process_data    = true;  ///< Process data messages
+    bool ignore_commands = true;  ///< Ignore CMD messages (we're a scoop, not a host)
 
     // State tracking
-    bool track_node_state = true;           ///< Track online/offline state of nodes
-    bool track_device_state = true;         ///< Track online/offline state of devices
-    bool track_metric_aliases = true;       ///< Track metric aliases from births
+    bool track_node_state     = true;  ///< Track online/offline state of nodes
+    bool track_device_state   = true;  ///< Track online/offline state of devices
+    bool track_metric_aliases = true;  ///< Track metric aliases from births
 
     // Data conversion
-    bool include_metadata = true;           ///< Include Sparkplug metadata in DataPoints
+    bool include_metadata          = true;  ///< Include Sparkplug metadata in DataPoints
     bool use_fully_qualified_names = true;  ///< Use group/node/device/metric naming
 
     // Performance
     size_t message_queue_size = 10000;
-    bool enable_statistics = true;
+    bool enable_statistics    = true;
     std::chrono::seconds statistics_interval{30};
 
     // Presets
@@ -319,20 +314,21 @@ struct SparkplugScoopConfig {
  */
 class SparkplugScoop : public common::IProtocolSourceBase {
 public:
-    static constexpr uint16_t PROTOCOL_ID = 10;
-    static constexpr std::string_view PROTOCOL_NAME = "SparkplugB";
-    static constexpr std::string_view COMPONENT_NAME = "SparkplugScoop";
+    static constexpr uint16_t PROTOCOL_ID               = 10;
+    static constexpr std::string_view PROTOCOL_NAME     = "SparkplugB";
+    static constexpr std::string_view COMPONENT_NAME    = "SparkplugScoop";
     static constexpr std::string_view COMPONENT_VERSION = "1.0.0";
 
     /**
      * @brief Construct SparkplugScoop with configuration
      */
-    explicit SparkplugScoop(const SparkplugScoopConfig& config = SparkplugScoopConfig::create_default());
+    explicit SparkplugScoop(
+        const SparkplugScoopConfig& config = SparkplugScoopConfig::create_default());
 
     ~SparkplugScoop() override;
 
     // Non-copyable
-    SparkplugScoop(const SparkplugScoop&) = delete;
+    SparkplugScoop(const SparkplugScoop&)            = delete;
     SparkplugScoop& operator=(const SparkplugScoop&) = delete;
 
     //=========================================================================
@@ -342,15 +338,15 @@ public:
     common::Result<common::DataSet> read() override;
     common::Result<common::DataSet> read_async() override;
 
-    common::Result<> subscribe(DataCallback data_cb, ErrorCallback error_cb) override;
-    common::Result<> unsubscribe() override;
+    common::Result<void> subscribe(DataCallback data_cb, ErrorCallback error_cb) override;
+    common::Result<void> unsubscribe() override;
 
-    common::Result<> add_address(std::string_view address) override;
-    common::Result<> remove_address(std::string_view address) override;
+    common::Result<void> add_address(std::string_view address) override;
+    common::Result<void> remove_address(std::string_view address) override;
     std::vector<std::string> get_addresses() const override;
 
-    common::Result<> connect() override;
-    common::Result<> disconnect() override;
+    common::Result<void> connect() override;
+    common::Result<void> disconnect() override;
     bool is_connected() const noexcept override;
 
     uint16_t protocol_id() const noexcept override { return PROTOCOL_ID; }
@@ -360,11 +356,11 @@ public:
     // IIPBComponent Implementation
     //=========================================================================
 
-    common::Result<> start() override;
-    common::Result<> stop() override;
+    common::Result<void> start() override;
+    common::Result<void> stop() override;
     bool is_running() const noexcept override;
 
-    common::Result<> configure(const common::ConfigurationBase& config) override;
+    common::Result<void> configure(const common::ConfigurationBase& config) override;
     std::unique_ptr<common::ConfigurationBase> get_configuration() const override;
 
     common::Statistics get_statistics() const noexcept override;
@@ -433,9 +429,8 @@ public:
     /**
      * @brief Create SparkplugScoop for specific group
      */
-    static std::unique_ptr<SparkplugScoop> create_for_group(
-        const std::string& broker_url,
-        const std::string& group_id);
+    static std::unique_ptr<SparkplugScoop> create_for_group(const std::string& broker_url,
+                                                            const std::string& group_id);
 
     /**
      * @brief Create SparkplugScoop with full configuration
@@ -448,4 +443,4 @@ public:
     static std::unique_ptr<SparkplugScoop> create_high_throughput(const std::string& broker_url);
 };
 
-} // namespace ipb::scoop::sparkplug
+}  // namespace ipb::scoop::sparkplug

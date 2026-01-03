@@ -1,8 +1,9 @@
 #include "ipb/transport/mqtt/backends/paho_backend.hpp"
-#include "ipb/transport/mqtt/mqtt_connection.hpp"  // For ConnectionConfig
 
 #include <chrono>
 #include <iostream>
+
+#include "ipb/transport/mqtt/mqtt_connection.hpp"  // For ConnectionConfig
 
 namespace ipb::transport::mqtt {
 
@@ -27,16 +28,10 @@ public:
         std::lock_guard<std::mutex> lock(backend_.callback_mutex_);
         if (backend_.message_cb_) {
             auto payload = msg->get_payload();
-            std::span<const uint8_t> payload_span(
-                reinterpret_cast<const uint8_t*>(payload.data()),
-                payload.size()
-            );
-            backend_.message_cb_(
-                msg->get_topic(),
-                payload_span,
-                static_cast<QoS>(msg->get_qos()),
-                msg->is_retained()
-            );
+            std::span<const uint8_t> payload_span(reinterpret_cast<const uint8_t*>(payload.data()),
+                                                  payload.size());
+            backend_.message_cb_(msg->get_topic(), payload_span, static_cast<QoS>(msg->get_qos()),
+                                 msg->is_retained());
         }
         backend_.stats_.messages_received++;
         backend_.stats_.bytes_received += msg->get_payload().size();
@@ -45,10 +40,7 @@ public:
     void delivery_complete(::mqtt::delivery_token_ptr tok) override {
         std::lock_guard<std::mutex> lock(backend_.callback_mutex_);
         if (backend_.delivery_cb_) {
-            backend_.delivery_cb_(
-                static_cast<uint16_t>(tok->get_message_id()),
-                true
-            );
+            backend_.delivery_cb_(static_cast<uint16_t>(tok->get_message_id()), true);
         }
     }
 
@@ -76,13 +68,10 @@ std::string_view PahoBackend::version() const noexcept {
 bool PahoBackend::initialize(const ConnectionConfig& config) {
     try {
         broker_url_ = config.broker_url;
-        client_id_ = config.client_id;
+        client_id_  = config.client_id;
 
         // Create async client
-        client_ = std::make_unique<::mqtt::async_client>(
-            broker_url_,
-            client_id_
-        );
+        client_ = std::make_unique<::mqtt::async_client>(broker_url_, client_id_);
 
         // Setup callback handler
         callback_handler_ = std::make_unique<CallbackHandler>(*this);
@@ -91,19 +80,11 @@ bool PahoBackend::initialize(const ConnectionConfig& config) {
         // Build connect options
         connect_opts_ = std::make_unique<::mqtt::connect_options>();
         connect_opts_->set_clean_session(config.clean_session);
-        connect_opts_->set_keep_alive_interval(
-            std::chrono::seconds(config.keep_alive_seconds)
-        );
+        connect_opts_->set_keep_alive_interval(std::chrono::seconds(config.keep_alive_seconds));
         connect_opts_->set_automatic_reconnect(config.auto_reconnect);
 
-        if (config.auto_reconnect) {
-            connect_opts_->set_min_retry_interval(
-                std::chrono::seconds(config.reconnect_delay_seconds)
-            );
-            connect_opts_->set_max_retry_interval(
-                std::chrono::seconds(config.reconnect_delay_seconds * 4)
-            );
-        }
+        // Note: set_min_retry_interval and set_max_retry_interval are not available
+        // in all versions of the Paho library. The default retry behavior is used.
 
         // Credentials
         if (!config.username.empty()) {
@@ -118,12 +99,8 @@ bool PahoBackend::initialize(const ConnectionConfig& config) {
 
         // Last Will and Testament
         if (!config.lwt_topic.empty()) {
-            auto lwt = ::mqtt::message(
-                config.lwt_topic,
-                config.lwt_payload,
-                static_cast<int>(config.lwt_qos),
-                config.lwt_retained
-            );
+            auto lwt = ::mqtt::message(config.lwt_topic, config.lwt_payload,
+                                       static_cast<int>(config.lwt_qos), config.lwt_retained);
             connect_opts_->set_will(lwt);
         }
 
@@ -158,7 +135,8 @@ void PahoBackend::setup_ssl(const ConnectionConfig& config) {
 }
 
 bool PahoBackend::connect() {
-    if (!client_) return false;
+    if (!client_)
+        return false;
 
     try {
         state_.store(ConnectionState::CONNECTING);
@@ -212,29 +190,21 @@ std::string_view PahoBackend::client_id() const noexcept {
     return client_id_;
 }
 
-uint16_t PahoBackend::publish(
-    std::string_view topic,
-    std::span<const uint8_t> payload,
-    QoS qos,
-    bool retained)
-{
-    if (!is_connected()) return 0;
+uint16_t PahoBackend::publish(std::string_view topic, std::span<const uint8_t> payload, QoS qos,
+                              bool retained) {
+    if (!is_connected())
+        return 0;
 
     try {
         auto start = std::chrono::high_resolution_clock::now();
 
-        auto msg = ::mqtt::make_message(
-            std::string(topic),
-            payload.data(),
-            payload.size(),
-            static_cast<int>(qos),
-            retained
-        );
+        auto msg = ::mqtt::make_message(std::string(topic), payload.data(), payload.size(),
+                                        static_cast<int>(qos), retained);
 
-        auto token = client_->publish(msg);
+        auto token         = client_->publish(msg);
         uint16_t msg_token = next_token_.fetch_add(1);
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end      = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
         stats_.messages_sent++;
@@ -250,30 +220,21 @@ uint16_t PahoBackend::publish(
     }
 }
 
-bool PahoBackend::publish_sync(
-    std::string_view topic,
-    std::span<const uint8_t> payload,
-    QoS qos,
-    bool retained,
-    uint32_t timeout_ms)
-{
-    if (!is_connected()) return false;
+bool PahoBackend::publish_sync(std::string_view topic, std::span<const uint8_t> payload, QoS qos,
+                               bool retained, uint32_t timeout_ms) {
+    if (!is_connected())
+        return false;
 
     try {
         auto start = std::chrono::high_resolution_clock::now();
 
-        auto msg = ::mqtt::make_message(
-            std::string(topic),
-            payload.data(),
-            payload.size(),
-            static_cast<int>(qos),
-            retained
-        );
+        auto msg = ::mqtt::make_message(std::string(topic), payload.data(), payload.size(),
+                                        static_cast<int>(qos), retained);
 
-        auto token = client_->publish(msg);
+        auto token   = client_->publish(msg);
         bool success = token->wait_for(std::chrono::milliseconds(timeout_ms));
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end      = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
         if (success) {
@@ -295,7 +256,8 @@ bool PahoBackend::publish_sync(
 }
 
 bool PahoBackend::subscribe(std::string_view topic, QoS qos) {
-    if (!is_connected()) return false;
+    if (!is_connected())
+        return false;
 
     try {
         auto token = client_->subscribe(std::string(topic), static_cast<int>(qos));
@@ -308,7 +270,8 @@ bool PahoBackend::subscribe(std::string_view topic, QoS qos) {
 }
 
 bool PahoBackend::unsubscribe(std::string_view topic) {
-    if (!is_connected()) return false;
+    if (!is_connected())
+        return false;
 
     try {
         auto token = client_->unsubscribe(std::string(topic));
@@ -354,4 +317,4 @@ size_t PahoBackend::dynamic_memory_usage() const noexcept {
     return usage;
 }
 
-} // namespace ipb::transport::mqtt
+}  // namespace ipb::transport::mqtt

@@ -13,10 +13,10 @@
  * Target: Zero-allocation sink selection, <100ns lookup time
  */
 
-#include <ipb/common/interfaces.hpp>
 #include <ipb/common/data_point.hpp>
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
+#include <ipb/common/interfaces.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <atomic>
@@ -54,10 +54,10 @@ enum class LoadBalanceStrategy : uint8_t {
  * @brief Sink health status
  */
 enum class SinkHealth : uint8_t {
-    HEALTHY,      ///< Sink is operating normally
-    DEGRADED,     ///< Sink is working but with issues
-    UNHEALTHY,    ///< Sink is not accepting data
-    UNKNOWN       ///< Health status unknown
+    HEALTHY,    ///< Sink is operating normally
+    DEGRADED,   ///< Sink is working but with issues
+    UNHEALTHY,  ///< Sink is not accepting data
+    UNKNOWN     ///< Health status unknown
 };
 
 /**
@@ -69,9 +69,9 @@ struct SinkInfo {
     std::shared_ptr<common::IIPBSink> sink;
 
     // Configuration
-    uint32_t weight = 100;      ///< Weight for load balancing (higher = more traffic)
-    bool enabled = true;        ///< Whether sink is enabled
-    uint32_t priority = 0;      ///< Priority for failover (lower = higher priority)
+    uint32_t weight   = 100;   ///< Weight for load balancing (higher = more traffic)
+    bool enabled      = true;  ///< Whether sink is enabled
+    uint32_t priority = 0;     ///< Priority for failover (lower = higher priority)
 
     // Health
     SinkHealth health = SinkHealth::UNKNOWN;
@@ -90,52 +90,35 @@ struct SinkInfo {
 
     // Copy constructor (atomics need explicit copy)
     SinkInfo(const SinkInfo& other)
-        : id(other.id)
-        , type(other.type)
-        , sink(other.sink)
-        , weight(other.weight)
-        , enabled(other.enabled)
-        , priority(other.priority)
-        , health(other.health)
-        , last_health_check(other.last_health_check)
-        , health_message(other.health_message)
-        , messages_sent(other.messages_sent.load())
-        , messages_failed(other.messages_failed.load())
-        , bytes_sent(other.bytes_sent.load())
-        , total_latency_ns(other.total_latency_ns.load())
-        , pending_count(other.pending_count.load())
-    {}
+        : id(other.id), type(other.type), sink(other.sink), weight(other.weight),
+          enabled(other.enabled), priority(other.priority), health(other.health),
+          last_health_check(other.last_health_check), health_message(other.health_message),
+          messages_sent(other.messages_sent.load()), messages_failed(other.messages_failed.load()),
+          bytes_sent(other.bytes_sent.load()), total_latency_ns(other.total_latency_ns.load()),
+          pending_count(other.pending_count.load()) {}
 
     // Move constructor
     SinkInfo(SinkInfo&& other) noexcept
-        : id(std::move(other.id))
-        , type(std::move(other.type))
-        , sink(std::move(other.sink))
-        , weight(other.weight)
-        , enabled(other.enabled)
-        , priority(other.priority)
-        , health(other.health)
-        , last_health_check(other.last_health_check)
-        , health_message(std::move(other.health_message))
-        , messages_sent(other.messages_sent.load())
-        , messages_failed(other.messages_failed.load())
-        , bytes_sent(other.bytes_sent.load())
-        , total_latency_ns(other.total_latency_ns.load())
-        , pending_count(other.pending_count.load())
-    {}
+        : id(std::move(other.id)), type(std::move(other.type)), sink(std::move(other.sink)),
+          weight(other.weight), enabled(other.enabled), priority(other.priority),
+          health(other.health), last_health_check(other.last_health_check),
+          health_message(std::move(other.health_message)),
+          messages_sent(other.messages_sent.load()), messages_failed(other.messages_failed.load()),
+          bytes_sent(other.bytes_sent.load()), total_latency_ns(other.total_latency_ns.load()),
+          pending_count(other.pending_count.load()) {}
 
     // Copy assignment
     SinkInfo& operator=(const SinkInfo& other) {
         if (this != &other) {
-            id = other.id;
-            type = other.type;
-            sink = other.sink;
-            weight = other.weight;
-            enabled = other.enabled;
-            priority = other.priority;
-            health = other.health;
+            id                = other.id;
+            type              = other.type;
+            sink              = other.sink;
+            weight            = other.weight;
+            enabled           = other.enabled;
+            priority          = other.priority;
+            health            = other.health;
             last_health_check = other.last_health_check;
-            health_message = other.health_message;
+            health_message    = other.health_message;
             messages_sent.store(other.messages_sent.load());
             messages_failed.store(other.messages_failed.load());
             bytes_sent.store(other.bytes_sent.load());
@@ -148,15 +131,15 @@ struct SinkInfo {
     // Move assignment
     SinkInfo& operator=(SinkInfo&& other) noexcept {
         if (this != &other) {
-            id = std::move(other.id);
-            type = std::move(other.type);
-            sink = std::move(other.sink);
-            weight = other.weight;
-            enabled = other.enabled;
-            priority = other.priority;
-            health = other.health;
+            id                = std::move(other.id);
+            type              = std::move(other.type);
+            sink              = std::move(other.sink);
+            weight            = other.weight;
+            enabled           = other.enabled;
+            priority          = other.priority;
+            health            = other.health;
             last_health_check = other.last_health_check;
-            health_message = std::move(other.health_message);
+            health_message    = std::move(other.health_message);
             messages_sent.store(other.messages_sent.load());
             messages_failed.store(other.messages_failed.load());
             bytes_sent.store(other.bytes_sent.load());
@@ -169,15 +152,13 @@ struct SinkInfo {
     /// Calculate success rate
     double success_rate() const noexcept {
         auto total = messages_sent.load() + messages_failed.load();
-        return total > 0 ?
-            static_cast<double>(messages_sent) / total * 100.0 : 100.0;
+        return total > 0 ? static_cast<double>(messages_sent) / total * 100.0 : 100.0;
     }
 
     /// Calculate average latency in microseconds
     double avg_latency_us() const noexcept {
         auto count = messages_sent.load();
-        return count > 0 ?
-            static_cast<double>(total_latency_ns) / count / 1000.0 : 0.0;
+        return count > 0 ? static_cast<double>(total_latency_ns) / count / 1000.0 : 0.0;
     }
 };
 
@@ -209,15 +190,12 @@ struct SinkRegistryStats {
     SinkRegistryStats() = default;
 
     SinkRegistryStats(const SinkRegistryStats& other)
-        : total_selections(other.total_selections.load())
-        , successful_selections(other.successful_selections.load())
-        , failed_selections(other.failed_selections.load())
-        , failover_events(other.failover_events.load())
-        , active_sinks(other.active_sinks.load())
-        , healthy_sinks(other.healthy_sinks.load())
-        , degraded_sinks(other.degraded_sinks.load())
-        , unhealthy_sinks(other.unhealthy_sinks.load())
-    {}
+        : total_selections(other.total_selections.load()),
+          successful_selections(other.successful_selections.load()),
+          failed_selections(other.failed_selections.load()),
+          failover_events(other.failover_events.load()), active_sinks(other.active_sinks.load()),
+          healthy_sinks(other.healthy_sinks.load()), degraded_sinks(other.degraded_sinks.load()),
+          unhealthy_sinks(other.unhealthy_sinks.load()) {}
 
     SinkRegistryStats& operator=(const SinkRegistryStats& other) {
         if (this != &other) {
@@ -298,7 +276,7 @@ public:
     ~SinkRegistry();
 
     // Non-copyable, movable
-    SinkRegistry(const SinkRegistry&) = delete;
+    SinkRegistry(const SinkRegistry&)            = delete;
     SinkRegistry& operator=(const SinkRegistry&) = delete;
     SinkRegistry(SinkRegistry&&) noexcept;
     SinkRegistry& operator=(SinkRegistry&&) noexcept;
@@ -321,7 +299,7 @@ public:
 
     /// Register a sink with weight
     bool register_sink(std::string_view id, std::shared_ptr<common::IIPBSink> sink,
-                      uint32_t weight);
+                       uint32_t weight);
 
     /// Unregister a sink
     bool unregister_sink(std::string_view id);
@@ -361,21 +339,18 @@ public:
 
     /// Select sink using data point for hash-based strategies
     SinkSelectionResult select_sink(
-        const std::vector<std::string>& candidate_ids,
-        const common::DataPoint& data_point,
+        const std::vector<std::string>& candidate_ids, const common::DataPoint& data_point,
         LoadBalanceStrategy strategy = LoadBalanceStrategy::ROUND_ROBIN);
 
     /// Select sink with filter predicate
     SinkSelectionResult select_sink_filtered(
-        const std::vector<std::string>& candidate_ids,
-        std::function<bool(const SinkInfo&)> filter,
+        const std::vector<std::string>& candidate_ids, std::function<bool(const SinkInfo&)> filter,
         LoadBalanceStrategy strategy = LoadBalanceStrategy::ROUND_ROBIN);
 
     // Data Routing
 
     /// Write data point to a specific sink
-    common::Result<> write_to_sink(std::string_view sink_id,
-                                   const common::DataPoint& data_point);
+    common::Result<> write_to_sink(std::string_view sink_id, const common::DataPoint& data_point);
 
     /// Write batch to a specific sink
     common::Result<> write_batch_to_sink(std::string_view sink_id,
@@ -383,14 +358,12 @@ public:
 
     /// Write to selected sink(s) with load balancing
     common::Result<> write_with_load_balancing(
-        const std::vector<std::string>& candidate_ids,
-        const common::DataPoint& data_point,
+        const std::vector<std::string>& candidate_ids, const common::DataPoint& data_point,
         LoadBalanceStrategy strategy = LoadBalanceStrategy::ROUND_ROBIN);
 
     /// Write to all sinks (broadcast)
     std::vector<std::pair<std::string, common::Result<>>> write_to_all(
-        const std::vector<std::string>& sink_ids,
-        const common::DataPoint& data_point);
+        const std::vector<std::string>& sink_ids, const common::DataPoint& data_point);
 
     // Health Management
 
@@ -432,4 +405,4 @@ private:
     std::unique_ptr<SinkRegistryImpl> impl_;
 };
 
-} // namespace ipb::core
+}  // namespace ipb::core

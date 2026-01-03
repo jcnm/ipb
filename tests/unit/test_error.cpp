@@ -9,10 +9,12 @@
  * - Result<T>: Result type for both void and value types
  */
 
-#include <gtest/gtest.h>
 #include <ipb/common/error.hpp>
+
 #include <string>
 #include <thread>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::common;
 
@@ -211,8 +213,7 @@ TEST_F(ErrorTest, TransientAndFatalChecks) {
 
 TEST_F(ErrorTest, WithContext) {
     Error err(ErrorCode::CONFIG_INVALID, "Invalid configuration");
-    err.with_context("file", "config.yaml")
-       .with_context("line", "42");
+    err.with_context("file", "config.yaml").with_context("line", "42");
 
     std::string str = err.to_string();
     EXPECT_NE(str.find("file: config.yaml"), std::string::npos);
@@ -483,7 +484,7 @@ class ErrorThreadSafetyTest : public ::testing::Test {};
 
 TEST_F(ErrorThreadSafetyTest, ConcurrentErrorCreation) {
     constexpr int NUM_THREADS = 4;
-    constexpr int ITERATIONS = 1000;
+    constexpr int ITERATIONS  = 1000;
 
     std::vector<std::thread> threads;
     std::atomic<int> success_count{0};
@@ -510,7 +511,7 @@ TEST_F(ErrorThreadSafetyTest, ConcurrentErrorCreation) {
 
 TEST_F(ErrorThreadSafetyTest, ConcurrentResultCreation) {
     constexpr int NUM_THREADS = 4;
-    constexpr int ITERATIONS = 1000;
+    constexpr int ITERATIONS  = 1000;
 
     std::vector<std::thread> threads;
     std::atomic<int> value_sum{0};

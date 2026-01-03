@@ -19,24 +19,24 @@
  * - Interactive data entry
  */
 
-#include "ipb/common/interfaces.hpp"
-#include "ipb/common/data_point.hpp"
-#include "ipb/common/dataset.hpp"
-#include "ipb/common/error.hpp"
-#include "ipb/common/debug.hpp"
-#include "ipb/common/platform.hpp"
-
-#include <memory>
-#include <string>
-#include <vector>
 #include <atomic>
-#include <mutex>
 #include <chrono>
 #include <functional>
+#include <istream>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <queue>
+#include <string>
 #include <thread>
-#include <istream>
+#include <vector>
+
+#include "ipb/common/data_point.hpp"
+#include "ipb/common/dataset.hpp"
+#include "ipb/common/debug.hpp"
+#include "ipb/common/error.hpp"
+#include "ipb/common/interfaces.hpp"
+#include "ipb/common/platform.hpp"
 
 namespace ipb::scoop::console {
 
@@ -48,10 +48,10 @@ namespace ipb::scoop::console {
  * @brief Supported input formats for console data
  */
 enum class InputFormat {
-    JSON,           ///< JSON format: {"address": "...", "value": ...}
-    KEY_VALUE,      ///< Key-value: address=... value=... quality=...
-    CSV,            ///< CSV: address,value,quality,timestamp
-    AUTO            ///< Auto-detect based on input content
+    JSON,       ///< JSON format: {"address": "...", "value": ...}
+    KEY_VALUE,  ///< Key-value: address=... value=... quality=...
+    CSV,        ///< CSV: address,value,quality,timestamp
+    AUTO        ///< Auto-detect based on input content
 };
 
 //=============================================================================
@@ -63,30 +63,30 @@ enum class InputFormat {
  */
 struct ConsoleScoopConfig {
     // Input settings
-    InputFormat format = InputFormat::AUTO;     ///< Input format to expect
-    std::string prompt = "ipb> ";               ///< Prompt for interactive mode
-    bool interactive = false;                   ///< Interactive mode with prompt
-    bool echo_input = false;                    ///< Echo parsed data back
+    InputFormat format = InputFormat::AUTO;  ///< Input format to expect
+    std::string prompt = "ipb> ";            ///< Prompt for interactive mode
+    bool interactive   = false;              ///< Interactive mode with prompt
+    bool echo_input    = false;              ///< Echo parsed data back
 
     // CSV format settings
-    char csv_delimiter = ',';                   ///< CSV field delimiter
-    bool csv_has_header = false;                ///< CSV has header row
+    char csv_delimiter                   = ',';    ///< CSV field delimiter
+    bool csv_has_header                  = false;  ///< CSV has header row
     std::vector<std::string> csv_columns = {"address", "value", "quality", "timestamp"};
 
     // Data conversion
     common::Quality default_quality = common::Quality::Good;
-    uint16_t default_protocol_id = 100;         ///< Protocol ID for console data
-    std::string address_prefix = "console/";    ///< Prefix for addresses
+    uint16_t default_protocol_id    = 100;         ///< Protocol ID for console data
+    std::string address_prefix      = "console/";  ///< Prefix for addresses
 
     // Processing
-    size_t buffer_size = 1000;                  ///< Max buffered DataPoints
-    std::chrono::milliseconds read_timeout{100}; ///< Timeout for non-blocking reads
-    bool skip_empty_lines = true;               ///< Skip empty input lines
-    bool skip_comments = true;                  ///< Skip lines starting with #
+    size_t buffer_size = 1000;                    ///< Max buffered DataPoints
+    std::chrono::milliseconds read_timeout{100};  ///< Timeout for non-blocking reads
+    bool skip_empty_lines = true;                 ///< Skip empty input lines
+    bool skip_comments    = true;                 ///< Skip lines starting with #
 
     // Error handling
-    bool skip_parse_errors = true;              ///< Skip lines that fail to parse
-    size_t max_parse_errors = 100;              ///< Max errors before unhealthy
+    bool skip_parse_errors  = true;  ///< Skip lines that fail to parse
+    size_t max_parse_errors = 100;   ///< Max errors before unhealthy
 
     // Monitoring
     bool enable_statistics = true;
@@ -119,12 +119,12 @@ struct ConsoleScoopStatistics {
     std::atomic<uint64_t> bytes_received{0};
 
     void reset() {
-        lines_received = 0;
-        lines_processed = 0;
-        lines_skipped = 0;
-        parse_errors = 0;
+        lines_received       = 0;
+        lines_processed      = 0;
+        lines_skipped        = 0;
+        parse_errors         = 0;
         data_points_produced = 0;
-        bytes_received = 0;
+        bytes_received       = 0;
     }
 };
 
@@ -146,9 +146,9 @@ struct ConsoleScoopStatistics {
  */
 class ConsoleScoop : public common::IProtocolSourceBase {
 public:
-    static constexpr uint16_t PROTOCOL_ID = 100;
-    static constexpr std::string_view PROTOCOL_NAME = "Console";
-    static constexpr std::string_view COMPONENT_NAME = "ConsoleScoop";
+    static constexpr uint16_t PROTOCOL_ID               = 100;
+    static constexpr std::string_view PROTOCOL_NAME     = "Console";
+    static constexpr std::string_view COMPONENT_NAME    = "ConsoleScoop";
     static constexpr std::string_view COMPONENT_VERSION = "1.0.0";
 
     /**
@@ -164,7 +164,7 @@ public:
     ~ConsoleScoop() override;
 
     // Non-copyable
-    ConsoleScoop(const ConsoleScoop&) = delete;
+    ConsoleScoop(const ConsoleScoop&)            = delete;
     ConsoleScoop& operator=(const ConsoleScoop&) = delete;
 
     //=========================================================================
@@ -230,7 +230,8 @@ public:
     /**
      * @brief Set custom line parser
      */
-    using CustomParserCallback = std::function<std::optional<common::DataPoint>(const std::string& line)>;
+    using CustomParserCallback =
+        std::function<std::optional<common::DataPoint>(const std::string& line)>;
     void set_custom_parser(CustomParserCallback parser);
 
 private:
@@ -265,7 +266,8 @@ public:
     /**
      * @brief Create CSV-mode ConsoleScoop for piped input
      */
-    static std::unique_ptr<ConsoleScoop> create_csv_pipe(char delimiter = ',', bool has_header = false);
+    static std::unique_ptr<ConsoleScoop> create_csv_pipe(char delimiter  = ',',
+                                                         bool has_header = false);
 
     /**
      * @brief Create ConsoleScoop with custom input stream
@@ -278,4 +280,4 @@ public:
     static std::unique_ptr<ConsoleScoop> create(const ConsoleScoopConfig& config);
 };
 
-} // namespace ipb::scoop::console
+}  // namespace ipb::scoop::console

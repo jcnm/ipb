@@ -1,21 +1,23 @@
 #include "ipb/core/rule_engine/rule_engine.hpp"
-#include "ipb/core/rule_engine/pattern_matcher.hpp"
+
+#include <ipb/common/debug.hpp>
 #include <ipb/common/endpoint.hpp>
 #include <ipb/common/error.hpp>
-#include <ipb/common/debug.hpp>
 #include <ipb/common/platform.hpp>
 
 #include <algorithm>
 #include <shared_mutex>
 #include <unordered_map>
 
+#include "ipb/core/rule_engine/pattern_matcher.hpp"
+
 namespace ipb::core {
 
 using namespace common::debug;
 
 namespace {
-    constexpr std::string_view LOG_CAT = category::ROUTER;  // Rules are part of routing
-} // anonymous namespace
+constexpr std::string_view LOG_CAT = category::ROUTER;  // Rules are part of routing
+}  // anonymous namespace
 
 // ============================================================================
 // ValueCondition Implementation
@@ -57,23 +59,27 @@ bool ValueCondition::evaluate(const common::Value& value) const noexcept {
     };
 
     // Get reference value as double
-    double ref = 0.0;
+    double ref      = 0.0;
     double ref_high = 0.0;
 
-    std::visit([&ref](auto&& arg) {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_arithmetic_v<T>) {
-            ref = static_cast<double>(arg);
-        }
-    }, reference);
-
-    if (op == CompareOp::BETWEEN) {
-        std::visit([&ref_high](auto&& arg) {
+    std::visit(
+        [&ref](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_arithmetic_v<T>) {
-                ref_high = static_cast<double>(arg);
+                ref = static_cast<double>(arg);
             }
-        }, reference_high);
+        },
+        reference);
+
+    if (op == CompareOp::BETWEEN) {
+        std::visit(
+            [&ref_high](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_arithmetic_v<T>) {
+                    ref_high = static_cast<double>(arg);
+                }
+            },
+            reference_high);
     }
 
     auto val_opt = extract_double(value);
@@ -135,8 +141,8 @@ RuleMatchResult RoutingRule::evaluate(const common::DataPoint& dp) const {
     common::rt::HighResolutionTimer timer;
 
     RuleMatchResult result;
-    result.rule_id = id;
-    result.priority = priority;
+    result.rule_id    = id;
+    result.priority   = priority;
     result.target_ids = target_sink_ids;
 
     eval_count.fetch_add(1, std::memory_order_relaxed);
@@ -158,9 +164,9 @@ RuleMatchResult RoutingRule::evaluate(const common::DataPoint& dp) const {
             break;
 
         case RuleType::PATTERN: {
-            auto matcher = PatternMatcherFactory::create(address_pattern);
-            auto match_result = matcher->match_with_groups(dp.address());
-            matched = match_result.matched;
+            auto matcher           = PatternMatcherFactory::create(address_pattern);
+            auto match_result      = matcher->match_with_groups(dp.address());
+            matched                = match_result.matched;
             result.captured_groups = std::move(match_result.captured_groups);
             break;
         }
@@ -222,36 +228,33 @@ RuleMatchResult RoutingRule::evaluate(const common::DataPoint& dp) const {
 
 class RuleEngineImpl {
 public:
-    explicit RuleEngineImpl(const RuleEngineConfig& config)
-        : config_(config) {}
+    explicit RuleEngineImpl(const RuleEngineConfig& config) : config_(config) {}
 
     uint32_t add_rule(RoutingRule rule) {
         std::unique_lock lock(rules_mutex_);
 
         uint32_t id = next_rule_id_++;
-        rule.id = id;
+        rule.id     = id;
 
-        IPB_LOG_DEBUG(LOG_CAT, "Adding rule id=" << id << " name=\"" << rule.name
-                     << "\" type=" << static_cast<int>(rule.type)
-                     << " priority=" << static_cast<int>(rule.priority));
+        IPB_LOG_DEBUG(LOG_CAT, "Adding rule id=" << id << " name=\"" << rule.name << "\" type="
+                                                 << static_cast<int>(rule.type) << " priority="
+                                                 << static_cast<int>(rule.priority));
 
         // Pre-compile pattern if configured
         if (config_.precompile_patterns && rule.type == RuleType::PATTERN) {
             IPB_LOG_TRACE(LOG_CAT, "Pre-compiling pattern: " << rule.address_pattern);
             compiled_patterns_[id] = PatternMatcherFactory::create(
-                rule.address_pattern,
-                config_.prefer_ctre ?
-                    PatternMatcherFactory::MatcherType::REGEX_CTRE :
-                    PatternMatcherFactory::MatcherType::AUTO);
+                rule.address_pattern, config_.prefer_ctre
+                                          ? PatternMatcherFactory::MatcherType::REGEX_CTRE
+                                          : PatternMatcherFactory::MatcherType::AUTO);
         }
 
         rules_.push_back(std::move(rule));
 
         // Re-sort by priority (descending)
-        std::sort(rules_.begin(), rules_.end(),
-            [](const RoutingRule& a, const RoutingRule& b) {
-                return static_cast<uint8_t>(a.priority) > static_cast<uint8_t>(b.priority);
-            });
+        std::sort(rules_.begin(), rules_.end(), [](const RoutingRule& a, const RoutingRule& b) {
+            return static_cast<uint8_t>(a.priority) > static_cast<uint8_t>(b.priority);
+        });
 
         // Invalidate cache
         if (config_.enable_cache) {
@@ -267,29 +270,27 @@ public:
         std::unique_lock lock(rules_mutex_);
 
         auto it = std::find_if(rules_.begin(), rules_.end(),
-            [rule_id](const RoutingRule& r) { return r.id == rule_id; });
+                               [rule_id](const RoutingRule& r) { return r.id == rule_id; });
 
         if (it == rules_.end()) {
             return false;
         }
 
-        *it = rule;
+        *it    = rule;
         it->id = rule_id;
 
         // Update compiled pattern
         if (config_.precompile_patterns && rule.type == RuleType::PATTERN) {
             compiled_patterns_[rule_id] = PatternMatcherFactory::create(
-                rule.address_pattern,
-                config_.prefer_ctre ?
-                    PatternMatcherFactory::MatcherType::REGEX_CTRE :
-                    PatternMatcherFactory::MatcherType::AUTO);
+                rule.address_pattern, config_.prefer_ctre
+                                          ? PatternMatcherFactory::MatcherType::REGEX_CTRE
+                                          : PatternMatcherFactory::MatcherType::AUTO);
         }
 
         // Re-sort
-        std::sort(rules_.begin(), rules_.end(),
-            [](const RoutingRule& a, const RoutingRule& b) {
-                return static_cast<uint8_t>(a.priority) > static_cast<uint8_t>(b.priority);
-            });
+        std::sort(rules_.begin(), rules_.end(), [](const RoutingRule& a, const RoutingRule& b) {
+            return static_cast<uint8_t>(a.priority) > static_cast<uint8_t>(b.priority);
+        });
 
         if (config_.enable_cache) {
             cache_.clear();
@@ -302,7 +303,7 @@ public:
         std::unique_lock lock(rules_mutex_);
 
         auto it = std::find_if(rules_.begin(), rules_.end(),
-            [rule_id](const RoutingRule& r) { return r.id == rule_id; });
+                               [rule_id](const RoutingRule& r) { return r.id == rule_id; });
 
         if (it == rules_.end()) {
             return false;
@@ -322,7 +323,7 @@ public:
         std::unique_lock lock(rules_mutex_);
 
         auto it = std::find_if(rules_.begin(), rules_.end(),
-            [rule_id](const RoutingRule& r) { return r.id == rule_id; });
+                               [rule_id](const RoutingRule& r) { return r.id == rule_id; });
 
         if (it == rules_.end()) {
             return false;
@@ -341,7 +342,7 @@ public:
         std::shared_lock lock(rules_mutex_);
 
         auto it = std::find_if(rules_.begin(), rules_.end(),
-            [rule_id](const RoutingRule& r) { return r.id == rule_id; });
+                               [rule_id](const RoutingRule& r) { return r.id == rule_id; });
 
         if (it == rules_.end()) {
             return std::nullopt;
@@ -371,6 +372,8 @@ public:
         common::rt::HighResolutionTimer timer;
 
         std::vector<RuleMatchResult> results;
+        // PERFORMANCE: Reserve space for typical number of matches to reduce reallocations
+        results.reserve(4);
         std::string address(dp.address());
 
         IPB_LOG_TRACE(LOG_CAT, "Evaluating rules for address: " << address);
@@ -391,13 +394,15 @@ public:
             std::shared_lock lock(rules_mutex_);
 
             for (const auto& rule : rules_) {
-                if (!rule.enabled) continue;
+                if (!rule.enabled)
+                    continue;
 
                 auto result = evaluate_rule(rule, dp);
                 if (IPB_UNLIKELY(result.matched)) {
                     results.push_back(std::move(result));
                     stats_.total_matches.fetch_add(1, std::memory_order_relaxed);
-                    IPB_LOG_TRACE(LOG_CAT, "Rule matched: id=" << rule.id << " name=\"" << rule.name << "\"");
+                    IPB_LOG_TRACE(
+                        LOG_CAT, "Rule matched: id=" << rule.id << " name=\"" << rule.name << "\"");
                 }
             }
         }
@@ -413,7 +418,7 @@ public:
         update_timing_stats(elapsed.count());
 
         IPB_LOG_TRACE(LOG_CAT, "Evaluation complete: " << results.size() << " matches in "
-                     << elapsed.count() / 1000.0 << "us");
+                                                       << elapsed.count() / 1000.0 << "us");
 
         return results;
     }
@@ -424,7 +429,8 @@ public:
         std::shared_lock lock(rules_mutex_);
 
         for (const auto& rule : rules_) {
-            if (!rule.enabled) continue;
+            if (!rule.enabled)
+                continue;
 
             auto result = evaluate_rule(rule, dp);
             if (result.matched) {
@@ -442,15 +448,17 @@ public:
         return std::nullopt;
     }
 
-    std::vector<RuleMatchResult> evaluate_priority(
-            const common::DataPoint& dp,
-            RulePriority min_priority) {
+    std::vector<RuleMatchResult> evaluate_priority(const common::DataPoint& dp,
+                                                   RulePriority min_priority) {
         std::vector<RuleMatchResult> results;
+        // PERFORMANCE: Reserve space for typical number of matches
+        results.reserve(4);
 
         std::shared_lock lock(rules_mutex_);
 
         for (const auto& rule : rules_) {
-            if (!rule.enabled) continue;
+            if (!rule.enabled)
+                continue;
             if (static_cast<uint8_t>(rule.priority) < static_cast<uint8_t>(min_priority)) {
                 break;  // Rules are sorted by priority, so we can stop here
             }
@@ -468,7 +476,7 @@ public:
     }
 
     std::vector<std::vector<RuleMatchResult>> evaluate_batch(
-            std::span<const common::DataPoint> data_points) {
+        std::span<const common::DataPoint> data_points) {
         std::vector<std::vector<RuleMatchResult>> results;
         results.reserve(data_points.size());
 
@@ -489,7 +497,7 @@ public:
 
         auto matcher = PatternMatcherFactory::create(address_pattern);
 
-        for (auto it = cache_.begin(); it != cache_.end(); ) {
+        for (auto it = cache_.begin(); it != cache_.end();) {
             if (matcher->matches(it->first)) {
                 it = cache_.erase(it);
             } else {
@@ -498,32 +506,25 @@ public:
         }
     }
 
-    const RuleEngineStats& stats() const noexcept {
-        return stats_;
-    }
+    const RuleEngineStats& stats() const noexcept { return stats_; }
 
-    void reset_stats() {
-        stats_.reset();
-    }
+    void reset_stats() { stats_.reset(); }
 
-    const RuleEngineConfig& config() const noexcept {
-        return config_;
-    }
+    const RuleEngineConfig& config() const noexcept { return config_; }
 
 private:
-    RuleMatchResult evaluate_rule(const RoutingRule& rule,
-                                  const common::DataPoint& dp) const {
+    RuleMatchResult evaluate_rule(const RoutingRule& rule, const common::DataPoint& dp) const {
         // Use pre-compiled pattern if available
         if (rule.type == RuleType::PATTERN) {
             auto it = compiled_patterns_.find(rule.id);
             if (it != compiled_patterns_.end()) {
                 RuleMatchResult result;
-                result.rule_id = rule.id;
-                result.priority = rule.priority;
+                result.rule_id    = rule.id;
+                result.priority   = rule.priority;
                 result.target_ids = rule.target_sink_ids;
 
-                auto match = it->second->match_with_groups(dp.address());
-                result.matched = match.matched;
+                auto match             = it->second->match_with_groups(dp.address());
+                result.matched         = match.matched;
                 result.captured_groups = std::move(match.captured_groups);
 
                 return result;
@@ -543,7 +544,7 @@ private:
 
         // Check TTL
         if (config_.cache_ttl_ms > 0) {
-            auto now = common::Timestamp::now();
+            auto now    = common::Timestamp::now();
             auto age_ms = (now - it->second.timestamp).count() / 1000000;
             if (age_ms > config_.cache_ttl_ms) {
                 return std::nullopt;
@@ -553,8 +554,7 @@ private:
         return it->second.results;
     }
 
-    void update_cache(const std::string& address,
-                     const std::vector<RuleMatchResult>& results) {
+    void update_cache(const std::string& address, const std::vector<RuleMatchResult>& results) {
         std::unique_lock lock(cache_mutex_);
 
         // Evict if at capacity
@@ -565,7 +565,7 @@ private:
 
             for (const auto& [key, entry] : cache_) {
                 if (entry.timestamp < oldest) {
-                    oldest = entry.timestamp;
+                    oldest     = entry.timestamp;
                     oldest_key = key;
                 }
             }
@@ -612,15 +612,14 @@ private:
 // RuleEngine Public Interface
 // ============================================================================
 
-RuleEngine::RuleEngine()
-    : impl_(std::make_unique<RuleEngineImpl>(RuleEngineConfig{})) {}
+RuleEngine::RuleEngine() : impl_(std::make_unique<RuleEngineImpl>(RuleEngineConfig{})) {}
 
 RuleEngine::RuleEngine(const RuleEngineConfig& config)
     : impl_(std::make_unique<RuleEngineImpl>(config)) {}
 
 RuleEngine::~RuleEngine() = default;
 
-RuleEngine::RuleEngine(RuleEngine&&) noexcept = default;
+RuleEngine::RuleEngine(RuleEngine&&) noexcept            = default;
 RuleEngine& RuleEngine::operator=(RuleEngine&&) noexcept = default;
 
 uint32_t RuleEngine::add_rule(RoutingRule rule) {
@@ -663,14 +662,13 @@ std::optional<RuleMatchResult> RuleEngine::evaluate_first(const common::DataPoin
     return impl_->evaluate_first(dp);
 }
 
-std::vector<RuleMatchResult> RuleEngine::evaluate_priority(
-        const common::DataPoint& dp,
-        RulePriority min_priority) {
+std::vector<RuleMatchResult> RuleEngine::evaluate_priority(const common::DataPoint& dp,
+                                                           RulePriority min_priority) {
     return impl_->evaluate_priority(dp, min_priority);
 }
 
 std::vector<std::vector<RuleMatchResult>> RuleEngine::evaluate_batch(
-        std::span<const common::DataPoint> data_points) {
+    std::span<const common::DataPoint> data_points) {
     return impl_->evaluate_batch(data_points);
 }
 
@@ -694,4 +692,4 @@ const RuleEngineConfig& RuleEngine::config() const noexcept {
     return impl_->config();
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

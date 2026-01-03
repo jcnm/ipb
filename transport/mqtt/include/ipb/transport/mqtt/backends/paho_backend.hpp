@@ -8,13 +8,14 @@
  * Best for: General purpose, feature-complete, well-tested.
  */
 
-#include "mqtt_backend.hpp"
-
-#include <mqtt/async_client.h>
+#include <atomic>
 #include <memory>
 #include <mutex>
-#include <atomic>
 #include <string>
+
+#include <mqtt/async_client.h>
+
+#include "mqtt_backend.hpp"
 
 namespace ipb::transport::mqtt {
 
@@ -33,7 +34,7 @@ public:
     ~PahoBackend() override;
 
     // Non-copyable, non-movable (due to callback registrations)
-    PahoBackend(const PahoBackend&) = delete;
+    PahoBackend(const PahoBackend&)            = delete;
     PahoBackend& operator=(const PahoBackend&) = delete;
 
     //=========================================================================
@@ -51,20 +52,11 @@ public:
     ConnectionState state() const noexcept override;
     std::string_view client_id() const noexcept override;
 
-    uint16_t publish(
-        std::string_view topic,
-        std::span<const uint8_t> payload,
-        QoS qos = QoS::AT_LEAST_ONCE,
-        bool retained = false
-    ) override;
+    uint16_t publish(std::string_view topic, std::span<const uint8_t> payload,
+                     QoS qos = QoS::AT_LEAST_ONCE, bool retained = false) override;
 
-    bool publish_sync(
-        std::string_view topic,
-        std::span<const uint8_t> payload,
-        QoS qos,
-        bool retained,
-        uint32_t timeout_ms
-    ) override;
+    bool publish_sync(std::string_view topic, std::span<const uint8_t> payload, QoS qos,
+                      bool retained, uint32_t timeout_ms) override;
 
     bool subscribe(std::string_view topic, QoS qos = QoS::AT_LEAST_ONCE) override;
     bool unsubscribe(std::string_view topic) override;
@@ -108,4 +100,4 @@ private:
     void notify_connection_state(ConnectionState new_state, std::string_view reason);
 };
 
-} // namespace ipb::transport::mqtt
+}  // namespace ipb::transport::mqtt

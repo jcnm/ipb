@@ -50,9 +50,10 @@ target_link_libraries(ipb-sink-sparkplug
     PUBLIC
         ipb-common
         ipb-transport-mqtt
-    PRIVATE
-        pthread
 )
+if(NOT WIN32)
+    target_link_libraries(ipb-sink-sparkplug PRIVATE pthread)
+endif()
 
 if(Protobuf_FOUND)
     target_link_libraries(ipb-sink-sparkplug PRIVATE ${Protobuf_LIBRARIES})
@@ -61,13 +62,22 @@ if(Protobuf_FOUND)
 endif()
 
 # Compiler options
-target_compile_options(ipb-sink-sparkplug PRIVATE
-    -Wall -Wextra -Wpedantic
-    -fPIC
-)
-
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-sink-sparkplug PRIVATE -O3 -march=native)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ipb-sink-sparkplug PRIVATE
+        -Wall -Wextra -Wpedantic
+        -fPIC
+    )
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(ipb-sink-sparkplug PRIVATE -O3)
+        if(NOT APPLE)
+            target_compile_options(ipb-sink-sparkplug PRIVATE -march=native)
+        endif()
+    endif()
+elseif(MSVC)
+    target_compile_options(ipb-sink-sparkplug PRIVATE /W4)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(ipb-sink-sparkplug PRIVATE /O2)
+    endif()
 endif()
 
 # Set library properties

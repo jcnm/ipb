@@ -1,4 +1,5 @@
 #include "ipb/core/message_bus/channel.hpp"
+
 #include <algorithm>
 
 namespace ipb::core {
@@ -7,8 +8,7 @@ namespace ipb::core {
 // Channel Implementation
 // ============================================================================
 
-Channel::Channel(std::string topic)
-    : topic_(std::move(topic)) {}
+Channel::Channel(std::string topic) : topic_(std::move(topic)) {}
 
 Channel::~Channel() = default;
 
@@ -38,7 +38,7 @@ uint64_t Channel::subscribe(SubscriberCallback callback) {
 }
 
 uint64_t Channel::subscribe(SubscriberCallback callback,
-                           std::function<bool(const Message&)> filter) {
+                            std::function<bool(const Message&)> filter) {
     uint64_t id = next_subscriber_id_.fetch_add(1, std::memory_order_relaxed);
 
     std::unique_lock lock(subscribers_mutex_);
@@ -51,10 +51,9 @@ uint64_t Channel::subscribe(SubscriberCallback callback,
 void Channel::unsubscribe(uint64_t subscriber_id) {
     std::unique_lock lock(subscribers_mutex_);
 
-    auto it = std::find_if(subscribers_.begin(), subscribers_.end(),
-        [subscriber_id](const auto& entry) {
-            return entry->id == subscriber_id;
-        });
+    auto it =
+        std::find_if(subscribers_.begin(), subscribers_.end(),
+                     [subscriber_id](const auto& entry) { return entry->id == subscriber_id; });
 
     if (it != subscribers_.end()) {
         (*it)->active.store(false, std::memory_order_release);
@@ -65,10 +64,9 @@ void Channel::unsubscribe(uint64_t subscriber_id) {
 bool Channel::is_subscriber_active(uint64_t subscriber_id) const {
     std::shared_lock lock(subscribers_mutex_);
 
-    auto it = std::find_if(subscribers_.begin(), subscribers_.end(),
-        [subscriber_id](const auto& entry) {
-            return entry->id == subscriber_id;
-        });
+    auto it =
+        std::find_if(subscribers_.begin(), subscribers_.end(),
+                     [subscriber_id](const auto& entry) { return entry->id == subscriber_id; });
 
     return it != subscribers_.end() && (*it)->active.load(std::memory_order_acquire);
 }
@@ -228,4 +226,4 @@ bool TopicMatcher::is_valid(std::string_view topic_or_pattern) noexcept {
     return true;
 }
 
-} // namespace ipb::core
+}  // namespace ipb::core

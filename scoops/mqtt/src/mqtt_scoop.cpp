@@ -1,22 +1,23 @@
 #include "ipb/scoop/mqtt/mqtt_scoop.hpp"
 
-#include <ipb/common/error.hpp>
 #include <ipb/common/debug.hpp>
+#include <ipb/common/error.hpp>
 #include <ipb/common/platform.hpp>
 
-#include <json/json.h>
-#include <sstream>
 #include <algorithm>
-#include <thread>
 #include <condition_variable>
+#include <sstream>
+#include <thread>
+
+#include <json/json.h>
 
 namespace ipb::scoop::mqtt {
 
 using namespace common::debug;
 
 namespace {
-    constexpr const char* LOG_CAT = category::PROTOCOL;
-}
+constexpr std::string_view LOG_CAT = category::PROTOCOL;
+}  // namespace
 
 //=============================================================================
 // TopicMapping Implementation
@@ -29,9 +30,8 @@ bool TopicMapping::matches(const std::string& topic) const {
     // Escape regex special characters (except our wildcards)
     for (size_t i = 0; i < regex_pattern.size(); ++i) {
         char c = regex_pattern[i];
-        if (c == '.' || c == '[' || c == ']' || c == '(' || c == ')' ||
-            c == '{' || c == '}' || c == '^' || c == '$' || c == '|' ||
-            c == '\\' || c == '?' || c == '*') {
+        if (c == '.' || c == '[' || c == ']' || c == '(' || c == ')' || c == '{' || c == '}' ||
+            c == '^' || c == '$' || c == '|' || c == '\\' || c == '?' || c == '*') {
             if (c != '+' && c != '#') {
                 regex_pattern.insert(i, "\\");
                 ++i;
@@ -81,7 +81,7 @@ std::string TopicMapping::generate_address(const std::string& topic) const {
 
     for (size_t i = 0; i < levels.size(); ++i) {
         std::string placeholder = "{level" + std::to_string(i) + "}";
-        pos = 0;
+        pos                     = 0;
         while ((pos = address.find(placeholder, pos)) != std::string::npos) {
             address.replace(pos, placeholder.length(), levels[i]);
         }
@@ -95,14 +95,18 @@ std::string TopicMapping::generate_address(const std::string& topic) const {
 //=============================================================================
 
 bool MQTTScoopConfig::is_valid() const {
-    if (!mqtt_config.is_valid()) return false;
-    if (subscription.mappings.empty()) return false;
+    if (!mqtt_config.is_valid())
+        return false;
+    if (subscription.mappings.empty())
+        return false;
     return true;
 }
 
 std::string MQTTScoopConfig::validation_error() const {
-    if (!mqtt_config.is_valid()) return mqtt_config.validation_error();
-    if (subscription.mappings.empty()) return "No topic mappings configured";
+    if (!mqtt_config.is_valid())
+        return mqtt_config.validation_error();
+    if (subscription.mappings.empty())
+        return "No topic mappings configured";
     return "";
 }
 
@@ -111,9 +115,9 @@ MQTTScoopConfig MQTTScoopConfig::create_default() {
     config.mqtt_config.broker_url = "tcp://localhost:1883";
 
     TopicMapping default_mapping;
-    default_mapping.topic_pattern = "#";
+    default_mapping.topic_pattern    = "#";
     default_mapping.address_template = "mqtt/{topic}";
-    default_mapping.format = PayloadFormat::RAW;
+    default_mapping.format           = PayloadFormat::RAW;
     config.subscription.mappings.push_back(default_mapping);
 
     return config;
@@ -122,9 +126,9 @@ MQTTScoopConfig MQTTScoopConfig::create_default() {
 MQTTScoopConfig MQTTScoopConfig::create_high_throughput() {
     MQTTScoopConfig config = create_default();
 
-    config.processing.buffer_size = 50000;
+    config.processing.buffer_size    = 50000;
     config.processing.flush_interval = std::chrono::milliseconds{10};
-    config.subscription.default_qos = transport::mqtt::QoS::AT_MOST_ONCE;
+    config.subscription.default_qos  = transport::mqtt::QoS::AT_MOST_ONCE;
 
     return config;
 }
@@ -135,10 +139,10 @@ MQTTScoopConfig MQTTScoopConfig::create_json_topics(const std::vector<std::strin
 
     for (const auto& topic : topics) {
         TopicMapping mapping;
-        mapping.topic_pattern = topic;
+        mapping.topic_pattern    = topic;
         mapping.address_template = "mqtt/{topic}";
-        mapping.format = PayloadFormat::JSON;
-        mapping.json_value_path = "value";
+        mapping.format           = PayloadFormat::JSON;
+        mapping.json_value_path  = "value";
         config.subscription.mappings.push_back(mapping);
     }
 
@@ -152,9 +156,7 @@ MQTTScoopConfig MQTTScoopConfig::create_json_topics(const std::vector<std::strin
 class MQTTScoop::Impl {
 public:
     explicit Impl(const MQTTScoopConfig& config)
-        : config_(config)
-        , running_(false)
-        , connected_(false) {
+        : config_(config), running_(false), connected_(false) {
         IPB_LOG_DEBUG(LOG_CAT, "MQTTScoop::Impl created");
     }
 
@@ -168,39 +170,37 @@ public:
 
         if (IPB_UNLIKELY(running_.load())) {
             IPB_LOG_WARN(LOG_CAT, "MQTTScoop already running");
-            return common::Result<>::success();
+            return common::ok();
         }
 
         IPB_LOG_INFO(LOG_CAT, "Starting MQTTScoop...");
 
         // Get or create shared MQTT connection
         auto& manager = transport::mqtt::MQTTConnectionManager::instance();
-        connection_ = manager.get_or_create(config_.connection_id, config_.mqtt_config);
+        connection_   = manager.get_or_create(config_.connection_id, config_.mqtt_config);
 
         if (IPB_UNLIKELY(!connection_)) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to create MQTT connection");
-            return common::Result<>::failure("Failed to create MQTT connection");
+            return common::err(common::ErrorCode::CONNECTION_FAILED,
+                               "Failed to create MQTT connection");
         }
 
         // Setup message callback
         connection_->set_message_callback(
-            [this](const std::string& topic, const std::string& payload,
-                   transport::mqtt::QoS qos, bool retained) {
-                handle_message(topic, payload, retained);
-            }
-        );
+            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS qos,
+                   bool retained) { handle_message(topic, payload, retained); });
 
         // Setup connection callback
         connection_->set_connection_callback(
             [this](transport::mqtt::ConnectionState state, const std::string& reason) {
                 handle_connection_state(state, reason);
-            }
-        );
+            });
 
         // Connect
         if (IPB_UNLIKELY(!connection_->connect())) {
             IPB_LOG_ERROR(LOG_CAT, "Failed to connect to MQTT broker");
-            return common::Result<>::failure("Failed to connect to MQTT broker");
+            return common::err(common::ErrorCode::CONNECTION_FAILED,
+                               "Failed to connect to MQTT broker");
         }
 
         IPB_LOG_DEBUG(LOG_CAT, "Connected to MQTT broker");
@@ -215,7 +215,7 @@ public:
         subscribe_all();
 
         IPB_LOG_INFO(LOG_CAT, "MQTTScoop started successfully");
-        return common::Result<>::success();
+        return common::ok();
     }
 
     common::Result<> stop() {
@@ -223,7 +223,7 @@ public:
 
         if (!running_.load()) {
             IPB_LOG_DEBUG(LOG_CAT, "MQTTScoop already stopped");
-            return common::Result<>::success();
+            return common::ok();
         }
 
         IPB_LOG_INFO(LOG_CAT, "Stopping MQTTScoop...");
@@ -253,7 +253,7 @@ public:
 
         connected_.store(false);
         IPB_LOG_INFO(LOG_CAT, "MQTTScoop stopped successfully");
-        return common::Result<>::success();
+        return common::ok();
     }
 
     bool is_running() const noexcept { return running_.load(); }
@@ -266,25 +266,25 @@ public:
 
         common::DataSet result;
         while (!data_buffer_.empty()) {
-            result.add(data_buffer_.front());
+            result.push_back(data_buffer_.front());
             data_buffer_.pop();
         }
 
-        return common::Result<common::DataSet>::success(std::move(result));
+        return common::ok(std::move(result));
     }
 
     common::Result<> subscribe(DataCallback data_cb, ErrorCallback error_cb) {
         std::lock_guard<std::mutex> lock(callback_mutex_);
-        data_callback_ = std::move(data_cb);
+        data_callback_  = std::move(data_cb);
         error_callback_ = std::move(error_cb);
-        return common::Result<>::success();
+        return common::ok();
     }
 
     common::Result<> unsubscribe() {
         std::lock_guard<std::mutex> lock(callback_mutex_);
-        data_callback_ = nullptr;
+        data_callback_  = nullptr;
         error_callback_ = nullptr;
-        return common::Result<>::success();
+        return common::ok();
     }
 
     common::Result<> add_topic_mapping(const TopicMapping& mapping) {
@@ -298,18 +298,18 @@ public:
             stats_.subscriptions_active++;
         }
 
-        return common::Result<>::success();
+        return common::ok();
     }
 
     common::Result<> remove_topic_mapping(const std::string& topic_pattern) {
         {
             std::lock_guard<std::mutex> lock(mappings_mutex_);
             auto& mappings = config_.subscription.mappings;
-            mappings.erase(
-                std::remove_if(mappings.begin(), mappings.end(),
-                    [&](const TopicMapping& m) { return m.topic_pattern == topic_pattern; }),
-                mappings.end()
-            );
+            mappings.erase(std::remove_if(mappings.begin(), mappings.end(),
+                                          [&](const TopicMapping& m) {
+                                              return m.topic_pattern == topic_pattern;
+                                          }),
+                           mappings.end());
         }
 
         if (connection_ && connection_->is_connected()) {
@@ -317,7 +317,7 @@ public:
             stats_.subscriptions_active--;
         }
 
-        return common::Result<>::success();
+        return common::ok();
     }
 
     std::vector<TopicMapping> get_topic_mappings() const {
@@ -330,9 +330,7 @@ public:
         custom_parser_ = std::move(parser);
     }
 
-    MQTTScoopStatistics get_mqtt_statistics() const {
-        return stats_;
-    }
+    MQTTScoopStatistics get_mqtt_statistics() const { return stats_; }
 
     std::vector<std::string> get_subscribed_topics() const {
         std::lock_guard<std::mutex> lock(mappings_mutex_);
@@ -344,13 +342,12 @@ public:
     }
 
     bool is_healthy() const noexcept {
-        if (!running_.load() || !is_connected()) return false;
+        if (!running_.load() || !is_connected())
+            return false;
         return stats_.parse_errors.load() < config_.processing.max_parse_errors;
     }
 
-    void reset_statistics() {
-        stats_.reset();
-    }
+    void reset_statistics() { stats_.reset(); }
 
 private:
     void subscribe_all() {
@@ -362,7 +359,8 @@ private:
         }
     }
 
-    void handle_connection_state(transport::mqtt::ConnectionState state, const std::string& reason) {
+    void handle_connection_state(transport::mqtt::ConnectionState state,
+                                 const std::string& reason) {
         if (state == transport::mqtt::ConnectionState::CONNECTED) {
             connected_.store(true);
             subscribe_all();
@@ -377,7 +375,8 @@ private:
         stats_.messages_received++;
         stats_.bytes_received += payload.size();
 
-        IPB_LOG_TRACE(LOG_CAT, "Received message on topic: " << topic << " (size=" << payload.size() << ")");
+        IPB_LOG_TRACE(LOG_CAT,
+                      "Received message on topic: " << topic << " (size=" << payload.size() << ")");
 
         // Check retained filter
         if (retained && config_.subscription.ignore_retained) {
@@ -389,7 +388,8 @@ private:
         // Check payload size
         if (IPB_UNLIKELY(payload.size() > config_.subscription.max_payload_size)) {
             stats_.messages_dropped++;
-            IPB_LOG_WARN(LOG_CAT, "Dropped oversized message on: " << topic << " (size=" << payload.size() << ")");
+            IPB_LOG_WARN(LOG_CAT, "Dropped oversized message on: " << topic << " (size="
+                                                                   << payload.size() << ")");
             return;
         }
 
@@ -439,21 +439,17 @@ private:
         }
     }
 
-    std::vector<common::DataPoint> parse_payload(
-        const std::string& topic,
-        const std::string& payload,
-        const TopicMapping& mapping)
-    {
+    std::vector<common::DataPoint> parse_payload(const std::string& topic,
+                                                 const std::string& payload,
+                                                 const TopicMapping& mapping) {
         std::vector<common::DataPoint> result;
 
         try {
             switch (mapping.format) {
                 case PayloadFormat::RAW:
-                    result.push_back(create_datapoint(
-                        mapping.generate_address(topic),
-                        payload,
-                        mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID
-                    ));
+                    result.push_back(
+                        create_datapoint(mapping.generate_address(topic), payload,
+                                         mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID));
                     break;
 
                 case PayloadFormat::JSON:
@@ -465,10 +461,8 @@ private:
                         float value;
                         std::memcpy(&value, payload.data(), sizeof(float));
                         result.push_back(create_datapoint(
-                            mapping.generate_address(topic),
-                            static_cast<double>(value),
-                            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID
-                        ));
+                            mapping.generate_address(topic), static_cast<double>(value),
+                            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID));
                     }
                     break;
 
@@ -477,10 +471,8 @@ private:
                         double value;
                         std::memcpy(&value, payload.data(), sizeof(double));
                         result.push_back(create_datapoint(
-                            mapping.generate_address(topic),
-                            value,
-                            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID
-                        ));
+                            mapping.generate_address(topic), value,
+                            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID));
                     }
                     break;
 
@@ -489,10 +481,8 @@ private:
                         int32_t value;
                         std::memcpy(&value, payload.data(), sizeof(int32_t));
                         result.push_back(create_datapoint(
-                            mapping.generate_address(topic),
-                            static_cast<int64_t>(value),
-                            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID
-                        ));
+                            mapping.generate_address(topic), static_cast<int64_t>(value),
+                            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID));
                     }
                     break;
 
@@ -501,22 +491,18 @@ private:
                         int64_t value;
                         std::memcpy(&value, payload.data(), sizeof(int64_t));
                         result.push_back(create_datapoint(
-                            mapping.generate_address(topic),
-                            value,
-                            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID
-                        ));
+                            mapping.generate_address(topic), value,
+                            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID));
                     }
                     break;
 
-                case PayloadFormat::CUSTOM:
-                    {
-                        std::lock_guard<std::mutex> lock(callback_mutex_);
-                        if (custom_parser_) {
-                            std::vector<uint8_t> bytes(payload.begin(), payload.end());
-                            result = custom_parser_(topic, bytes);
-                        }
+                case PayloadFormat::CUSTOM: {
+                    std::lock_guard<std::mutex> lock(callback_mutex_);
+                    if (custom_parser_) {
+                        std::vector<uint8_t> bytes(payload.begin(), payload.end());
+                        result = custom_parser_(topic, bytes);
                     }
-                    break;
+                } break;
 
                 default:
                     // Unsupported format
@@ -529,11 +515,8 @@ private:
         return result;
     }
 
-    std::vector<common::DataPoint> parse_json(
-        const std::string& topic,
-        const std::string& payload,
-        const TopicMapping& mapping)
-    {
+    std::vector<common::DataPoint> parse_json(const std::string& topic, const std::string& payload,
+                                              const TopicMapping& mapping) {
         std::vector<common::DataPoint> result;
 
         Json::Value root;
@@ -560,11 +543,9 @@ private:
             }
         }
 
-        auto dp = create_datapoint_from_json(
-            mapping.generate_address(topic),
-            value,
-            mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID
-        );
+        auto dp =
+            create_datapoint_from_json(mapping.generate_address(topic), value,
+                                       mapping.protocol_id ? mapping.protocol_id : PROTOCOL_ID);
 
         if (dp) {
             result.push_back(std::move(*dp));
@@ -573,30 +554,29 @@ private:
         return result;
     }
 
-    common::DataPoint create_datapoint(
-        const std::string& address,
-        const common::DataPoint::ValueType& value,
-        uint16_t protocol_id)
-    {
+    template <typename T>
+    common::DataPoint create_datapoint(const std::string& address, T value, uint16_t protocol_id) {
         common::DataPoint dp;
         dp.set_address(address);
-        dp.set_value(value);
+        if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
+            dp.value().set_string_view(value);
+        } else {
+            dp.set_value(value);
+        }
         dp.set_protocol_id(protocol_id);
         dp.set_quality(config_.processing.default_quality);
-        dp.set_timestamp(std::chrono::system_clock::now());
+        dp.set_timestamp(common::Timestamp::from_system_time());
         return dp;
     }
 
-    std::optional<common::DataPoint> create_datapoint_from_json(
-        const std::string& address,
-        const Json::Value& value,
-        uint16_t protocol_id)
-    {
+    std::optional<common::DataPoint> create_datapoint_from_json(const std::string& address,
+                                                                const Json::Value& value,
+                                                                uint16_t protocol_id) {
         common::DataPoint dp;
         dp.set_address(address);
         dp.set_protocol_id(protocol_id);
         dp.set_quality(config_.processing.default_quality);
-        dp.set_timestamp(std::chrono::system_clock::now());
+        dp.set_timestamp(common::Timestamp::from_system_time());
 
         if (value.isBool()) {
             dp.set_value(value.asBool());
@@ -605,7 +585,7 @@ private:
         } else if (value.isDouble()) {
             dp.set_value(value.asDouble());
         } else if (value.isString()) {
-            dp.set_value(value.asString());
+            dp.value().set_string_view(value.asString());
         } else {
             return std::nullopt;
         }
@@ -617,11 +597,11 @@ private:
         while (running_.load()) {
             std::unique_lock<std::mutex> lock(buffer_mutex_);
 
-            buffer_cv_.wait_for(lock, config_.processing.flush_interval, [this] {
-                return !data_buffer_.empty() || !running_.load();
-            });
+            buffer_cv_.wait_for(lock, config_.processing.flush_interval,
+                                [this] { return !data_buffer_.empty() || !running_.load(); });
 
-            if (!running_.load()) break;
+            if (!running_.load())
+                break;
 
             // Deliver buffered data to callback
             std::vector<common::DataPoint> batch;
@@ -637,7 +617,7 @@ private:
                 if (data_callback_) {
                     common::DataSet ds;
                     for (auto& dp : batch) {
-                        ds.add(std::move(dp));
+                        ds.push_back(std::move(dp));
                     }
                     data_callback_(std::move(ds));
                 }
@@ -676,8 +656,7 @@ private:
 // MQTTScoop Implementation
 //=============================================================================
 
-MQTTScoop::MQTTScoop(const MQTTScoopConfig& config)
-    : impl_(std::make_unique<Impl>(config)) {}
+MQTTScoop::MQTTScoop(const MQTTScoopConfig& config) : impl_(std::make_unique<Impl>(config)) {}
 
 MQTTScoop::~MQTTScoop() = default;
 
@@ -699,7 +678,7 @@ common::Result<> MQTTScoop::unsubscribe() {
 
 common::Result<> MQTTScoop::add_address(std::string_view address) {
     TopicMapping mapping;
-    mapping.topic_pattern = std::string(address);
+    mapping.topic_pattern    = std::string(address);
     mapping.address_template = "mqtt/{topic}";
     return impl_->add_topic_mapping(mapping);
 }
@@ -736,9 +715,9 @@ bool MQTTScoop::is_running() const noexcept {
     return impl_->is_running();
 }
 
-common::Result<> MQTTScoop::configure(const common::ConfigurationBase& config) {
+common::Result<> MQTTScoop::configure([[maybe_unused]] const common::ConfigurationBase& config) {
     // Configuration should be done via constructor
-    return common::Result<>::success();
+    return common::ok();
 }
 
 std::unique_ptr<common::ConfigurationBase> MQTTScoop::get_configuration() const {
@@ -748,10 +727,9 @@ std::unique_ptr<common::ConfigurationBase> MQTTScoop::get_configuration() const 
 common::Statistics MQTTScoop::get_statistics() const noexcept {
     auto mqtt_stats = impl_->get_mqtt_statistics();
     common::Statistics stats;
-    stats.messages_received = mqtt_stats.messages_received.load();
-    stats.messages_processed = mqtt_stats.messages_processed.load();
-    stats.messages_dropped = mqtt_stats.messages_dropped.load();
-    stats.errors = mqtt_stats.parse_errors.load();
+    stats.total_messages      = mqtt_stats.messages_received.load();
+    stats.successful_messages = mqtt_stats.messages_processed.load();
+    stats.failed_messages     = mqtt_stats.messages_dropped.load() + mqtt_stats.parse_errors.load();
     return stats;
 }
 
@@ -804,35 +782,31 @@ std::vector<std::string> MQTTScoop::get_subscribed_topics() const {
 //=============================================================================
 
 std::unique_ptr<MQTTScoop> MQTTScoopFactory::create(const std::string& broker_url) {
-    auto config = MQTTScoopConfig::create_default();
+    auto config                   = MQTTScoopConfig::create_default();
     config.mqtt_config.broker_url = broker_url;
     return std::make_unique<MQTTScoop>(config);
 }
 
 std::unique_ptr<MQTTScoop> MQTTScoopFactory::create_for_topics(
-    const std::string& broker_url,
-    const std::vector<std::string>& topics)
-{
+    const std::string& broker_url, const std::vector<std::string>& topics) {
     MQTTScoopConfig config;
     config.mqtt_config.broker_url = broker_url;
 
     for (const auto& topic : topics) {
         TopicMapping mapping;
-        mapping.topic_pattern = topic;
+        mapping.topic_pattern    = topic;
         mapping.address_template = "mqtt/{topic}";
-        mapping.format = PayloadFormat::RAW;
+        mapping.format           = PayloadFormat::RAW;
         config.subscription.mappings.push_back(mapping);
     }
 
     return std::make_unique<MQTTScoop>(config);
 }
 
-std::unique_ptr<MQTTScoop> MQTTScoopFactory::create_json(
-    const std::string& broker_url,
-    const std::vector<std::string>& topics,
-    const std::string& value_path)
-{
-    auto config = MQTTScoopConfig::create_json_topics(topics);
+std::unique_ptr<MQTTScoop> MQTTScoopFactory::create_json(const std::string& broker_url,
+                                                         const std::vector<std::string>& topics,
+                                                         const std::string& value_path) {
+    auto config                   = MQTTScoopConfig::create_json_topics(topics);
     config.mqtt_config.broker_url = broker_url;
 
     for (auto& mapping : config.subscription.mappings) {
@@ -847,9 +821,9 @@ std::unique_ptr<MQTTScoop> MQTTScoopFactory::create(const MQTTScoopConfig& confi
 }
 
 std::unique_ptr<MQTTScoop> MQTTScoopFactory::create_high_throughput(const std::string& broker_url) {
-    auto config = MQTTScoopConfig::create_high_throughput();
+    auto config                   = MQTTScoopConfig::create_high_throughput();
     config.mqtt_config.broker_url = broker_url;
     return std::make_unique<MQTTScoop>(config);
 }
 
-} // namespace ipb::scoop::mqtt
+}  // namespace ipb::scoop::mqtt

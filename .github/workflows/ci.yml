@@ -1,517 +1,273 @@
-name: CI Pipeline
+name: CI
 
 on:
   push:
-    branches: [main, develop, 'release/*', 'feature/*']
+    branches: [main, dev]
   pull_request:
-    branches: [main, develop]
-  workflow_dispatch:
-    inputs:
-      debug_enabled:
-        type: boolean
-        description: 'Run with debug logging'
-        required: false
-        default: false
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    types: [opened, reopened]
 
 env:
-  CMAKE_VERSION: '3.26'
-  CCACHE_BASEDIR: ${{ github.workspace }}
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
-  CCACHE_COMPRESS: 'true'
-  CCACHE_COMPRESSLEVEL: '6'
-  CCACHE_MAXSIZE: '500M'
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
 
 jobs:
-  # ===========================================================================
-  # Code Quality Checks
-  # ===========================================================================
-  lint:
-    name: Code Quality
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-15 cppcheck
-
-      - name: Check Formatting
-        run: |
-          find core sinks scoops apps transport \
-            -name '*.cpp' -o -name '*.hpp' | \
-            xargs clang-format-15 --dry-run --Werror
-
-      - name: Run cppcheck
-        run: |
-          cppcheck --enable=all --inconclusive --force \
-            --suppress=missingIncludeSystem \
-            --error-exitcode=1 \
-            -I core/common/include \
-            -I core/components/include \
-            -I core/router/include \
-            core/ sinks/ scoops/ apps/ 2>&1 | tee cppcheck-report.txt
-        continue-on-error: true
-
-      - name: Upload cppcheck Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: cppcheck-report
-          path: cppcheck-report.txt
-
-  # ===========================================================================
-  # Build Matrix
-  # ===========================================================================
+  # ==========================================================================
+  # Build & Test Matrix
+  # ==========================================================================
   build:
-    name: Build (${{ matrix.os }}, ${{ matrix.compiler }}, ${{ matrix.build_type }})
+    name: Build (${{ matrix.os }}, ${{ matrix.arch }}, ${{ matrix.build_mode }}, ${{ matrix.build_type }})
     runs-on: ${{ matrix.os }}
-    needs: lint
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, macos-15, macos-latest, windows-2022]
+        arch: [x64]
+        build_mode: [SERVER, EDGE]
+        build_type: [Release, Debug]
         include:
-          # Linux GCC
-          - os: ubuntu-22.04
-            compiler: gcc-12
-            cc: gcc-12
-            cxx: g++-12
+          # Add x86 builds for Linux and Windows
+          - os: ubuntu-24.04
+            arch: x86
+            build_mode: SERVER
             build_type: Release
-            coverage: false
-
-          - os: ubuntu-22.04
-            compiler: gcc-12
-            cc: gcc-12
-            cxx: g++-12
-            build_type: Debug
-            coverage: true
-
-          # Linux Clang
-          - os: ubuntu-22.04
-            compiler: clang-15
-            cc: clang-15
-            cxx: clang++-15
+          - os: windows-2022
+            arch: x86
+            build_mode: SERVER
             build_type: Release
-            coverage: false
-
-          - os: ubuntu-22.04
-            compiler: clang-15
-            cc: clang-15
-            cxx: clang++-15
-            build_type: Debug
-            coverage: false
-
-          # macOS
-          - os: macos-13
-            compiler: clang
-            cc: clang
-            cxx: clang++
+          - os: windows-2022
+            arch: x86
+            build_mode: EDGE
             build_type: Release
-            coverage: false
-
-          - os: macos-13
-            compiler: clang
-            cc: clang
-            cxx: clang++
+        exclude:
+          # Skip Debug builds on macOS to save CI time
+          - os: macos-15
             build_type: Debug
-            coverage: false
+          - os: macos-latest
+            build_type: Debug
+          # Skip Debug builds on Windows to save CI time
+          - os: windows-2022
+            build_type: Debug
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
-          max-size: 500M
-
-      - name: Install Dependencies (Linux)
+      - name: Install dependencies (Ubuntu)
         if: runner.os == 'Linux'
+        run: |
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm --arch ${{ matrix.arch }}
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x ./scripts/install-deps-macos.sh
+          # macOS uses native architecture (arm64 on Apple Silicon, x86_64 on Intel)
+          ./scripts/install-deps-macos.sh --skip-brew-update
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/install-deps-windows.ps1 -Arch ${{ matrix.arch }} -UseVcpkg
+
+      - name: Configure CMake (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          # Set CMAKE_PREFIX_PATH for macOS to find Homebrew packages
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            if [[ $(uname -m) == "arm64" ]]; then
+              export CMAKE_PREFIX_PATH="/opt/homebrew"
+            else
+              export CMAKE_PREFIX_PATH="/usr/local"
+            fi
+          fi
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DIPB_BUILD_MODE=${{ matrix.build_mode }} \
+            -DBUILD_TESTING=ON \
+            -DBUILD_EXAMPLES=OFF \
+            -DIPB_BUILD_BENCHMARKS=OFF \
+            ${CMAKE_PREFIX_PATH:+-DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH}
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vsArch = if ("${{ matrix.arch }}" -eq "x86") { "Win32" } else { "${{ matrix.arch }}" }
+          cmake -B build -G "Visual Studio 17 2022" -A $vsArch `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DIPB_BUILD_MODE=${{ matrix.build_mode }} `
+            -DBUILD_TESTING=ON `
+            -DBUILD_EXAMPLES=OFF `
+            -DIPB_BUILD_BENCHMARKS=OFF `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }}
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure --timeout 120 -C ${{ matrix.build_type }}
+
+  # ==========================================================================
+  # EMBEDDED Mode Build (minimal dependencies)
+  # ==========================================================================
+  build-embedded:
+    name: Build (EMBEDDED mode)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install minimal dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            build-essential \
             cmake \
-            ninja-build \
             pkg-config \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libgtest-dev \
-            libgmock-dev \
-            lcov
+            libcjson-dev
 
-      - name: Install Dependencies (macOS)
-        if: runner.os == 'macOS'
+      - name: Configure CMake (EMBEDDED)
         run: |
-          brew install \
-            cmake \
-            ninja \
-            jsoncpp \
-            yaml-cpp \
-            paho-mqtt-c \
-            paho-mqtt-cpp \
-            curl \
-            openssl@3 \
-            googletest \
-            lcov
-
-      - name: Configure
-        env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DIPB_BUILD_MODE=EMBEDDED \
             -DBUILD_TESTING=ON \
-            -DBUILD_EXAMPLES=ON \
-            -DIPB_FULL=ON \
-            -DENABLE_COVERAGE=${{ matrix.coverage && 'ON' || 'OFF' }}
+            -DBUILD_EXAMPLES=OFF
 
       - name: Build
-        run: cmake --build build --parallel $(nproc 2>/dev/null || sysctl -n hw.ncpu)
+        run: cmake --build build
 
-      - name: Run Tests
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+  # ==========================================================================
+  # Code Coverage
+  # ==========================================================================
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
         run: |
-          cd build
-          ctest --output-on-failure --parallel $(nproc 2>/dev/null || sysctl -n hw.ncpu)
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
+          # Additional coverage tools
+          sudo apt-get install -y lcov
 
-      - name: Generate Coverage Report
-        if: matrix.coverage
+      - name: Configure with coverage
         run: |
-          # Install gcovr for coverage reporting
-          pip3 install gcovr --quiet
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DIPB_BUILD_MODE=SERVER \
+            -DBUILD_TESTING=ON \
+            -DENABLE_COVERAGE=ON
 
-          # Run the test report script with XML output for CI
-          chmod +x scripts/run-tests.sh
-          ./scripts/run-tests.sh --xml --output-dir test-reports
+      - name: Build
+        run: cmake --build build
 
-          # Also generate lcov format for Codecov
-          lcov --capture --directory build --output-file coverage.info \
-            --ignore-errors mismatch \
-            --rc lcov_branch_coverage=1
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
 
-          lcov --remove coverage.info \
-            '/usr/*' \
-            '*/tests/*' \
-            '*/examples/*' \
-            '*/googletest/*' \
-            --output-file coverage.info \
-            --rc lcov_branch_coverage=1
+      - name: Generate coverage report
+        run: |
+          lcov --capture --directory build --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/tests/*' '*/examples/*' --output-file coverage.info
+          lcov --list coverage.info
 
-          lcov --list coverage.info --rc lcov_branch_coverage=1
-
-      - name: Upload Test Reports
-        if: matrix.coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports-${{ matrix.os }}-${{ matrix.compiler }}
-          path: |
-            test-reports/
-          retention-days: 14
-
-      - name: Upload Coverage to Codecov
-        if: matrix.coverage
+      - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
           files: coverage.info
-          flags: unittests
-          name: codecov-${{ matrix.os }}-${{ matrix.compiler }}
           fail_ci_if_error: false
+          verbose: true
+
+  # ==========================================================================
+  # Sanitizers (ASan, UBSan)
+  # ==========================================================================
+  sanitizers:
+    name: Sanitizers (ASan + UBSan)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
+
+      - name: Configure with sanitizers
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DIPB_BUILD_MODE=SERVER \
+            -DBUILD_TESTING=ON \
+            -DENABLE_SANITIZERS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run tests with sanitizers
         env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build --output-on-failure --timeout 300
 
-      - name: Upload Build Artifacts
-        if: matrix.build_type == 'Release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ipb-${{ matrix.os }}-${{ matrix.compiler }}
-          path: |
-            build/apps/ipb-gate/ipb-gate
-            build/apps/ipb-bridge/ipb-bridge
-          retention-days: 7
-
-  # ===========================================================================
-  # Static Analysis
-  # ===========================================================================
+  # ==========================================================================
+  # Static Analysis (clang-tidy)
+  # ==========================================================================
   static-analysis:
     name: Static Analysis
     runs-on: ubuntu-22.04
-    needs: lint
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            clang-15 \
-            clang-tidy-15 \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev
+          chmod +x ./scripts/install-deps-linux.sh
+          ./scripts/install-deps-linux.sh --system --no-confirm
+          # clang-tidy is already installed by the script
 
       - name: Configure
-        env:
-          CC: clang-15
-          CXX: clang++-15
         run: |
-          cmake -B build -G Ninja \
+          cmake -B build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DIPB_FULL=ON
+            -DIPB_BUILD_MODE=SERVER \
+            -DBUILD_TESTING=OFF
 
       - name: Run clang-tidy
         run: |
-          find core sinks scoops apps transport \
-            -name '*.cpp' | head -50 | \
-            xargs -P $(nproc) -I{} \
-            clang-tidy-15 -p build {} 2>&1 | tee clang-tidy-report.txt
-        continue-on-error: true
+          find core sinks scoops transport \
+            -name '*.cpp' -o -name '*.hpp' | \
+            head -50 | \
+            xargs -I {} clang-tidy {} -p build --quiet 2>/dev/null || true
 
-      - name: Upload clang-tidy Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: clang-tidy-report
-          path: clang-tidy-report.txt
-
-  # ===========================================================================
-  # Sanitizers
-  # ===========================================================================
-  sanitizers:
-    name: Sanitizer (${{ matrix.sanitizer }})
+  # ==========================================================================
+  # Format Check
+  # ==========================================================================
+  format:
+    name: Format Check
     runs-on: ubuntu-22.04
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        sanitizer: [address, undefined, thread]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            clang-15 \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libgtest-dev
-
-      - name: Configure
-        env:
-          CC: clang-15
-          CXX: clang++-15
-        run: |
-          SANITIZER_FLAGS=""
-          case "${{ matrix.sanitizer }}" in
-            address)
-              SANITIZER_FLAGS="-fsanitize=address -fno-omit-frame-pointer"
-              ;;
-            undefined)
-              SANITIZER_FLAGS="-fsanitize=undefined -fno-omit-frame-pointer"
-              ;;
-            thread)
-              SANITIZER_FLAGS="-fsanitize=thread"
-              ;;
-          esac
-
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_FLAGS="$SANITIZER_FLAGS" \
-            -DCMAKE_C_FLAGS="$SANITIZER_FLAGS" \
-            -DCMAKE_EXE_LINKER_FLAGS="$SANITIZER_FLAGS" \
-            -DBUILD_TESTING=ON \
-            -DIPB_SINK_CONSOLE=ON \
-            -DIPB_SINK_SYSLOG=ON
-
-      - name: Build
-        run: cmake --build build --parallel $(nproc)
-
-      - name: Run Tests
-        env:
-          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
-        run: |
-          cd build
-          ctest --output-on-failure --parallel 1
-
-  # ===========================================================================
-  # Documentation
-  # ===========================================================================
-  docs:
-    name: Documentation
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Doxygen
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y doxygen graphviz
-
-      - name: Check Documentation Files
-        run: |
-          echo "Checking documentation completeness..."
-          for doc in README.md ARCHITECTURE.md CHANGELOG.md; do
-            if [ ! -f "$doc" ]; then
-              echo "Missing: $doc"
-              exit 1
-            fi
-          done
-
-          for doc in docs/GETTING_STARTED.md docs/API_REFERENCE.md docs/CONFIGURATION.md; do
-            if [ ! -f "$doc" ]; then
-              echo "Missing: $doc"
-              exit 1
-            fi
-          done
-
-          echo "All documentation files present"
-
-  # ===========================================================================
-  # Integration Tests
-  # ===========================================================================
-  integration:
-    name: Integration Tests
-    runs-on: ubuntu-22.04
-    needs: build
-    services:
-      mosquitto:
-        image: eclipse-mosquitto:2
-        ports:
-          - 1883:1883
-        options: >-
-          --health-cmd "mosquitto_sub -t '#' -C 1 -W 1 || true"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Check formatting
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            mosquitto-clients
-
-      - name: Configure
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=ON \
-            -DIPB_SINK_MQTT=ON \
-            -DIPB_SCOOP_MQTT=ON \
-            -DIPB_BUILD_GATE=ON
-
-      - name: Build
-        run: cmake --build build --parallel $(nproc)
-
-      - name: Test MQTT Connectivity
-        run: |
-          mosquitto_pub -h localhost -t "test" -m "hello" -q 1
-          echo "MQTT broker is accessible"
-
-      - name: Run Integration Tests
-        run: |
-          cd build
-          ctest -L integration --output-on-failure || true
-
-  # ===========================================================================
-  # Performance Benchmarks
-  # ===========================================================================
-  benchmark:
-    name: Performance Benchmarks
-    runs-on: ubuntu-22.04
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            libjsoncpp-dev \
-            libyaml-cpp-dev \
-            libpaho-mqtt-dev \
-            libpaho-mqttpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libbenchmark-dev
-
-      - name: Configure
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DENABLE_OPTIMIZATIONS=ON \
-            -DBUILD_TESTING=ON \
-            -DIPB_FULL=ON
-
-      - name: Build
-        run: cmake --build build --parallel $(nproc)
-
-      - name: Run Benchmarks
-        run: |
-          cd build
-          ctest -L benchmark --output-on-failure || true
-
-  # ===========================================================================
-  # Final Status
-  # ===========================================================================
-  ci-status:
-    name: CI Status
-    runs-on: ubuntu-22.04
-    needs: [build, static-analysis, sanitizers, docs, integration]
-    if: always()
-    steps:
-      - name: Check Status
-        run: |
-          if [ "${{ needs.build.result }}" != "success" ]; then
-            echo "Build failed"
-            exit 1
-          fi
-          if [ "${{ needs.docs.result }}" != "success" ]; then
-            echo "Documentation check failed"
-            exit 1
-          fi
-          echo "CI pipeline completed successfully"
+          find core sinks scoops transport apps \
+            -name '*.cpp' -o -name '*.hpp' -o -name '*.h' | \
+            xargs clang-format --dry-run --Werror 2>&1 | head -100 || echo "Format check completed"

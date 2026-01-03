@@ -1,8 +1,9 @@
+#include <ipb/common/data_point.hpp>
+#include <ipb/sink/syslog/syslog_sink.hpp>
+
+#include <chrono>
 #include <iostream>
 #include <thread>
-#include <chrono>
-#include <ipb/sink/syslog/syslog_sink.hpp>
-#include <ipb/common/data_point.hpp>
 
 using namespace ipb::sink::syslog;
 using namespace ipb::common;
@@ -13,8 +14,8 @@ int main() {
     // Create syslog sink configuration
     SyslogSinkConfig config;
     config.facility = SyslogFacility::LOCAL0;
-    config.ident = "ipb-example";
-    config.format = SyslogFormat::RFC3164;
+    config.ident    = "ipb-example";
+    config.format   = SyslogFormat::RFC3164;
 
     // Create syslog sink with configuration
     SyslogSink syslog_sink(config);

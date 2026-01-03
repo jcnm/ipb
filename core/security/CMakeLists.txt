@@ -126,12 +126,20 @@ target_link_libraries(ipb-security
 # Compile definitions
 target_compile_definitions(ipb-security PRIVATE ${SECURITY_COMPILE_DEFINITIONS})
 
-# Compiler flags
-target_compile_options(ipb-security PRIVATE
-    -Wall -Wextra -Wpedantic
-    $<$<CONFIG:Release>:-O3>
-    $<$<CONFIG:Debug>:-g -O0>
-)
+# Compiler flags (platform-specific)
+if(MSVC)
+    target_compile_options(ipb-security PRIVATE
+        /W4
+        $<$<CONFIG:Release>:/O2>
+        $<$<CONFIG:Debug>:/Od /Zi>
+    )
+else()
+    target_compile_options(ipb-security PRIVATE
+        -Wall -Wextra -Wpedantic
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:Debug>:-g -O0>
+    )
+endif()
 
 # Install targets
 install(TARGETS ipb-security

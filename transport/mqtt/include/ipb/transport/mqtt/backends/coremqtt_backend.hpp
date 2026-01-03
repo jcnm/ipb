@@ -14,15 +14,15 @@
  * Best for: Low-latency, memory-constrained, deterministic timing.
  */
 
-#include "mqtt_backend.hpp"
-
 #include <array>
-#include <vector>
-#include <string>
 #include <atomic>
-#include <mutex>
-#include <memory>
 #include <chrono>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
+
+#include "mqtt_backend.hpp"
 
 // Forward declarations for coreMQTT types (avoid including C headers in hpp)
 struct MQTTContext;
@@ -38,11 +38,11 @@ namespace ipb::transport::mqtt {
  * @brief coreMQTT buffer sizes (can be overridden at compile time)
  */
 struct CoreMQTTBufferConfig {
-    static constexpr size_t NETWORK_BUFFER_SIZE = 4096;
-    static constexpr size_t MAX_SUBSCRIPTIONS = 64;
+    static constexpr size_t NETWORK_BUFFER_SIZE    = 4096;
+    static constexpr size_t MAX_SUBSCRIPTIONS      = 64;
     static constexpr size_t MAX_OUTGOING_PUBLISHES = 128;
     static constexpr size_t MAX_INCOMING_PUBLISHES = 128;
-    static constexpr size_t TOPIC_FILTER_MAX_SIZE = 256;
+    static constexpr size_t TOPIC_FILTER_MAX_SIZE  = 256;
 };
 
 //=============================================================================
@@ -74,13 +74,12 @@ public:
     /**
      * @brief Construct with custom buffer sizes
      */
-    explicit CoreMQTTBackend(size_t network_buffer_size,
-                             size_t max_subscriptions = 64);
+    explicit CoreMQTTBackend(size_t network_buffer_size, size_t max_subscriptions = 64);
 
     ~CoreMQTTBackend() override;
 
     // Non-copyable, non-movable
-    CoreMQTTBackend(const CoreMQTTBackend&) = delete;
+    CoreMQTTBackend(const CoreMQTTBackend&)            = delete;
     CoreMQTTBackend& operator=(const CoreMQTTBackend&) = delete;
 
     //=========================================================================
@@ -98,20 +97,11 @@ public:
     ConnectionState state() const noexcept override;
     std::string_view client_id() const noexcept override;
 
-    uint16_t publish(
-        std::string_view topic,
-        std::span<const uint8_t> payload,
-        QoS qos = QoS::AT_LEAST_ONCE,
-        bool retained = false
-    ) override;
+    uint16_t publish(std::string_view topic, std::span<const uint8_t> payload,
+                     QoS qos = QoS::AT_LEAST_ONCE, bool retained = false) override;
 
-    bool publish_sync(
-        std::string_view topic,
-        std::span<const uint8_t> payload,
-        QoS qos,
-        bool retained,
-        uint32_t timeout_ms
-    ) override;
+    bool publish_sync(std::string_view topic, std::span<const uint8_t> payload, QoS qos,
+                      bool retained, uint32_t timeout_ms) override;
 
     bool subscribe(std::string_view topic, QoS qos = QoS::AT_LEAST_ONCE) override;
     bool unsubscribe(std::string_view topic) override;
@@ -169,9 +159,8 @@ private:
 
     // Internal methods
     void notify_connection_state(ConnectionState new_state, std::string_view reason);
-    void on_incoming_publish(const char* topic, size_t topic_len,
-                            const uint8_t* payload, size_t payload_len,
-                            uint8_t qos, bool retained);
+    void on_incoming_publish(const char* topic, size_t topic_len, const uint8_t* payload,
+                             size_t payload_len, uint8_t qos, bool retained);
     void on_ack_received(uint16_t packet_id, bool success);
 
 #ifdef IPB_HAS_SECURITY
@@ -179,4 +168,4 @@ private:
 #endif
 };
 
-} // namespace ipb::transport::mqtt
+}  // namespace ipb::transport::mqtt

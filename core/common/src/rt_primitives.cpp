@@ -7,12 +7,13 @@
  */
 
 #include <ipb/common/endpoint.hpp>
-#include <thread>
+
 #include <chrono>
+#include <thread>
 
 #ifdef __linux__
-#include <sched.h>
 #include <pthread.h>
+#include <sched.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -46,7 +47,7 @@ bool unlock_memory() noexcept {
  */
 void precise_sleep(std::chrono::nanoseconds duration) noexcept {
     auto start = std::chrono::high_resolution_clock::now();
-    auto end = start + duration;
+    auto end   = start + duration;
 
     // For very short durations, use busy wait
     if (duration < std::chrono::microseconds(100)) {
@@ -79,11 +80,11 @@ void precise_sleep(std::chrono::nanoseconds duration) noexcept {
 uint64_t get_cpu_cycles() noexcept {
 #if defined(__x86_64__)
     uint32_t lo, hi;
-    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
     return (static_cast<uint64_t>(hi) << 32) | lo;
 #elif defined(__aarch64__)
     uint64_t cycles;
-    __asm__ __volatile__ ("mrs %0, cntvct_el0" : "=r" (cycles));
+    __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(cycles));
     return cycles;
 #else
     // Fallback to high resolution clock
@@ -98,15 +99,15 @@ uint64_t get_cpu_cycles() noexcept {
 double get_cpu_frequency_ghz() noexcept {
     // Simple estimation - measure cycles over a known time period
     auto start_cycles = get_cpu_cycles();
-    auto start_time = std::chrono::high_resolution_clock::now();
+    auto start_time   = std::chrono::high_resolution_clock::now();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     auto end_cycles = get_cpu_cycles();
-    auto end_time = std::chrono::high_resolution_clock::now();
+    auto end_time   = std::chrono::high_resolution_clock::now();
 
-    auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        end_time - start_time).count();
+    auto duration_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time).count();
     auto cycles_diff = end_cycles - start_cycles;
 
     return static_cast<double>(cycles_diff) / duration_ns;
@@ -138,12 +139,7 @@ bool set_thread_affinity(std::thread& thread, const std::vector<int>& cpu_cores)
 /**
  * @brief Legacy priority enum for backwards compatibility
  */
-enum class LegacyThreadPriority {
-    LOW,
-    NORMAL,
-    HIGH,
-    REALTIME
-};
+enum class LegacyThreadPriority { LOW, NORMAL, HIGH, REALTIME };
 
 /**
  * @brief Set thread priority (legacy function)
@@ -157,19 +153,19 @@ bool set_thread_priority(std::thread& thread, LegacyThreadPriority priority) noe
 
     switch (priority) {
         case LegacyThreadPriority::LOW:
-            policy = SCHED_OTHER;
+            policy               = SCHED_OTHER;
             param.sched_priority = 0;
             break;
         case LegacyThreadPriority::NORMAL:
-            policy = SCHED_OTHER;
+            policy               = SCHED_OTHER;
             param.sched_priority = 0;
             break;
         case LegacyThreadPriority::HIGH:
-            policy = SCHED_FIFO;
+            policy               = SCHED_FIFO;
             param.sched_priority = 50;
             break;
         case LegacyThreadPriority::REALTIME:
-            policy = SCHED_FIFO;
+            policy               = SCHED_FIFO;
             param.sched_priority = 99;
             break;
         default:
@@ -184,4 +180,4 @@ bool set_thread_priority(std::thread& thread, LegacyThreadPriority priority) noe
 #endif
 }
 
-} // namespace ipb::common::rt
+}  // namespace ipb::common::rt

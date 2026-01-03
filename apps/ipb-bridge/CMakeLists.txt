@@ -21,9 +21,44 @@ find_package(Threads REQUIRED)
 
 # Optional: yaml-cpp (for config loading, can be disabled for minimal build)
 if(NOT IPB_BRIDGE_MINIMAL)
-    find_package(yaml-cpp QUIET)
-    if(yaml-cpp_FOUND)
+    # Check for yaml-cpp target (may be yaml-cpp or yaml-cpp::yaml-cpp)
+    if(TARGET yaml-cpp)
         set(HAS_YAML_CPP TRUE)
+        set(YAML_CPP_TARGET yaml-cpp)
+    elseif(TARGET yaml-cpp::yaml-cpp)
+        set(HAS_YAML_CPP TRUE)
+        set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+    else()
+        find_package(yaml-cpp QUIET)
+        if(yaml-cpp_FOUND)
+            set(HAS_YAML_CPP TRUE)
+            if(TARGET yaml-cpp::yaml-cpp)
+                set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+            else()
+                set(YAML_CPP_TARGET yaml-cpp)
+            endif()
+        endif()
+    endif()
+
+    # On macOS, yaml-cpp CMake config may not have proper include directories
+    # Try to find and add them explicitly if needed
+    if(HAS_YAML_CPP AND APPLE AND TARGET ${YAML_CPP_TARGET})
+        # Check if we need to find include directories
+        get_target_property(_yaml_inc ${YAML_CPP_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+        if(NOT _yaml_inc OR "${_yaml_inc}" STREQUAL "_yaml_inc-NOTFOUND")
+            # Try Homebrew paths
+            find_path(YAML_CPP_INCLUDE_DIR yaml-cpp/yaml.h
+                PATHS
+                    /opt/homebrew/include
+                    /usr/local/include
+                    /usr/include
+                NO_DEFAULT_PATH
+            )
+            if(YAML_CPP_INCLUDE_DIR)
+                set(YAML_CPP_BRIDGE_INCLUDE_DIR "${YAML_CPP_INCLUDE_DIR}")
+                message(STATUS "ipb-bridge: Found yaml-cpp includes at ${YAML_CPP_BRIDGE_INCLUDE_DIR}")
+            endif()
+        endif()
     endif()
 endif()
 
@@ -59,8 +94,12 @@ endif()
 
 # Conditionally link yaml-cpp
 if(HAS_YAML_CPP)
-    target_link_libraries(ipb-bridge PRIVATE yaml-cpp)
+    target_link_libraries(ipb-bridge PRIVATE ${YAML_CPP_TARGET})
     target_compile_definitions(ipb-bridge PRIVATE IPB_BRIDGE_HAS_YAML=1)
+    # Add explicit include directory on macOS if needed
+    if(YAML_CPP_BRIDGE_INCLUDE_DIR)
+        target_include_directories(ipb-bridge PRIVATE ${YAML_CPP_BRIDGE_INCLUDE_DIR})
+    endif()
 endif()
 
 # Conditionally link sinks (based on build configuration)
@@ -101,35 +140,68 @@ endif()
 # Compiler options - optimized for embedded
 target_compile_features(ipb-bridge PRIVATE cxx_std_20)
 
-target_compile_options(ipb-bridge PRIVATE
-    -Wall -Wextra -Wpedantic
-    -fno-rtti            # Reduce binary size
-    -ffunction-sections  # Enable dead code elimination
-    -fdata-sections
-)
+if(MSVC)
+    target_compile_options(ipb-bridge PRIVATE
+        /W4              # High warning level
+        /GR-             # Disable RTTI to reduce binary size
+        /Gy              # Enable function-level linking
+    )
+else()
+    target_compile_options(ipb-bridge PRIVATE
+        -Wall -Wextra -Wpedantic
+        -fno-rtti            # Reduce binary size
+        -ffunction-sections  # Enable dead code elimination
+        -fdata-sections
+    )
+endif()
 
-# Link options for size optimization
-target_link_options(ipb-bridge PRIVATE
-    -Wl,--gc-sections    # Remove unused sections
-)
+# Link options for size optimization (platform-specific)
+if(APPLE)
+    target_link_options(ipb-bridge PRIVATE
+        -Wl,-dead_strip    # Remove unused code on macOS
+    )
+elseif(WIN32)
+    if(MSVC)
+        target_link_options(ipb-bridge PRIVATE
+            /OPT:REF         # Remove unreferenced functions
+            /OPT:ICF         # Identical COMDAT folding
+        )
+    endif()
+else()
+    target_link_options(ipb-bridge PRIVATE
+        -Wl,--gc-sections    # Remove unused sections on Linux
+    )
+endif()
 
 # Static linking option
-if(IPB_BRIDGE_STATIC)
+if(IPB_BRIDGE_STATIC AND NOT WIN32)
     target_link_options(ipb-bridge PRIVATE -static)
 endif()
 
 # Release optimizations
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(ipb-bridge PRIVATE
-        -Os              # Optimize for size (embedded-friendly)
-        -flto            # Link-time optimization
-    )
-    target_link_options(ipb-bridge PRIVATE -flto)
+    if(MSVC)
+        target_compile_options(ipb-bridge PRIVATE
+            /Os              # Optimize for size
+            /GL              # Whole program optimization
+        )
+        target_link_options(ipb-bridge PRIVATE /LTCG)
+    else()
+        target_compile_options(ipb-bridge PRIVATE
+            -Os              # Optimize for size (embedded-friendly)
+            -flto            # Link-time optimization
+        )
+        target_link_options(ipb-bridge PRIVATE -flto)
+    endif()
 endif()
 
 # Debug options
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(ipb-bridge PRIVATE -g3)
+    if(MSVC)
+        target_compile_options(ipb-bridge PRIVATE /Zi)
+    else()
+        target_compile_options(ipb-bridge PRIVATE -g3)
+    endif()
     target_compile_definitions(ipb-bridge PRIVATE IPB_DEBUG=1)
 endif()
 

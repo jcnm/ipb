@@ -10,11 +10,13 @@
  * - SinkRegistry: Sink management and load balancing
  */
 
-#include <gtest/gtest.h>
 #include <ipb/core/sink_registry/sink_registry.hpp>
+
 #include <atomic>
 #include <future>
 #include <memory>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::core;
 using namespace ipb::common;
@@ -39,8 +41,14 @@ public:
     explicit MockSinkImpl(std::shared_ptr<MockSinkState> state) : state_(std::move(state)) {}
 
     // IIPBComponent interface
-    Result<void> start() override { state_->started = true; return ok(); }
-    Result<void> stop() override { state_->started = false; return ok(); }
+    Result<void> start() override {
+        state_->started = true;
+        return ok();
+    }
+    Result<void> stop() override {
+        state_->started = false;
+        return ok();
+    }
     bool is_running() const noexcept override { return state_->started; }
 
     Result<void> configure(const ConfigurationBase&) override { return ok(); }
@@ -66,9 +74,7 @@ public:
         return ok();
     }
 
-    Result<void> write_dataset(const DataSet&) override {
-        return ok();
-    }
+    Result<void> write_dataset(const DataSet&) override { return ok(); }
 
     std::future<Result<void>> write_async(const DataPoint&) override {
         std::promise<Result<void>> p;
@@ -98,8 +104,10 @@ class MockSink {
 public:
     explicit MockSink(const std::string& name = "mock")
         : state_(std::make_shared<MockSinkState>(name))
-        // Note: Can't use make_shared with unique_ptr argument; use shared_ptr constructor directly
-        , sink_(std::shared_ptr<IIPBSink>(new IIPBSink(std::make_unique<MockSinkImpl>(state_)))) {}
+          // Note: Can't use make_shared with unique_ptr argument; use shared_ptr constructor
+          // directly
+          ,
+          sink_(std::shared_ptr<IIPBSink>(new IIPBSink(std::make_unique<MockSinkImpl>(state_)))) {}
 
     // Get the IIPBSink to pass to registry
     std::shared_ptr<IIPBSink> get() const { return sink_; }
@@ -183,14 +191,14 @@ TEST_F(SinkInfoTest, AverageLatency) {
 
     // Set values
     info.messages_sent.store(100);
-    info.total_latency_ns.store(1000000);  // 1ms total
+    info.total_latency_ns.store(1000000);           // 1ms total
     EXPECT_DOUBLE_EQ(info.avg_latency_us(), 10.0);  // 10us average
 }
 
 TEST_F(SinkInfoTest, CopyConstruction) {
     SinkInfo original;
-    original.id = "sink1";
-    original.type = "kafka";
+    original.id     = "sink1";
+    original.type   = "kafka";
     original.weight = 150;
     original.messages_sent.store(100);
 
@@ -204,7 +212,7 @@ TEST_F(SinkInfoTest, CopyConstruction) {
 
 TEST_F(SinkInfoTest, MoveConstruction) {
     SinkInfo original;
-    original.id = "sink1";
+    original.id   = "sink1";
     original.type = "kafka";
 
     SinkInfo moved(std::move(original));
@@ -327,7 +335,7 @@ TEST_F(SinkRegistryTest, StartStop) {
 TEST_F(SinkRegistryTest, RegisterSink) {
     SinkRegistry registry(config_);
 
-    auto sink = std::make_shared<MockSink>("test_sink");
+    auto sink       = std::make_shared<MockSink>("test_sink");
     bool registered = registry.register_sink("sink1", sink->get());
 
     EXPECT_TRUE(registered);
@@ -338,7 +346,7 @@ TEST_F(SinkRegistryTest, RegisterSink) {
 TEST_F(SinkRegistryTest, RegisterSinkWithWeight) {
     SinkRegistry registry(config_);
 
-    auto sink = std::make_shared<MockSink>("test_sink");
+    auto sink       = std::make_shared<MockSink>("test_sink");
     bool registered = registry.register_sink("sink1", sink->get(), 200);
 
     EXPECT_TRUE(registered);
@@ -590,9 +598,7 @@ TEST_F(LoadBalancingTest, EmptyCandidates) {
 
 class DataRoutingTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        config_.enable_health_check = false;
-    }
+    void SetUp() override { config_.enable_health_check = false; }
 
     SinkRegistryConfig config_;
 };
@@ -652,8 +658,8 @@ TEST_F(DataRoutingTest, WriteWithLoadBalancing) {
     DataPoint dp("sensors/temp1");
     dp.set_value(25.5);
 
-    auto result = registry.write_with_load_balancing(candidates, dp,
-        LoadBalanceStrategy::ROUND_ROBIN);
+    auto result =
+        registry.write_with_load_balancing(candidates, dp, LoadBalanceStrategy::ROUND_ROBIN);
     EXPECT_TRUE(result.is_success());
 }
 
@@ -691,9 +697,7 @@ TEST_F(DataRoutingTest, WriteToAll) {
 
 class HealthManagementTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        config_.enable_health_check = false;
-    }
+    void SetUp() override { config_.enable_health_check = false; }
 
     SinkRegistryConfig config_;
 };
@@ -774,9 +778,7 @@ TEST_F(HealthManagementTest, GetUnhealthySinks) {
 
 class SinkRegistryStatsIntegrationTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        config_.enable_health_check = false;
-    }
+    void SetUp() override { config_.enable_health_check = false; }
 
     SinkRegistryConfig config_;
 };

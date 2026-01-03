@@ -10,10 +10,12 @@
  * - RuleEngine: Rule management and evaluation
  */
 
-#include <gtest/gtest.h>
 #include <ipb/core/rule_engine/rule_engine.hpp>
-#include <vector>
+
 #include <string>
+#include <vector>
+
+#include <gtest/gtest.h>
 
 using namespace ipb::core;
 using namespace ipb::common;
@@ -79,7 +81,7 @@ TEST_F(ValueConditionTest, DefaultConstruction) {
 
 TEST_F(ValueConditionTest, EqualityComparison) {
     ValueCondition cond;
-    cond.op = CompareOp::EQ;
+    cond.op        = CompareOp::EQ;
     cond.reference = int64_t(42);
 
     Value v;
@@ -129,9 +131,9 @@ TEST_F(RoutingRuleTest, DefaultConstruction) {
 
 TEST_F(RoutingRuleTest, CopyConstruction) {
     RoutingRule original;
-    original.id = 42;
-    original.name = "test_rule";
-    original.type = RuleType::PATTERN;
+    original.id              = 42;
+    original.name            = "test_rule";
+    original.type            = RuleType::PATTERN;
     original.address_pattern = "sensors/.*";
     original.target_sink_ids = {"sink1", "sink2"};
     original.match_count.store(100);
@@ -148,8 +150,8 @@ TEST_F(RoutingRuleTest, CopyConstruction) {
 
 TEST_F(RoutingRuleTest, MoveConstruction) {
     RoutingRule original;
-    original.id = 42;
-    original.name = "test_rule";
+    original.id              = 42;
+    original.name            = "test_rule";
     original.target_sink_ids = {"sink1", "sink2"};
 
     RoutingRule moved(std::move(original));
@@ -161,11 +163,11 @@ TEST_F(RoutingRuleTest, MoveConstruction) {
 
 TEST_F(RoutingRuleTest, CopyAssignment) {
     RoutingRule original;
-    original.id = 42;
+    original.id   = 42;
     original.name = "original";
 
     RoutingRule copy;
-    copy.id = 1;
+    copy.id   = 1;
     copy.name = "copy";
 
     copy = original;
@@ -176,7 +178,7 @@ TEST_F(RoutingRuleTest, CopyAssignment) {
 
 TEST_F(RoutingRuleTest, MoveAssignment) {
     RoutingRule original;
-    original.id = 42;
+    original.id   = 42;
     original.name = "original";
 
     RoutingRule moved;
@@ -228,7 +230,7 @@ TEST_F(RuleEngineStatsTest, AverageEvalTime) {
 
     // Set values
     stats.total_evaluations.store(100);
-    stats.total_eval_time_ns.store(100000);  // 100us total
+    stats.total_eval_time_ns.store(100000);              // 100us total
     EXPECT_DOUBLE_EQ(stats.avg_eval_time_ns(), 1000.0);  // 1000ns average
 }
 
@@ -268,11 +270,11 @@ class RuleBuilderTest : public ::testing::Test {};
 
 TEST_F(RuleBuilderTest, BuildStaticRule) {
     auto rule = RuleBuilder()
-        .name("static_rule")
-        .priority(RulePriority::HIGH)
-        .match_address("sensors/temp1")
-        .route_to("influxdb")
-        .build();
+                    .name("static_rule")
+                    .priority(RulePriority::HIGH)
+                    .match_address("sensors/temp1")
+                    .route_to("influxdb")
+                    .build();
 
     EXPECT_EQ(rule.name, "static_rule");
     EXPECT_EQ(rule.priority, RulePriority::HIGH);
@@ -285,10 +287,10 @@ TEST_F(RuleBuilderTest, BuildStaticRule) {
 
 TEST_F(RuleBuilderTest, BuildPatternRule) {
     auto rule = RuleBuilder()
-        .name("pattern_rule")
-        .match_pattern("sensors/temp.*")
-        .route_to(std::vector<std::string>{"kafka", "influxdb"})
-        .build();
+                    .name("pattern_rule")
+                    .match_pattern("sensors/temp.*")
+                    .route_to(std::vector<std::string>{"kafka", "influxdb"})
+                    .build();
 
     EXPECT_EQ(rule.name, "pattern_rule");
     EXPECT_EQ(rule.type, RuleType::PATTERN);
@@ -298,11 +300,11 @@ TEST_F(RuleBuilderTest, BuildPatternRule) {
 
 TEST_F(RuleBuilderTest, BuildProtocolRule) {
     auto rule = RuleBuilder()
-        .name("protocol_rule")
-        .match_protocol(1)
-        .match_protocols({2, 3, 4})
-        .route_to("protocol_sink")
-        .build();
+                    .name("protocol_rule")
+                    .match_protocol(1)
+                    .match_protocols({2, 3, 4})
+                    .route_to("protocol_sink")
+                    .build();
 
     EXPECT_EQ(rule.type, RuleType::PROTOCOL);
     EXPECT_GE(rule.protocol_ids.size(), 1u);
@@ -310,10 +312,10 @@ TEST_F(RuleBuilderTest, BuildProtocolRule) {
 
 TEST_F(RuleBuilderTest, BuildQualityRule) {
     auto rule = RuleBuilder()
-        .name("quality_rule")
-        .match_quality(Quality::GOOD)
-        .route_to("good_data_sink")
-        .build();
+                    .name("quality_rule")
+                    .match_quality(Quality::GOOD)
+                    .route_to("good_data_sink")
+                    .build();
 
     EXPECT_EQ(rule.type, RuleType::QUALITY);
     EXPECT_EQ(rule.quality_levels.size(), 1u);
@@ -321,12 +323,12 @@ TEST_F(RuleBuilderTest, BuildQualityRule) {
 
 TEST_F(RuleBuilderTest, BuildCustomRule) {
     auto rule = RuleBuilder()
-        .name("custom_rule")
-        .match_custom([](const DataPoint& dp) {
-            return dp.address().find("temp") != std::string::npos;
-        })
-        .route_to("custom_sink")
-        .build();
+                    .name("custom_rule")
+                    .match_custom([](const DataPoint& dp) {
+                        return dp.address().find("temp") != std::string::npos;
+                    })
+                    .route_to("custom_sink")
+                    .build();
 
     EXPECT_EQ(rule.type, RuleType::CUSTOM);
     EXPECT_TRUE(rule.custom_predicate != nullptr);
@@ -334,10 +336,10 @@ TEST_F(RuleBuilderTest, BuildCustomRule) {
 
 TEST_F(RuleBuilderTest, BuildMultiTargetRule) {
     auto rule = RuleBuilder()
-        .name("multi_target")
-        .match_pattern(".*")
-        .route_to(std::vector<std::string>{"sink1", "sink2", "sink3"})
-        .build();
+                    .name("multi_target")
+                    .match_pattern(".*")
+                    .route_to(std::vector<std::string>{"sink1", "sink2", "sink3"})
+                    .build();
 
     EXPECT_EQ(rule.target_sink_ids.size(), 3u);
 }
@@ -349,9 +351,9 @@ TEST_F(RuleBuilderTest, BuildMultiTargetRule) {
 class RuleEngineTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_.max_rules = 1000;
+        config_.max_rules    = 1000;
         config_.enable_cache = true;
-        config_.cache_size = 1024;
+        config_.cache_size   = 1024;
     }
 
     RuleEngineConfig config_;
@@ -370,11 +372,8 @@ TEST_F(RuleEngineTest, ConfiguredConstruction) {
 TEST_F(RuleEngineTest, AddRule) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("test_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     uint32_t rule_id = engine.add_rule(rule);
     EXPECT_GT(rule_id, 0u);
@@ -384,11 +383,8 @@ TEST_F(RuleEngineTest, AddRule) {
 TEST_F(RuleEngineTest, GetRule) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("test_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     uint32_t rule_id = engine.add_rule(rule);
 
@@ -407,11 +403,8 @@ TEST_F(RuleEngineTest, GetNonexistentRule) {
 TEST_F(RuleEngineTest, RemoveRule) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("test_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     uint32_t rule_id = engine.add_rule(rule);
     EXPECT_EQ(engine.rule_count(), 1u);
@@ -424,11 +417,8 @@ TEST_F(RuleEngineTest, RemoveRule) {
 TEST_F(RuleEngineTest, EnableDisableRule) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("test_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     uint32_t rule_id = engine.add_rule(rule);
 
@@ -443,19 +433,13 @@ TEST_F(RuleEngineTest, EnableDisableRule) {
 TEST_F(RuleEngineTest, UpdateRule) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("original")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("original").match_address("sensors/temp1").route_to("sink1").build();
 
     uint32_t rule_id = engine.add_rule(rule);
 
-    auto updated_rule = RuleBuilder()
-        .name("updated")
-        .match_address("sensors/temp2")
-        .route_to("sink2")
-        .build();
+    auto updated_rule =
+        RuleBuilder().name("updated").match_address("sensors/temp2").route_to("sink2").build();
 
     bool updated = engine.update_rule(rule_id, updated_rule);
     EXPECT_TRUE(updated);
@@ -469,10 +453,10 @@ TEST_F(RuleEngineTest, GetAllRules) {
 
     for (int i = 0; i < 5; ++i) {
         auto rule = RuleBuilder()
-            .name("rule_" + std::to_string(i))
-            .match_address("sensors/temp" + std::to_string(i))
-            .route_to("sink" + std::to_string(i))
-            .build();
+                        .name("rule_" + std::to_string(i))
+                        .match_address("sensors/temp" + std::to_string(i))
+                        .route_to("sink" + std::to_string(i))
+                        .build();
         engine.add_rule(rule);
     }
 
@@ -485,10 +469,10 @@ TEST_F(RuleEngineTest, ClearRules) {
 
     for (int i = 0; i < 5; ++i) {
         auto rule = RuleBuilder()
-            .name("rule_" + std::to_string(i))
-            .match_address("sensors/temp" + std::to_string(i))
-            .route_to("sink")
-            .build();
+                        .name("rule_" + std::to_string(i))
+                        .match_address("sensors/temp" + std::to_string(i))
+                        .route_to("sink")
+                        .build();
         engine.add_rule(rule);
     }
 
@@ -501,11 +485,8 @@ TEST_F(RuleEngineTest, ClearRules) {
 TEST_F(RuleEngineTest, EvaluateStaticRule) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("static_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("static_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     engine.add_rule(rule);
 
@@ -524,11 +505,8 @@ TEST_F(RuleEngineTest, EvaluateStaticRule) {
 TEST_F(RuleEngineTest, EvaluateNoMatch) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("static_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("static_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     engine.add_rule(rule);
 
@@ -539,7 +517,8 @@ TEST_F(RuleEngineTest, EvaluateNoMatch) {
     // No matches expected for this address
     bool found_match = false;
     for (const auto& r : results) {
-        if (r.matched) found_match = true;
+        if (r.matched)
+            found_match = true;
     }
     EXPECT_FALSE(found_match);
 }
@@ -548,18 +527,18 @@ TEST_F(RuleEngineTest, EvaluateFirst) {
     RuleEngine engine(config_);
 
     auto rule1 = RuleBuilder()
-        .name("rule1")
-        .priority(RulePriority::HIGH)
-        .match_address("sensors/temp1")
-        .route_to("high_priority_sink")
-        .build();
+                     .name("rule1")
+                     .priority(RulePriority::HIGH)
+                     .match_address("sensors/temp1")
+                     .route_to("high_priority_sink")
+                     .build();
 
     auto rule2 = RuleBuilder()
-        .name("rule2")
-        .priority(RulePriority::LOW)
-        .match_address("sensors/temp1")
-        .route_to("low_priority_sink")
-        .build();
+                     .name("rule2")
+                     .priority(RulePriority::LOW)
+                     .match_address("sensors/temp1")
+                     .route_to("low_priority_sink")
+                     .build();
 
     engine.add_rule(rule1);
     engine.add_rule(rule2);
@@ -576,18 +555,18 @@ TEST_F(RuleEngineTest, EvaluatePriority) {
     RuleEngine engine(config_);
 
     auto high_rule = RuleBuilder()
-        .name("high_priority")
-        .priority(RulePriority::HIGH)
-        .match_address("sensors/temp1")
-        .route_to("high_sink")
-        .build();
+                         .name("high_priority")
+                         .priority(RulePriority::HIGH)
+                         .match_address("sensors/temp1")
+                         .route_to("high_sink")
+                         .build();
 
     auto low_rule = RuleBuilder()
-        .name("low_priority")
-        .priority(RulePriority::LOW)
-        .match_address("sensors/temp1")
-        .route_to("low_sink")
-        .build();
+                        .name("low_priority")
+                        .priority(RulePriority::LOW)
+                        .match_address("sensors/temp1")
+                        .route_to("low_sink")
+                        .build();
 
     engine.add_rule(high_rule);
     engine.add_rule(low_rule);
@@ -598,8 +577,7 @@ TEST_F(RuleEngineTest, EvaluatePriority) {
     // Only high priority rules should match
     for (const auto& r : results) {
         if (r.matched) {
-            EXPECT_GE(static_cast<uint8_t>(r.priority),
-                     static_cast<uint8_t>(RulePriority::HIGH));
+            EXPECT_GE(static_cast<uint8_t>(r.priority), static_cast<uint8_t>(RulePriority::HIGH));
         }
     }
 }
@@ -607,11 +585,8 @@ TEST_F(RuleEngineTest, EvaluatePriority) {
 TEST_F(RuleEngineTest, EvaluateBatch) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("batch_rule")
-        .match_pattern("sensors/.*")
-        .route_to("batch_sink")
-        .build();
+    auto rule =
+        RuleBuilder().name("batch_rule").match_pattern("sensors/.*").route_to("batch_sink").build();
 
     engine.add_rule(rule);
 
@@ -629,11 +604,8 @@ TEST_F(RuleEngineTest, EvaluateBatch) {
 TEST_F(RuleEngineTest, Statistics) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("test_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     engine.add_rule(rule);
 
@@ -653,11 +625,8 @@ TEST_F(RuleEngineTest, Statistics) {
 TEST_F(RuleEngineTest, ResetStats) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("test_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     engine.add_rule(rule);
 
@@ -673,11 +642,8 @@ TEST_F(RuleEngineTest, ResetStats) {
 TEST_F(RuleEngineTest, ClearCache) {
     RuleEngine engine(config_);
 
-    auto rule = RuleBuilder()
-        .name("test_rule")
-        .match_pattern("sensors/.*")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("test_rule").match_pattern("sensors/.*").route_to("sink1").build();
 
     engine.add_rule(rule);
 
@@ -692,11 +658,8 @@ TEST_F(RuleEngineTest, ClearCache) {
 TEST_F(RuleEngineTest, MoveConstruction) {
     RuleEngine engine1(config_);
 
-    auto rule = RuleBuilder()
-        .name("test_rule")
-        .match_address("sensors/temp1")
-        .route_to("sink1")
-        .build();
+    auto rule =
+        RuleBuilder().name("test_rule").match_address("sensors/temp1").route_to("sink1").build();
 
     engine1.add_rule(rule);
 
