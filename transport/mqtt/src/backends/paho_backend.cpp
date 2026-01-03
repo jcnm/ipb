@@ -5,6 +5,15 @@
 
 #include "ipb/transport/mqtt/mqtt_connection.hpp"  // For ConnectionConfig
 
+// On Windows, the Paho MQTT C++ library may not export these static members properly
+// when used as a DLL. We provide definitions here to satisfy the linker.
+#if defined(_WIN32) && defined(IPB_HAS_PAHO)
+namespace mqtt {
+const std::string message::EMPTY_STR;
+const std::string message::EMPTY_BIN;
+}  // namespace mqtt
+#endif
+
 namespace ipb::transport::mqtt {
 
 //=============================================================================
