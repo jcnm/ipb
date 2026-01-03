@@ -102,6 +102,23 @@ target_compile_options(ipb-sink-console PRIVATE
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /fp:fast>
     $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Release>>:-O3 -ffast-math -funroll-loops -finline-functions>
 )
+# Performance optimizations
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(MSVC)
+        # Performance optimizations - platform specific
+        target_compile_options(ipb-sink-console PRIVATE
+            $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /fp:fast>
+            $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Release>>:-O3 -ffast-math -funroll-loops -finline-functions>
+        )
+    else()
+        target_compile_options(ipb-sink-console PRIVATE
+            -O3
+            -ffast-math
+            -funroll-loops
+            -finline-functions
+        )
+    endif()
+endif()
 
 # Install targets
 install(TARGETS ipb-sink-console

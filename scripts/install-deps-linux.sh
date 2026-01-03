@@ -267,6 +267,8 @@ install_ubuntu_debian() {
         "libssl-dev${arch_suffix}"
         "libcurl4-openssl-dev${arch_suffix}"
         "zlib1g-dev${arch_suffix}"
+        "libzstd-dev${arch_suffix}"
+        "liblz4-dev${arch_suffix}"
     )
 
     # These packages may not have i386/cross versions - install native only
@@ -274,6 +276,7 @@ install_ubuntu_debian() {
         "libyaml-cpp-dev"
         "libgtest-dev"
         "libgmock-dev"
+        "libxxhash-dev"
     )
 
     # Optional dependencies (native only for cross-compile, as most don't have multiarch)
@@ -351,6 +354,9 @@ install_redhat_fedora() {
         openssl-devel
         libcurl-devel
         zlib-devel
+        libzstd-devel
+        lz4-devel
+        xxhash-devel
         gtest-devel
         gmock-devel
     )
