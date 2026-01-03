@@ -11,7 +11,7 @@
 #include <cstring>
 #include <thread>
 
-#include <getopt.h>
+#include "getopt_compat.hpp"
 
 #include "bridge.hpp"
 

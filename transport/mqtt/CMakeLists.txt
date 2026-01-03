@@ -37,21 +37,36 @@ set(BACKEND_DEFINES "")
 
 # Paho MQTT Backend
 if(IPB_MQTT_BACKEND_PAHO)
-    find_library(PAHO_MQTT_C_LIB paho-mqtt3as)
-    find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
-    find_path(PAHO_MQTT_CPP_INCLUDE mqtt/async_client.h)
+    # First try to use the CMake config provided by vcpkg or system installation
+    # This is the preferred method as it properly handles import/export definitions on Windows
+    find_package(PahoMqttCpp QUIET CONFIG)
 
-    if(PAHO_MQTT_CPP_LIB AND PAHO_MQTT_C_LIB)
-        message(STATUS "Paho MQTT backend: ENABLED")
+    if(PahoMqttCpp_FOUND)
+        message(STATUS "Paho MQTT backend: ENABLED (via CMake config)")
         list(APPEND BACKENDS_AVAILABLE "paho")
         list(APPEND BACKEND_SOURCES src/backends/paho_backend.cpp)
-        list(APPEND BACKEND_LIBS ${PAHO_MQTT_CPP_LIB} ${PAHO_MQTT_C_LIB})
-        list(APPEND BACKEND_INCLUDES ${PAHO_MQTT_CPP_INCLUDE})
+        # Use the imported target which handles all includes and definitions
+        list(APPEND BACKEND_LIBS PahoMqttCpp::paho-mqttpp3)
         list(APPEND BACKEND_DEFINES IPB_HAS_PAHO=1)
+        set(PAHO_FOUND_VIA_CONFIG TRUE)
     else()
-        message(STATUS "Paho MQTT backend: NOT FOUND")
-        message(STATUS "  Install with: brew install paho-mqtt-c paho-mqtt-cpp (macOS)")
-        message(STATUS "  Install with: sudo apt install libpaho-mqtt-dev libpaho-mqttpp-dev (Ubuntu)")
+        # Fallback to manual library finding for systems without CMake config
+        find_library(PAHO_MQTT_C_LIB paho-mqtt3as)
+        find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3)
+        find_path(PAHO_MQTT_CPP_INCLUDE mqtt/async_client.h)
+
+        if(PAHO_MQTT_CPP_LIB AND PAHO_MQTT_C_LIB)
+            message(STATUS "Paho MQTT backend: ENABLED (via find_library)")
+            list(APPEND BACKENDS_AVAILABLE "paho")
+            list(APPEND BACKEND_SOURCES src/backends/paho_backend.cpp)
+            list(APPEND BACKEND_LIBS ${PAHO_MQTT_CPP_LIB} ${PAHO_MQTT_C_LIB})
+            list(APPEND BACKEND_INCLUDES ${PAHO_MQTT_CPP_INCLUDE})
+            list(APPEND BACKEND_DEFINES IPB_HAS_PAHO=1)
+        else()
+            message(STATUS "Paho MQTT backend: NOT FOUND")
+            message(STATUS "  Install with: brew install paho-mqtt-c paho-mqtt-cpp (macOS)")
+            message(STATUS "  Install with: sudo apt install libpaho-mqtt-dev libpaho-mqttpp-dev (Ubuntu)")
+        endif()
     endif()
 endif()
 
