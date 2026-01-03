@@ -32,7 +32,7 @@ void signal_handler(int signum) {
             g_bridge->stop();
         }
     }
-#ifdef IPB_BRIDGE_WATCHDOG
+#if defined(IPB_BRIDGE_WATCHDOG) && !defined(_WIN32)
     else if (signum == SIGALRM) {
         if (g_bridge) {
             g_bridge->feed_watchdog();
@@ -150,8 +150,10 @@ int main(int argc, char* argv[]) {
 
     // Setup signal handlers
     std::signal(SIGINT, signal_handler);
+#ifndef _WIN32
     std::signal(SIGTERM, signal_handler);
-#ifdef IPB_BRIDGE_WATCHDOG
+#endif
+#if defined(IPB_BRIDGE_WATCHDOG) && !defined(_WIN32)
     std::signal(SIGALRM, signal_handler);
 #endif
 
