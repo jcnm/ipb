@@ -223,7 +223,7 @@ uint16_t PahoBackend::publish(std::string_view topic, std::span<const uint8_t> p
 
         return msg_token;
 
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
         stats_.messages_failed++;
         return 0;
     }
@@ -258,7 +258,7 @@ bool PahoBackend::publish_sync(std::string_view topic, std::span<const uint8_t> 
 
         return success;
 
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
         stats_.messages_failed++;
         return false;
     }

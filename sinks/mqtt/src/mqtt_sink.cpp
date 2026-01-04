@@ -487,7 +487,7 @@ common::Result<void> MQTTSink::disconnect_from_broker() {
 }
 
 void MQTTSink::handle_connection_state(transport::mqtt::ConnectionState state,
-                                       const std::string& reason) {
+                                       const std::string& /*reason*/) {
     switch (state) {
         case transport::mqtt::ConnectionState::CONNECTED:
             connected_.store(true);
@@ -510,7 +510,7 @@ void MQTTSink::handle_connection_state(transport::mqtt::ConnectionState state,
     }
 }
 
-void MQTTSink::handle_delivery_complete(int token, bool success, const std::string& error) {
+void MQTTSink::handle_delivery_complete(int /*token*/, bool success, const std::string& /*error*/) {
     if (!success) {
         statistics_.messages_failed.fetch_add(1);
     }

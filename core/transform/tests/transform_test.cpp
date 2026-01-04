@@ -1628,7 +1628,7 @@ TEST_F(TransformPerformanceTest, GzipCompressionImpact) {
 
         // Net benefit = time saved transmitting smaller data - compression overhead
         // Assuming 100 Mbps network = 12.5 MB/s = 80 µs/KB
-        double bytes_saved = data.size() - compressed.value().size();
+        double bytes_saved = static_cast<double>(data.size() - compressed.value().size());
         double transmit_savings_us = (bytes_saved / 1024.0) * 80;  // µs saved
         double net_benefit_us = transmit_savings_us - compress_us - decompress_us;
 

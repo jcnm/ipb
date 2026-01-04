@@ -277,7 +277,7 @@ TEST_F(BackpressureControllerTest, UpdateMemory) {
 }
 
 TEST_F(BackpressureControllerTest, DropCallback) {
-    int drop_count = 0;
+    size_t drop_count = 0;
     controller->set_drop_callback([&drop_count](size_t count) {
         drop_count += count;
     });
@@ -285,7 +285,7 @@ TEST_F(BackpressureControllerTest, DropCallback) {
     controller->item_dropped();
     controller->item_dropped();
 
-    EXPECT_EQ(drop_count, 2);
+    EXPECT_EQ(drop_count, 2u);
 }
 
 TEST_F(BackpressureControllerTest, PressureCallback) {

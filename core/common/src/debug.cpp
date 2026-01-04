@@ -50,6 +50,17 @@ ThreadContext& get_thread_context() {
     return *tls_context;
 }
 
+// Platform-safe localtime conversion
+inline std::tm safe_localtime(const std::time_t* time) {
+    std::tm result{};
+#if defined(IPB_OS_WINDOWS)
+    localtime_s(&result, time);
+#else
+    localtime_r(time, &result);
+#endif
+    return result;
+}
+
 // Random number generator for IDs
 std::mt19937_64& get_rng() {
     static thread_local std::mt19937_64 rng(
@@ -262,10 +273,11 @@ void ConsoleSink::write(const LogRecord& record) {
         auto ms   = std::chrono::duration_cast<std::chrono::milliseconds>(
                       record.timestamp.time_since_epoch()) %
                   1000;
+        auto tm_result = safe_localtime(&time);
 
         if (config_.use_colors)
             out << DIM;
-        out << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0')
+        out << std::put_time(&tm_result, "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0')
             << std::setw(3) << ms.count();
         if (config_.use_colors)
             out << RESET;
@@ -399,7 +411,8 @@ void FileSink::write(const LogRecord& record) {
     auto ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(record.timestamp.time_since_epoch()) %
         1000;
-    oss << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0')
+    auto tm_result = safe_localtime(&time);
+    oss << std::put_time(&tm_result, "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0')
         << std::setw(3) << ms.count() << ' ';
 
     // Level and category

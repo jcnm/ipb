@@ -1,3 +1,9 @@
+// MSVC: Disable C4324 warning for intentional cache-line padding in lambdas
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4324)  // structure was padded due to alignment specifier
+#endif
+
 #include <ipb/core/rule_engine/compiled_pattern_cache.hpp>
 #include <ipb/router/router.hpp>
 
@@ -1432,3 +1438,7 @@ Result<RoutingRule> RuleBuilder::try_build() {
 }
 
 }  // namespace ipb::router
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif

@@ -411,7 +411,7 @@ Result<CachedPattern> CompiledPatternCache::compile_pattern(std::string_view pat
                 auto regex =
                     std::make_unique<std::regex>(std::string(pattern), config_.regex_flags);
                 promise.set_value(std::move(regex));
-            } catch (const std::regex_error& e) {
+            } catch (const std::regex_error&) {
                 promise.set_exception(std::current_exception());
             }
         });

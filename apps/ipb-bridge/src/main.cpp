@@ -11,6 +11,8 @@
 #include <cstring>
 #include <thread>
 
+#include <ipb/common/platform.hpp>
+
 #include "getopt_compat.hpp"
 
 #include "bridge.hpp"
@@ -142,8 +144,8 @@ int main(int argc, char* argv[]) {
 
     // Check for config from environment
     if (config_path.empty()) {
-        const char* env_config = std::getenv("IPB_CONFIG");
-        if (env_config) {
+        auto env_config = ipb::common::platform::get_env("IPB_CONFIG");
+        if (!env_config.empty()) {
             config_path = env_config;
         }
     }

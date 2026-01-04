@@ -1,5 +1,12 @@
 #pragma once
 
+// MSVC: Disable C4324 warning for intentional cache-line padding
+// This warning is expected as we deliberately use alignas() to prevent false sharing
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4324)  // structure was padded due to alignment specifier
+#endif
+
 /**
  * @file memory_pool.hpp
  * @brief High-performance memory pooling for zero-allocation hot paths
@@ -480,3 +487,7 @@ public:
 };
 
 }  // namespace ipb::common
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif

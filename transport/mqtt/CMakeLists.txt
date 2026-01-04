@@ -211,6 +211,13 @@ set_target_properties(ipb-transport-mqtt PROPERTIES
     OUTPUT_NAME ipb-transport-mqtt
 )
 
+# On Windows, export all symbols so that the import library (.lib) is generated
+if(WIN32)
+    set_target_properties(ipb-transport-mqtt PROPERTIES
+        WINDOWS_EXPORT_ALL_SYMBOLS TRUE
+    )
+endif()
+
 #=============================================================================
 # Installation
 #=============================================================================

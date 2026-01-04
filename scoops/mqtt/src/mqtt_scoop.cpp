@@ -187,7 +187,7 @@ public:
 
         // Setup message callback
         connection_->set_message_callback(
-            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS qos,
+            [this](const std::string& topic, const std::string& payload, transport::mqtt::QoS /*qos*/,
                    bool retained) { handle_message(topic, payload, retained); });
 
         // Setup connection callback
@@ -360,7 +360,7 @@ private:
     }
 
     void handle_connection_state(transport::mqtt::ConnectionState state,
-                                 const std::string& reason) {
+                                 const std::string& /*reason*/) {
         if (state == transport::mqtt::ConnectionState::CONNECTED) {
             connected_.store(true);
             subscribe_all();
