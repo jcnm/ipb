@@ -406,7 +406,7 @@ TEST_F(ConsoleSinkTest, Flush) {
 
 class FileSinkTest : public ::testing::Test {
 protected:
-    void SetUp() override { test_file_ = "/tmp/ipb_test_log_" + std::to_string(getpid()) + ".log"; }
+    void SetUp() override { test_file_ = "/tmp/ipb_test_log_" + std::to_string(platform::get_process_id()) + ".log"; }
 
     void TearDown() override {
         // Clean up test files

@@ -1,5 +1,12 @@
 #pragma once
 
+// MSVC: Disable C4324 warning for intentional cache-line padding
+// This warning is expected as we deliberately use alignas() to prevent false sharing
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4324)  // structure was padded due to alignment specifier
+#endif
+
 /**
  * @file message_bus.hpp
  * @brief Lock-free message bus for high-performance pub/sub communication
@@ -295,3 +302,7 @@ private:
 };
 
 }  // namespace ipb::core
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif

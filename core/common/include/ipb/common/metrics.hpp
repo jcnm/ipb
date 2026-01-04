@@ -1,5 +1,12 @@
 #pragma once
 
+// MSVC: Disable C4324 warning for intentional cache-line padding
+// This warning is expected as we deliberately use alignas() to prevent false sharing
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4324)  // structure was padded due to alignment specifier
+#endif
+
 /**
  * @file metrics.hpp
  * @brief Enterprise-grade metrics collection system
@@ -867,3 +874,7 @@ private:
 #define IPB_TIMER(histogram) ipb::common::metrics::Timer _timer_##__LINE__(histogram)
 
 }  // namespace ipb::common::metrics
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif

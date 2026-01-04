@@ -432,7 +432,7 @@ public:
             external_address_.reset();
         }
 
-        address_size_ = std::min(address.size(), static_cast<size_t>(UINT16_MAX));
+        address_size_ = static_cast<uint16_t>(std::min(address.size(), static_cast<size_t>(UINT16_MAX)));
 
         if (address_size_ <= MAX_INLINE_ADDRESS) {
             std::memcpy(inline_address_, address.data(), address_size_);
