@@ -53,5 +53,9 @@ if(XXHASH_FOUND)
 endif()
 
 # Add test
+# Use PRE_TEST discovery mode to avoid running test binary during build
+# This is required on Windows where DLLs may not be in PATH during build
 include(GoogleTest)
-gtest_discover_tests(transform_tests)
+gtest_discover_tests(transform_tests
+    DISCOVERY_MODE PRE_TEST
+)
