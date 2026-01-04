@@ -406,7 +406,11 @@ TEST_F(ConsoleSinkTest, Flush) {
 
 class FileSinkTest : public ::testing::Test {
 protected:
-    void SetUp() override { test_file_ = "/tmp/ipb_test_log_" + std::to_string(platform::get_process_id()) + ".log"; }
+    void SetUp() override {
+        // Use cross-platform temp directory
+        auto temp_dir = std::filesystem::temp_directory_path();
+        test_file_    = (temp_dir / ("ipb_test_log_" + std::to_string(platform::get_process_id()) + ".log")).string();
+    }
 
     void TearDown() override {
         // Clean up test files
