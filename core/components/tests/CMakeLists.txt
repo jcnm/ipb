@@ -25,10 +25,13 @@ if(GTest_FOUND)
     target_compile_features(test_pattern_matching PRIVATE cxx_std_20)
 
     # Add test discovery
+    # Use PRE_TEST discovery mode to avoid running test binary during build
+    # This is required on Windows where DLLs may not be in PATH during build
     include(GoogleTest)
     gtest_discover_tests(test_pattern_matching
         PROPERTIES
             TIMEOUT 60
+        DISCOVERY_MODE PRE_TEST
     )
 
     message(STATUS "IPB Core Components tests enabled")
