@@ -601,7 +601,7 @@ TEST_F(FixedStringIteratorTest, EmptyStringIterators) {
 TEST_F(FixedStringIteratorTest, MutableIterator) {
     FixedString<32> str("abc");
     for (char& c : str) {
-        c = std::toupper(c);
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     }
     EXPECT_STREQ(str.c_str(), "ABC");
 }
