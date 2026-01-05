@@ -46,7 +46,7 @@ enum class SecurityError : uint32_t {
     VERIFICATION_FAILED,
     CRYPTO_ERROR,
     FILE_NOT_FOUND,
-    SOCKET_ERROR,
+    SOCKET_FAILURE,  // Note: Renamed from SOCKET_ERROR to avoid Windows macro conflict
     MEMORY_ALLOCATION_FAILED,
     CONFIG_INVALID,
     NOT_SUPPORTED,
@@ -136,10 +136,10 @@ enum class TLSMode : uint8_t { CLIENT, SERVER };
  * @brief Certificate verification mode
  */
 enum class VerifyMode : uint8_t {
-    NONE,         // No verification (insecure)
-    OPTIONAL,     // Verify if presented
-    REQUIRED,     // Must verify successfully
-    REQUIRE_ONCE  // Verify only on first connection
+    NONE,          // No verification (insecure)
+    PEER_OPTIONAL, // Verify if presented (renamed from OPTIONAL to avoid Windows macro)
+    REQUIRED,      // Must verify successfully
+    REQUIRE_ONCE   // Verify only on first connection
 };
 
 /**

@@ -567,7 +567,7 @@ void OpenSSLContext::set_verify_mode(VerifyMode mode) {
                       << "connection is vulnerable to MITM attacks!" << std::endl;
             ssl_mode = SSL_VERIFY_NONE;
             break;
-        case VerifyMode::OPTIONAL:
+        case VerifyMode::PEER_OPTIONAL:
             ssl_mode = SSL_VERIFY_PEER;
             break;
         case VerifyMode::REQUIRED:
@@ -609,7 +609,7 @@ Result<std::unique_ptr<TLSSocket>> OpenSSLContext::wrap_socket(int fd) {
 
     if (SSL_set_fd(ssl, fd) != 1) {
         SSL_free(ssl);
-        return Result<std::unique_ptr<TLSSocket>>(SecurityError::SOCKET_ERROR,
+        return Result<std::unique_ptr<TLSSocket>>(SecurityError::SOCKET_FAILURE,
                                                   "Failed to set socket: " + get_openssl_error());
     }
 
@@ -694,7 +694,7 @@ ssize_t OpenSSLSocket::tls_write(const void* buffer, size_t length) {
 Result<void> OpenSSLSocket::shutdown() {
     int ret = SSL_shutdown(ssl_);
     if (ret < 0) {
-        return Result<void>(SecurityError::SOCKET_ERROR,
+        return Result<void>(SecurityError::SOCKET_FAILURE,
                             "SSL shutdown failed: " + get_openssl_error());
     }
     return Result<void>();
